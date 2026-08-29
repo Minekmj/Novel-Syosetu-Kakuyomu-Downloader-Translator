@@ -40,6 +40,8 @@
 
 ## 스크린샷
 
+<div align="center">
+
 ![프로그램 메인](https://github.com/user-attachments/assets/4d272181-e8d5-4150-aa88-0f426a1838b0)
 
 <p align="center"><i>프로그램 메인 화면 (목록 화면)</i></p>
@@ -59,6 +61,8 @@
 ![카쿠요무 파인더](https://github.com/user-attachments/assets/9c68880e-974f-4993-8ce6-2073efa5a0e7)
 
 <p align="center"><i>카쿠요무 파인더 메인 화면</i></p>
+
+</div>
 
 ## 설치 및 실행 방법
 
