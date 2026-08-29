@@ -1,0 +1,2 @@
+import load
+load.main()

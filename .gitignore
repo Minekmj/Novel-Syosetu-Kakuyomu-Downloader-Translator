@@ -1,0 +1,7 @@
+# Directories
+out/
+.vscode/
+__pycache__/
+
+# Files
+data.json

@@ -1,0 +1,520 @@
+QMainWindow,
+QDialog,
+QWidget {
+    background-color: |bg||;
+    color: |text||;
+    font-family: 'Pretendard', 'Malgun Gothic', 'Segoe UI', sans-serif;
+}
+
+
+/* =========================================================
+   LABEL
+   ========================================================= */
+
+QLabel {
+    background: transparent;
+    border: none;
+    color: |text_secondary||;
+    font-size: 9pt;
+    padding: 0px;
+}
+
+QLabel#app_title {
+    color: |text_primary||;
+    font-size: 15pt;
+    font-weight: 700;
+}
+
+QLabel#title,
+QLabel#title_lbl,
+QLabel#label_title {
+    color: |text_title||;
+    font-size: 11pt;
+    font-weight: 600;
+}
+
+QLabel#title_label {
+    color: |text_title_bright||;
+    font-size: 13pt;
+    font-weight: 700;
+}
+
+QLabel#lbl_title {
+    color: |text_title_sub||;
+    font-size: 10.5pt;
+    font-weight: 600;
+}
+
+QLabel#new_lbl,
+QLabel#new_and_now,
+QLabel#label_meta {
+    color: |text_meta||;
+    font-size: 8.5pt;
+}
+
+QLabel#url_lbl,
+QLabel#lbl_url {
+    color: |text_url||;
+    font-size: 8pt;
+}
+
+QLabel#lbl_episodes,
+QLabel#prograss {
+    color: |text_muted||;
+    font-size: 8.5pt;
+}
+
+QLabel#cat_label {
+    color: |text_category||;
+    font-size: 8pt;
+    font-weight: 600;
+}
+
+QLabel#tilde {
+    color: |text_dim||;
+    font-size: 11pt;
+}
+
+QLabel#lbl_stars {
+    color: |text_star||;
+    font-size: 8.5pt;
+    font-weight: 600;
+}
+
+
+/* =========================================================
+   TAG
+   ========================================================= */
+
+QLabel#lbl_tag {
+    background-color: |surface_tag||;
+    color: |tag_text||;
+    border: none;
+    border-radius: 10px;
+    padding: 4px 9px;
+    font-size: 8pt;
+}
+
+
+/* =========================================================
+   INPUT
+   ========================================================= */
+
+QLineEdit,
+QComboBox,
+QSpinBox {
+    background-color: |surface_input||;
+    color: |text_input||;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    min-height: 22px;
+    padding: 7px 10px;
+    font-size: 9.5pt;
+    selection-background-color: |selection_input||;
+    selection-color: |selection_text||;
+}
+
+QLineEdit:hover,
+QComboBox:hover,
+QSpinBox:hover {
+    background-color: |surface_input_hover||;
+}
+
+QLineEdit:focus,
+QComboBox:focus,
+QSpinBox:focus {
+    background-color: |surface_input_focus||;
+    border: 1px solid |border_input_focus||;
+}
+
+QLineEdit:disabled,
+QComboBox:disabled,
+QSpinBox:disabled {
+    background-color: |surface_disabled||;
+    color: |text_disabled||;
+}
+
+
+/* =========================================================
+   COMBOBOX
+   ========================================================= */
+
+QComboBox {
+    padding-right: 30px;
+}
+
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 28px;
+    background: transparent;
+    border: none;
+}
+
+QComboBox::down-arrow {
+    width: 7px;
+    height: 7px;
+}
+
+QComboBox QAbstractItemView {
+    background-color: |surface_input||;
+    color: |combo_text||;
+    border: 1px solid |border_default||;
+    border-radius: 7px;
+    padding: 5px;
+    outline: none;
+    selection-background-color: |surface_combo_selected||;
+    selection-color: |selection_text||;
+}
+
+QComboBox QAbstractItemView::item {
+    min-height: 28px;
+    padding: 4px 8px;
+}
+
+
+/* =========================================================
+   BUTTON
+   ========================================================= */
+
+QPushButton {
+    background-color: |surface_button||;
+    color: |text_button||;
+    border: none;
+    border-radius: 8px;
+    min-height: 20px;
+    padding: 7px 13px;
+    font-size: 9pt;
+    font-weight: 500;
+}
+
+QPushButton:hover {
+    background-color: |surface_button_hover||;
+    color: |text_button_hover||;
+}
+
+QPushButton:pressed {
+    background-color: |surface_button_pressed||;
+    color: |text_button_pressed||;
+}
+
+QPushButton:disabled {
+    background-color: |surface_disabled||;
+    color: |text_disabled_button||;
+}
+
+
+/* =========================================================
+   PRIMARY BUTTON
+   ========================================================= */
+
+QPushButton#primaryBtn {
+    background-color: |primary_bg||;
+    color: |primary_text||;
+    border: none;
+    border-radius: 8px;
+    min-height: 22px;
+    padding: 8px 15px;
+    font-weight: 650;
+}
+
+QPushButton#primaryBtn:hover {
+    background-color: |primary_hover||;
+    color: |primary_hover_text||;
+}
+
+QPushButton#primaryBtn:pressed {
+    background-color: |primary_pressed||;
+}
+
+
+/* =========================================================
+   SECONDARY BUTTON
+   ========================================================= */
+
+QPushButton#secondaryBtn {
+    background-color: |secondary_bg||;
+    color: |secondary_text||;
+}
+
+QPushButton#secondaryBtn:hover {
+    background-color: |secondary_hover||;
+    color: |secondary_hover_text||;
+}
+
+
+/* =========================================================
+   DELETE
+   ========================================================= */
+
+QPushButton#del {
+    background-color: transparent;
+    color: |delete_text||;
+    border: none;
+    border-radius: 7px;
+}
+
+QPushButton#del:hover {
+    background-color: |surface_delete_hover||;
+    color: |delete_hover_text||;
+}
+
+
+/* =========================================================
+   FILTER / CHIP BUTTON
+   ========================================================= */
+
+QPushButton#btn {
+    background-color: |surface_chip||;
+    color: |chip_text||;
+    border: none;
+    border-radius: 10px;
+    min-height: 15px;
+    padding: 4px 9px;
+    font-size: 8pt;
+}
+
+QPushButton#btn:hover {
+    background-color: |surface_chip_hover||;
+    color: |chip_hover_text||;
+}
+
+QPushButton#btn:checked {
+    background-color: |chip_checked||;
+    color: |chip_checked_text||;
+    font-weight: 600;
+}
+
+
+/* =========================================================
+   GROUP
+   ========================================================= */
+
+QGroupBox {
+    background-color: transparent;
+    border: none;
+    border-top: 1px solid |border_subtle||;
+    margin-top: 15px;
+    padding-top: 16px;
+    color: |text_group||;
+    font-size: 9pt;
+    font-weight: 600;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 0px;
+    padding: 0px 7px 0px 0px;
+    background-color: |bg||;
+    color: |text_group_title||;
+}
+
+
+/* =========================================================
+   CARD
+   ========================================================= */
+
+QFrame#CardFrame,
+QWidget#cardContainer {
+    background-color: |surface_card||;
+    border: 1px solid transparent;
+    border-radius: 10px;
+}
+
+QFrame#CardFrame:hover,
+QWidget#cardContainer:hover {
+    background-color: |surface_hover||;
+    border: 1px solid |border_card_hover||;
+}
+
+
+/* =========================================================
+   LIST
+   ========================================================= */
+
+QListWidget {
+    background: transparent;
+    border: none;
+    outline: none;
+    padding: 0px;
+}
+
+QListWidget::item {
+    background: transparent;
+    border: none;
+    padding: 0px;
+    margin: 0px;
+}
+
+QListWidget::item:selected {
+    background: transparent;
+}
+
+
+/* =========================================================
+   TEXTEDIT
+   ========================================================= */
+
+QTextEdit {
+    background-color: transparent;
+    color: |textedit_text||;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    padding: 10px;
+    font-size: 9pt;
+    selection-background-color: |selection_textedit||;
+    selection-color: |selection_text||;
+}
+
+
+QTextEdit#t {
+    background: transparent;
+    border: none;
+    color: |textedit_transparent_text||;
+    padding: 0px;
+    font-size: 9.5pt;
+}
+
+
+/* =========================================================
+   CHECKBOX
+   ========================================================= */
+
+QCheckBox {
+    background: transparent;
+    color: |checkbox_text||;
+    spacing: 7px;
+    padding: 2px 0px;
+    font-size: 9pt;
+}
+
+QCheckBox:hover {
+    color: |text_button_hover||;
+}
+
+QCheckBox::indicator {
+    width: 15px;
+    height: 15px;
+    background-color: |checkbox_bg||;
+    border: 1px solid |border_checkbox||;
+    border-radius: 5px;
+}
+
+QCheckBox::indicator:hover {
+    background-color: |checkbox_hover_bg||;
+    border-color: |border_checkbox_hover||;
+}
+
+QCheckBox::indicator:checked {
+    background-color: |checkbox_checked||;
+    border-color: |checkbox_checked||;
+}
+
+QCheckBox::indicator:disabled {
+    background-color: |checkbox_disabled_bg||;
+    border-color: |border_disabled||;
+}
+
+
+/* =========================================================
+   SCROLL AREA
+   ========================================================= */
+
+QScrollArea {
+    background: transparent;
+    border: none;
+}
+
+
+/* =========================================================
+   SCROLL BAR
+   ========================================================= */
+
+QScrollBar:vertical {
+    background: transparent;
+    width: 6px;
+    border: none;
+    margin: 2px 0px;
+}
+
+QScrollBar::handle:vertical {
+    background-color: |scrollbar||;
+    min-height: 30px;
+    border-radius: 3px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background-color: |scrollbar_hover||;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical,
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical {
+    background: transparent;
+    height: 0px;
+    border: none;
+}
+
+
+/* =========================================================
+   MENU
+   ========================================================= */
+
+QMenu {
+    background-color: |surface_menu||;
+    border: 1px solid |border_default||;
+    border-radius: 8px;
+    padding: 5px;
+}
+
+QMenu::item {
+    background: transparent;
+    color: |menu_text||;
+    border-radius: 5px;
+    padding: 7px 20px 7px 10px;
+    font-size: 9pt;
+}
+
+QMenu::item:selected {
+    background-color: |surface_menu_selected||;
+    color: |menu_selected_text||;
+}
+
+QMenu::separator {
+    height: 1px;
+    background-color: |surface_menu_selected||;
+    margin: 4px 3px;
+}
+
+
+/* =========================================================
+   SPINBOX
+   ========================================================= */
+
+QSpinBox::up-button,
+QSpinBox::down-button {
+    width: 0px;
+    height: 0px;
+    border: none;
+}
+
+QSpinBox::up-arrow,
+QSpinBox::down-arrow {
+    image: none;
+    width: 0px;
+    height: 0px;
+}
+
+/* =========================================================
+   transparent
+   ========================================================= */
+
+QWidget#tag_container {
+    background-color: transparent;
+}
+
+QGroupBox#group_box::title {
+    background-color: transparent;
+}
