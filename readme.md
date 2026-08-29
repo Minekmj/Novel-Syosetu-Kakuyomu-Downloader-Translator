@@ -61,12 +61,6 @@ python -m venv venv
 venv\Scripts\activate.bat
 ```
 
-```bash
-#PowerShell
-python -m venv venv
-venv\Scripts\Activate.ps1
-```
-
 ### 3. 기본 패키지 설치 및 프로그램 실행
 
 ```bash
