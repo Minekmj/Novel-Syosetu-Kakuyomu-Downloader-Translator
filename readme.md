@@ -45,7 +45,7 @@
 ### 1. 저장소 클론
 
 ```bash
-git clone [https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator.git](https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator.git)
+git clone https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator.git
 cd novel-syosetu-kakuyomu-downloader-translator
 
 ```
