@@ -38,6 +38,28 @@
 
   * 멀티스레드 기반 다운로드 및 번역 진행 상황 실시간 제공
 
+## 스크린샷
+
+![프로그램 메인](https://github.com/user-attachments/assets/4d272181-e8d5-4150-aa88-0f426a1838b0)
+
+<p align="center"><i>프로그램 메인 화면 (목록 화면)</i></p>
+
+![테마 및 환경 설정](https://github.com/user-attachments/assets/4bc2a64f-ac05-44e1-bb5e-94a21c6582ac)
+
+<p align="center"><i>테마 및 환경 설정 화면</i></p>
+
+![ai 번역](https://github.com/user-attachments/assets/3a3eb6d4-a9ad-432e-b15f-fafd64cd6d72)
+
+<p align="center"><i>ai 번역기 화면</i></p>
+
+![나로우 파인더](https://github.com/user-attachments/assets/49ab0049-0754-4028-99f5-0bc7654423fc)
+
+<p align="center"><i>나로우 파인더 메인 화면</i></p>
+
+![카쿠요무 파인더](https://github.com/user-attachments/assets/9c68880e-974f-4993-8ce6-2073efa5a0e7)
+
+<p align="center"><i>카쿠요무 파인더 메인 화면</i></p>
+
 ## 설치 및 실행 방법
 
 *(현재 윈도우 만을 지원합니다. 추후 리눅스와 맥os를 지원할 예정입니다.)*
