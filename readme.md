@@ -45,8 +45,8 @@
 ### 1. 저장소 클론
 
 ```bash
-git clone [...](...)
-cd ...
+git clone [https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator.git](https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator.git)
+cd novel-syosetu-kakuyomu-downloader-translator
 
 ```
 
@@ -94,7 +94,7 @@ USE_LOCAL_AI = True  # CUDA 코어가 있는 그래픽카드 환경 시 True로 
 
 ```
 
-## 면책 조항 (Disclaimer)
+## 면책 조항
 
 본 프로그램은 개인 연구 및 학습 목적으로 제작된 웹 크롤링 및 번역 지원 도구입니다.
 
