@@ -4,3 +4,4 @@ pyside6==6.11.1
 pyside6_addons==6.11.1
 pyside6_essentials==6.11.1
 Requests==2.34.2
+google-genai==2.18.1
