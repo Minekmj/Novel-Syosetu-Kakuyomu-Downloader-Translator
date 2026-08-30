@@ -7,6 +7,11 @@ import time
 import tkinter as tk
 from tkinter import ttk
 from PIL import Image, ImageTk
+from html.parser import HTMLParser
+import urllib.request
+
+URL = "https://minekmj.github.io/Novel-Syosetu-Kakuyomu-Downloader-Translator/"
+URL_D = "https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/releases/download/{v}/Novel-Syosetu-Kakuyomu-Downloader-Translator-{v}.exe"
 
 THEME_CONFIG = {
     "bg_color": "#1E1E1E",
@@ -17,6 +22,74 @@ THEME_CONFIG = {
     "font_family": "맑은 고딕",
     "window_size": (360, 190),
 }
+
+V = None
+
+try:
+    base_path = sys._MEIPASS
+    from v import V
+except Exception:
+    pass
+
+
+class VersionParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.in_down_p = False
+        self.latest_version = None
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "p":
+            attrs_dict = dict(attrs)
+            if attrs_dict.get("id") == "down":
+                self.in_down_p = True
+
+    def handle_endtag(self, tag):
+        if tag == "p" and self.in_down_p:
+            self.in_down_p = False
+
+    def handle_data(self, data):
+        if self.in_down_p and not self.latest_version:
+            cleaned_data = data.strip()
+            if cleaned_data:
+                self.latest_version = cleaned_data
+
+
+def check_and_update(root, sub_label):
+    if V is None:
+        return
+
+    update_status(root, sub_label, "버전 확인 중...")
+    try:
+        req = urllib.request.Request(
+            URL, 
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+        )
+        with urllib.request.urlopen(req, timeout=5) as response:
+            html_content = response.read().decode('utf-8')
+
+        parser = VersionParser()
+        parser.feed(html_content)
+        latest_version = parser.latest_version
+
+        if latest_version and latest_version != str(V):
+            update_status(root, sub_label, f"새로운 버전 발견 ({latest_version}). 다운로드 중...")
+            
+            download_url = URL_D.format(v=latest_version)
+            file_name = f"Novel-Syosetu-Kakuyomu-Downloader-Translator-{latest_version}.exe"
+            save_path = os.path.join(os.getcwd(), file_name)
+
+            urllib.request.urlretrieve(download_url, save_path)
+            
+            update_status(root, sub_label, "다운로드 완료. 프로그램을 종료합니다.")
+            time.sleep(1.5)
+            
+            root.after(0, root.destroy)
+            sys.exit(0)
+            
+    except Exception as e:
+        print(f"[업데이트 확인 실패]: {e}")
+
 
 def resource_path(relative_path):
     try:
@@ -31,6 +104,8 @@ def update_status(root, label, text):
 
 
 def start_main_app(root, sub_label, pre_file):
+    check_and_update(root, sub_label)
+
     if pre_file:
         abs_file_path = os.path.abspath(pre_file)
 
