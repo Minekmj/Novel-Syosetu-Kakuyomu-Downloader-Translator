@@ -55,7 +55,36 @@ class VersionParser(HTMLParser):
                 self.latest_version = cleaned_data
 
 
+def check_internet(timeout=3):
+    try:
+        urllib.request.urlopen("https://www.google.com/generate_204", timeout=timeout)
+        return True
+    except Exception:
+        return False
+
+inter = 0
+
 def check_and_update(root, sub_label):
+    global inter
+    update_status(root, sub_label, "인터넷 연결 확인 중...")
+    
+    if not check_internet():
+        if inter > 3:
+            update_status(root, sub_label, "인터넷 연결 없음... 프로그램 종료")
+            time.sleep(1.5)
+            root.after(0, root.destroy)
+            sys.exit(0)
+            
+        update_status(root, sub_label, "인터넷 연결 없음... 3초후 재시도")
+        time.sleep(1)
+        update_status(root, sub_label, "인터넷 연결 없음... 2초후 재시도")
+        time.sleep(1)
+        update_status(root, sub_label, "인터넷 연결 없음... 1초후 재시도")
+        time.sleep(1)
+        inter = inter + 1
+        check_and_update(root, sub_label)
+        return
+    
     if V is None:
         return
 

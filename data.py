@@ -26,7 +26,7 @@ THEME_DATA = {
     "OLED": "OLED",
 }
 
-THEME_NAME = "DARK"
+THEME_NAME = "BLUE"
 
 MINIMAL_DARK_THEME = ""
 
@@ -41,7 +41,7 @@ def rest():
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
-                THEME_NAME = json.load(f).get("theme", "DARK")
+                THEME_NAME = json.load(f).get("theme", "BLUE")
         except Exception:
             pass
 

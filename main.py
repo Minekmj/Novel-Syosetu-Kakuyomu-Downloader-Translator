@@ -7,7 +7,7 @@ import webbrowser
 from datetime import datetime
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                             QHBoxLayout, QLineEdit, QPushButton, QLabel,
-                            QFileDialog, QScrollArea, QFrame, QDialog, QMessageBox,
+                            QFileDialog, QScrollArea, QFrame, QDialog, QMessageBox, QTextBrowser,
                             QMenu, QCheckBox, QSizePolicy, QComboBox)
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction, QFont
@@ -447,6 +447,26 @@ class AddressRowWidget(QWidget):
     def open_detail_dialog(self):
         dialog = DownloadDetailDialog(self.site_url, self.title_text, self.last, self, self.now, self)
         dialog.show()
+        
+class UpdateView(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self.setWindowTitle("업데이트")
+        self.setFixedSize(600, 500)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(0)
+
+        self.text_browser = QTextBrowser(self)
+        self.text_browser.setOpenExternalLinks(True)
+        self.text_browser.setMarkdown(
+            open(resource_path("update.md"), "r", encoding="UTF-8").read()
+        )
+
+        layout.addWidget(self.text_browser)
+    
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -561,6 +581,16 @@ class MainWindow(QMainWindow):
         self.click_watcher.start()
 
         self.init_saved_data()
+        
+        from v import V
+        data = load_data()
+        vn = data.get("V", "")
+        if vn == "" or vn != V:
+            update = UpdateView(self)
+            update.show()
+            data["V"] = V
+            save_data(data)
+            
 
     def init_saved_data(self):
         data = load_data()
