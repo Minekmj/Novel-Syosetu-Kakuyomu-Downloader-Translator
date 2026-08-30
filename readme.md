@@ -80,7 +80,7 @@
 
 ### 1. EXE 다운로드
 
-[exe 다운로드 (v1.1.1)](https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/releases/download/v1.1.0/Novel-Syosetu-Kakuyomu-Downloader-Translator-v1.1.1.exe)
+[exe 다운로드 (v1.1.1)](https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/releases/download/v1.1.1/Novel-Syosetu-Kakuyomu-Downloader-Translator-v1.1.1.exe)
 
 혹은 아래와 같이
 
