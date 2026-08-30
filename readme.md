@@ -142,7 +142,11 @@ USE_LOCAL_AI = True  # CUDA 코어가 있는 그래픽카드 환경 시 True로 
 
 의견은 다음 링크
 
-[의견 보내기 홈페이지 링크]()
+<b><i>
+
+[의견 보내기 홈페이지 링크](https://minekmj.github.io/Novel-Syosetu-Kakuyomu-Downloader-Translator/opinion/home.html)
+
+</i></b>
 
 로 보내주세요.
 
