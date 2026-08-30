@@ -2,6 +2,12 @@
 
 일본 소설 플랫폼(소설가가 되자, 카쿠요무)의 웹소설 수집, 태그 검색, 번역, EPUB 전자책 변환을 일괄 처리하는 통합 Desktop GUI 애플리케이션입니다.
 
+<div align="center">
+
+![](https://raw.githubusercontent.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/refs/heads/main/main.ico)
+
+</div>
+
 ## 주요 기능
 
 * **웹소설 검색 및 크롤링**
@@ -38,6 +44,8 @@
 
   * 멀티스레드 기반 다운로드 및 번역 진행 상황 실시간 제공
 
+  * 자동 최신 버전 다운로드 기능 (.exe)
+
 ## 스크린샷
 
 <div align="center">
@@ -62,11 +70,19 @@
 
 <p align="center"><i>카쿠요무 파인더 메인 화면</i></p>
 
+<p align="center" style="font-size:20px"><i><b>스크린샷 기준 버전 (v1.0.0)</b></i></p>
+
 </div>
 
 ## 설치 및 실행 방법
 
 *(현재 윈도우 만을 지원합니다. 추후 리눅스와 맥os를 지원할 예정입니다.)*
+
+### 1. EXE 다운로드
+
+[exe 다운로드 (v1.1.0)](https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/releases/download/v1.1.0/Novel-Syosetu-Kakuyomu-Downloader-Translator-v1.1.0.exe)
+
+혹은 아래와 같이
 
 ### 1. 저장소 클론
 
