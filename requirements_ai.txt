@@ -1,3 +1,4 @@
-torch==2.13.0+cu130   #cuda 버전에 따라 다르게
+torch   #cuda 버전에 따라 다르게
+# https://pytorch.org/get-started/locally/ 접속, 필요한 버전 따로 찾아 설치
 transformers==5.15.0
 protobuf==7.36.0

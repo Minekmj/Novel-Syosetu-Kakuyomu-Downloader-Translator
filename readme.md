@@ -94,6 +94,8 @@ cd novel-syosetu-kakuyomu-downloader-translator
 
 ### 2. 가상환경 생성 및 활성화
 
+#### 필수 사항 : python3.12 이상
+
 프로젝트 독립 환경 구성을 위해 가상환경 생성을 권장합니다.
 
 * **Windows**:
