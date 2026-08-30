@@ -536,7 +536,8 @@ class KakuyomuSearch:
     FLAG_INCLUSION_AND_EXLUSION = {
         "잔혹 묘사": "cruel",
         "폭력 묘사": "violent",
-        "성 묘사": "violent"
+        "성 묘사": "sexual",
+        "서적 미디어화": "has_publication"
     }
 
     @staticmethod
@@ -571,9 +572,10 @@ class KakuyomuSearch:
         if serial_status:
             params.append(("serial_status", serial_status))
         if inclusion_flag:
-            params.append(("inclusion_conditions", " ".join(inclusion_flag)))
+            params.append(("inclusion_conditions", ",".join(inclusion_flag)))
         if exclusion_flag:
-            params.append(("exclusion_flag_name", " ".join(inclusion_flag)))
+            for i in exclusion_flag:
+                params.append(("exclusion_flag_name", i))
 
         if page > 1:
             params.append(("page", str(page)))

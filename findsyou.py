@@ -626,7 +626,7 @@ class WorkCardWidget(QWidget):
         )
 
         self.lbl_stars = QLabel(
-            f'★ {stars}'
+            f'{"★" if self.is_k else "pt"} {stars}'
         )
 
         self.lbl_stars.setObjectName(
@@ -868,7 +868,7 @@ class DetailDialog(QDialog):
         original_title.setWordWrap(True)
 
         stars = QLabel(
-            f"★ {self.item_data.get('stars', '')}"
+            f"{'★' if self.is_k else 'pt'} {self.item_data.get('stars', '')}"
         )
 
         stars.setObjectName(
