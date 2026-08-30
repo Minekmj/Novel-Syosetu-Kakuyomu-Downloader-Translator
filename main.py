@@ -11,6 +11,8 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                             QMenu, QCheckBox, QSizePolicy, QComboBox)
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction, QFont
+from PySide6.QtGui import QIcon
+import ctypes
 
 import down
 import data as data_iteam
@@ -454,6 +456,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("다운로더")
         self.resize(950, 700)
         self.setMinimumSize(650, 550)
+        self.setWindowIcon(QIcon(resource_path("main.ico")))
 
         main_widget = QWidget()
         self.setCentralWidget(main_widget)
@@ -761,12 +764,29 @@ class MainWindow(QMainWindow):
         if not close_event is None: close_event()
         super().closeEvent(event)
 
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
 app = None
 close_event = None
 
 def main(callback = None, close = None):
     global app, close_event
+    if sys.platform == "win32":  # 윈도우 환경일 경우에만 실행
+        try:
+            # 고유한 임의의 문자열 지정 (형식은 자유)
+            myappid = 'mine.mn.downloader.v1'
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+        except Exception:
+            pass
+        
     app = QApplication(sys.argv)
+    app.setWindowIcon(QIcon(resource_path("main.ico")))
     close_event = close
         
     font = QFont("Pretendard", 10)
@@ -775,6 +795,7 @@ def main(callback = None, close = None):
     app.setStyleSheet(data_iteam.MINIMAL_DARK_THEME)
 
     window = MainWindow()
+    window.setWindowIcon(QIcon(resource_path("main.ico")))
     callback()
     window.show()
     sys.exit(app.exec())
