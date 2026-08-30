@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Novel Syosetu Kakuyomu Downloader Translator 의견 보내기">
+<title>의견 보내기</title>
+
+<style>
+*{box-sizing:border-box}
+
+html,body{
+    margin:0;
+    padding:0;
+    min-height:100%;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif;
+    background:#17191c;
+    color:#e8eaed
+}
+
+body{
+    min-height:100vh;
+    display:flex;
+    justify-content:center;
+    padding:70px 20px
+}
+
+.container{
+    width:100%;
+    max-width:680px
+}
+
+.header{
+    margin-bottom:28px
+}
+
+.brand{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-bottom:20px;
+    color:#9da4aa;
+    font-size:13px
+}
+
+.brand-mark{
+    width:28px;
+    height:28px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    border:1px solid #41464b;
+    border-radius:6px;
+    color:#cdd1d5;
+    font-size:12px;
+    font-weight:600
+}
+
+.header h1{
+    margin:0 0 8px;
+    color:#f1f2f3;
+    font-size:28px;
+    line-height:1.3;
+    font-weight:600;
+    letter-spacing:-.8px
+}
+
+.header p{
+    margin:0;
+    color:#858b91;
+    font-size:13px;
+    line-height:1.6
+}
+
+.card{
+    padding:28px;
+    background:#202327;
+    border:1px solid #34383d;
+    border-radius:10px
+}
+
+.field{
+    margin-bottom:22px
+}
+
+label{
+    display:block;
+    margin-bottom:8px;
+    color:#d9dde0;
+    font-size:13px;
+    font-weight:600
+}
+
+.required{
+    margin-left:3px;
+    color:#d66a6a
+}
+
+select,textarea{
+    display:block;
+    width:100%;
+    border:1px solid #3c4146;
+    border-radius:6px;
+    outline:none;
+    background:#181b1e;
+    color:#e1e4e6;
+    font-family:inherit;
+    font-size:13px;
+    transition:border-color .15s,background .15s
+}
+
+select{
+    height:44px;
+    padding:0 11px;
+    cursor:pointer
+}
+
+textarea{
+    min-height:190px;
+    padding:11px;
+    resize:vertical;
+    line-height:1.65
+}
+
+select:hover,
+textarea:hover{
+    border-color:#4b5157
+}
+
+select:focus,
+textarea:focus{
+    border-color:#69727a;
+    background:#1b1e21
+}
+
+select option{
+    background:#181b1e;
+    color:#e1e4e6
+}
+
+.counter{
+    margin-top:6px;
+    text-align:right;
+    color:#666d73;
+    font-size:11px
+}
+
+.submit{
+    width:100%;
+    height:45px;
+    border:1px solid #4a5056;
+    border-radius:6px;
+    background:#e2e5e7;
+    color:#181a1c;
+    font-family:inherit;
+    font-size:13px;
+    font-weight:600;
+    cursor:pointer;
+    transition:background .15s,transform .1s
+}
+
+.submit:hover{
+    background:#f0f1f2
+}
+
+.submit:active{
+    background:#d4d7da;
+    transform:translateY(1px)
+}
+
+.submit:disabled{
+    opacity:.5;
+    cursor:not-allowed;
+    transform:none
+}
+
+.loading{
+    display:none;
+    margin-left:5px
+}
+
+.message{
+    display:none;
+    margin-bottom:18px;
+    padding:11px 13px;
+    border-radius:6px;
+    font-size:12px;
+    line-height:1.5
+}
+
+.message.success{
+    display:block;
+    background:#1d3024;
+    border:1px solid #31513a;
+    color:#a8d4b3
+}
+
+.message.error{
+    display:block;
+    background:#321f20;
+    border:1px solid #523234;
+    color:#dda5a6
+}
+
+.footer{
+    margin-top:15px;
+    text-align:center;
+    color:#60666c;
+    font-size:11px
+}
+
+.hp{
+    position:absolute;
+    left:-9999px;
+    width:1px;
+    height:1px;
+    overflow:hidden
+}
+
+@media(max-width:600px){
+    body{
+        padding:38px 15px
+    }
+
+    .header h1{
+        font-size:24px
+    }
+
+    .card{
+        padding:21px 18px
+    }
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <div class="header">
+        <div class="brand">
+            <div class="brand-mark">!</div>
+            <span>Novel(Syosetu, Kakuyomu) Downloader & Translator</span>
+        </div>
+
+        <h1>의견 보내기</h1>
+
+        <p>
+            프로그램 사용 중 발견한 문제나 개선 의견을 알려주세요.
+        </p>
+    </div>
+
+    <div class="card">
+
+        <div id="message" class="message"></div>
+
+        <form id="feedbackForm">
+
+            <div class="field">
+                <label for="category">
+                    구분<span class="required">*</span>
+                </label>
+
+                <select id="category" name="category" required>
+                    <option value="">선택해주세요</option>
+                    <option value="기능 추가 요청">기능 추가 요청</option>
+                    <option value="버그 신고">버그 신고</option>
+                    <option value="불만 신고">불만 신고</option>
+                    <option value="개선 요구">개선 요구</option>
+                </select>
+            </div>
+
+            <div class="field">
+                <label for="version">
+                    버전<span class="required">*</span>
+                </label>
+
+                <select id="version" name="version" required>
+                    <option value="">버전을 불러오는 중...</option>
+                </select>
+            </div>
+
+            <div class="field">
+                <label for="details">
+                    문제 내역<span class="required">*</span>
+                </label>
+
+                <textarea
+                    id="details"
+                    name="details"
+                    maxlength="3000"
+                    placeholder="내용을 입력해주세요."
+                    required
+                ></textarea>
+
+                <div class="counter">
+                    <span id="counter">0</span> / 3000
+                </div>
+            </div>
+
+            <div class="hp">
+                <input
+                    type="text"
+                    id="website"
+                    name="website"
+                    tabindex="-1"
+                    autocomplete="off"
+                >
+            </div>
+
+            <button
+                type="submit"
+                class="submit"
+                id="submitButton"
+            >
+                의견 보내기<span class="loading" id="loading">...</span>
+            </button>
+
+        </form>
+    </div>
+
+    <div class="footer">
+        제출된 의견은 프로그램 개선을 위해 사용됩니다.
+    </div>
+
+</div>
+
+<iframe
+    name="googleFeedbackFrame"
+    style="display:none"
+></iframe>
+
+<script>
+const SCRIPT_URL="https://script.google.com/macros/s/AKfycbz8N4gI8_-yMrMjHj8qKliDVEpTy0Qv9KMUP4sZgE_ZzjXk5HW8zwVKCAIUEYD5pI1Xuw/exec";
+
+const RELEASE_API="https://api.github.com/repos/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/releases";
+
+const form=document.getElementById("feedbackForm");
+const category=document.getElementById("category");
+const version=document.getElementById("version");
+const details=document.getElementById("details");
+const counter=document.getElementById("counter");
+const message=document.getElementById("message");
+const submitButton=document.getElementById("submitButton");
+const loading=document.getElementById("loading");
+
+async function loadVersions(){
+    try{
+        const response=await fetch(RELEASE_API,{
+            headers:{
+                "Accept":"application/vnd.github+json"
+            }
+        });
+
+        if(!response.ok){
+            throw new Error("GitHub Releases 요청 실패");
+        }
+
+        const releases=await response.json();
+        const validReleases=releases.filter(release=>!release.draft);
+
+        version.innerHTML='<option value="">선택해주세요</option>';
+
+        validReleases.forEach(release=>{
+            const option=document.createElement("option");
+            option.value=release.tag_name;
+            option.textContent=release.tag_name+(release.prerelease?" (프리릴리즈)":"");
+            version.appendChild(option);
+        });
+
+        const unknownOption=document.createElement("option");
+        unknownOption.value="모름";
+        unknownOption.textContent="모름";
+        version.appendChild(unknownOption);
+
+        version.value="";
+    }catch(error){
+        console.error(error);
+
+        version.innerHTML='<option value="">선택해주세요</option>';
+
+        const unknownOption=document.createElement("option");
+        unknownOption.value="모름";
+        unknownOption.textContent="모름";
+        version.appendChild(unknownOption);
+
+        version.value="";
+    }
+}
+
+details.addEventListener("input",()=>{
+    counter.textContent=details.value.length;
+});
+
+function showMessage(text,type){
+    message.textContent=text;
+    message.className="message "+type;
+}
+
+form.addEventListener("submit",e=>{
+    e.preventDefault();
+
+    if(document.getElementById("website").value){
+        return;
+    }
+
+    if(!form.checkValidity()){
+        form.reportValidity();
+        return;
+    }
+
+    submitButton.disabled=true;
+    loading.style.display="inline";
+
+    const sendForm=document.createElement("form");
+
+    sendForm.method="POST";
+    sendForm.action=SCRIPT_URL;
+    sendForm.target="googleFeedbackFrame";
+    sendForm.style.display="none";
+
+    const fields={
+        category:category.value,
+        version:version.value,
+        details:details.value
+    };
+
+    Object.entries(fields).forEach(([name,value])=>{
+        const input=document.createElement("input");
+
+        input.type="hidden";
+        input.name=name;
+        input.value=value;
+
+        sendForm.appendChild(input);
+    });
+
+    document.body.appendChild(sendForm);
+
+    sendForm.submit();
+
+    setTimeout(()=>{
+        sendForm.remove();
+
+        showMessage(
+            "의견이 접수되었습니다.",
+            "success"
+        );
+
+        form.reset();
+
+        counter.textContent="0";
+
+        submitButton.disabled=false;
+        loading.style.display="none";
+
+        loadVersions();
+    },1000);
+});
+
+loadVersions();
+</script>
+
+</body>
+</html>
