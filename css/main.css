@@ -7,11 +7,6 @@ QWidget {
     |dv_window||
 }
 
-
-/* =========================================================
-   LABEL
-   ========================================================= */
-
 QLabel {
     background: transparent;
     border: none;
@@ -45,10 +40,18 @@ QLabel#title_label {
 }
 
 QLabel#lbl_title {
-    color: |text_title_sub||;
+    color: |text||;
     font-size: 10.5pt;
-    font-weight: 600;
+    font-weight: 650;
+    line-height: 1.25;
     |dv_lbl_title||
+}
+
+QLabel#lbl_original_title {
+    color: |text_original||;
+    font-size: 8.5pt;
+    padding-top: 1px;
+    |dv_original_title||
 }
 
 QLabel#new_lbl,
@@ -62,7 +65,7 @@ QLabel#label_meta {
 QLabel#url_lbl,
 QLabel#lbl_url {
     color: |text_url||;
-    font-size: 8pt;
+    font-size: 7.8pt;
     |dv_url||
 }
 
@@ -70,13 +73,16 @@ QLabel#lbl_episodes,
 QLabel#prograss {
     color: |text_muted||;
     font-size: 8.5pt;
+    font-weight: 500;
     |dv_progress||
 }
 
 QLabel#cat_label {
     color: |text_category||;
-    font-size: 8pt;
-    font-weight: 600;
+    font-size: 8.5pt;
+    font-weight: 650;
+    padding-top: 3px;
+    padding-bottom: 2px;
     |dv_cat_label||
 }
 
@@ -87,16 +93,74 @@ QLabel#tilde {
 }
 
 QLabel#lbl_stars {
+    background-color: |surface_rating||;
     color: |text_star||;
+    border-radius: 7px;
+    padding: 4px 8px;
     font-size: 8.5pt;
-    font-weight: 600;
+    font-weight: 700;
     |dv_stars||
 }
 
+QLabel#detail_dialog_title {
+    color: |text||;
+    font-size: 15pt;
+    font-weight: 700;
+    padding-bottom: 1px;
+    |dv_detail_title||
+}
 
-/* =========================================================
-   TAG
-   ========================================================= */
+QLabel#detail_original_title {
+    color: |text_original||;
+    font-size: 9pt;
+    padding-bottom: 3px;
+    |dv_detail_original_title||
+}
+
+QLabel#detail_section_title {
+    color: |text_category||;
+    font-size: 8.5pt;
+    font-weight: 700;
+    padding-top: 3px;
+    padding-bottom: 2px;
+    |dv_detail_section_title||
+}
+
+QLabel#detail_rating {
+    color: |text_star||;
+    font-size: 9pt;
+    font-weight: 700;
+    |dv_detail_rating||
+}
+
+QLabel#detail_meta_text {
+    color: |text||;
+    font-size: 8.5pt;
+    font-weight: 500;
+    |dv_detail_meta_text||
+}
+
+QLabel#detail_url {
+    color: |text_url||;
+    font-size: 8pt;
+    padding: 8px 10px;
+    background-color: |surface_input||;
+    border-radius: 7px;
+    |dv_detail_url||
+}
+
+QLabel#dialog_description {
+    color: |text_meta||;
+    font-size: 8.5pt;
+    padding-bottom: 4px;
+    |dv_dialog_description||
+}
+
+QLabel#dialog_hint {
+    color: |text_dim||;
+    font-size: 8pt;
+    |dv_dialog_hint||
+}
 
 QLabel#lbl_tag {
     background-color: |surface_tag||;
@@ -107,11 +171,6 @@ QLabel#lbl_tag {
     font-size: 8pt;
     |dv_tag||
 }
-
-
-/* =========================================================
-   INPUT
-   ========================================================= */
 
 QLineEdit,
 QComboBox,
@@ -151,11 +210,6 @@ QSpinBox:disabled {
     |dv_input_disabled||
 }
 
-
-/* =========================================================
-   COMBOBOX
-   ========================================================= */
-
 QComboBox {
     padding-right: 30px;
     |dv_combo||
@@ -194,11 +248,6 @@ QComboBox QAbstractItemView::item {
     |dv_combo_item||
 }
 
-
-/* =========================================================
-   BUTTON
-   ========================================================= */
-
 QPushButton {
     background-color: |surface_button||;
     color: |text_button||;
@@ -229,18 +278,13 @@ QPushButton:disabled {
     |dv_button_disabled||
 }
 
-
-/* =========================================================
-   PRIMARY BUTTON
-   ========================================================= */
-
 QPushButton#primaryBtn {
     background-color: |primary_bg||;
     color: |primary_text||;
     border: none;
     border-radius: 8px;
     min-height: 22px;
-    padding: 8px 15px;
+    padding: 8px 16px;
     font-weight: 650;
     |dv_primary_btn||
 }
@@ -256,11 +300,6 @@ QPushButton#primaryBtn:pressed {
     |dv_primary_btn_pressed||
 }
 
-
-/* =========================================================
-   SECONDARY BUTTON
-   ========================================================= */
-
 QPushButton#secondaryBtn {
     background-color: |secondary_bg||;
     color: |secondary_text||;
@@ -272,11 +311,6 @@ QPushButton#secondaryBtn:hover {
     color: |secondary_hover_text||;
     |dv_secondary_btn_hover||
 }
-
-
-/* =========================================================
-   DELETE BUTTON
-   ========================================================= */
 
 QPushButton#del {
     background-color: transparent;
@@ -292,39 +326,57 @@ QPushButton#del:hover {
     |dv_del_btn_hover||
 }
 
-
-/* =========================================================
-   FILTER / CHIP BUTTON
-   ========================================================= */
-
 QPushButton#btn {
     background-color: |surface_chip||;
     color: |chip_text||;
-    border: none;
+    border: 1px solid transparent;
     border-radius: 10px;
     min-height: 15px;
-    padding: 4px 9px;
+    padding: 5px 10px;
     font-size: 8pt;
+    font-weight: 500;
     |dv_chip_btn||
 }
 
 QPushButton#btn:hover {
     background-color: |surface_chip_hover||;
     color: |chip_hover_text||;
+    border: 1px solid |border_card_hover||;
     |dv_chip_btn_hover||
 }
 
 QPushButton#btn:checked {
     background-color: |chip_checked||;
     color: |chip_checked_text||;
-    font-weight: 600;
+    font-weight: 650;
+    border: 1px solid transparent;
     |dv_chip_btn_checked||
 }
 
+QPushButton#detail_tag_btn {
+    background-color: |surface_chip||;
+    color: |chip_text||;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    min-height: 15px;
+    padding: 5px 11px;
+    font-size: 8pt;
+    font-weight: 500;
+    |dv_detail_tag_btn||
+}
 
-/* =========================================================
-   GROUP
-   ========================================================= */
+QPushButton#detail_tag_btn:hover {
+    background-color: |surface_chip_hover||;
+    color: |chip_hover_text||;
+    border: 1px solid |border_card_hover||;
+    |dv_detail_tag_btn_hover||
+}
+
+QPushButton#detail_tag_btn:pressed {
+    background-color: |chip_checked||;
+    color: |chip_checked_text||;
+    |dv_detail_tag_btn_pressed||
+}
 
 QGroupBox {
     background-color: transparent;
@@ -348,11 +400,6 @@ QGroupBox::title {
     |dv_groupbox_title||
 }
 
-
-/* =========================================================
-   CARD
-   ========================================================= */
-
 QFrame#CardFrame,
 QWidget#cardContainer {
     background-color: |surface_card||;
@@ -367,11 +414,6 @@ QWidget#cardContainer:hover {
     border: 1px solid |border_card_hover||;
     |dv_card_hover||
 }
-
-
-/* =========================================================
-   LIST
-   ========================================================= */
 
 QListWidget {
     background: transparent;
@@ -393,24 +435,56 @@ QListWidget::item:selected {
     background: transparent;
     |dv_list_item_selected||
 }
-
-
-/* =========================================================
-   TEXTEDIT
-   ========================================================= */
-
-QTextEdit {
-    background-color: transparent;
-    color: |textedit_text||;
+QFrame#detail_meta {
+    background-color: |surface_card||;
     border: 1px solid transparent;
     border-radius: 9px;
-    padding: 10px;
+    |dv_detail_meta||
+}
+
+QWidget#detail_tags {
+    background-color: transparent;
+    min-height: 25px;
+    |dv_detail_tags||
+}
+
+QFrame#dialog_separator {
+    background-color: |border_subtle||;
+    border: none;
+    |dv_dialog_separator||
+}
+
+QTextEdit {
+    background-color: |surface_card||;
+    color: |textedit_text||;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    padding: 13px;
     font-size: 9pt;
     selection-background-color: |selection_textedit||;
     selection-color: |selection_text||;
     |dv_textedit||
 }
 
+QTextEdit#detail_description {
+    background-color: |surface_card||;
+    color: |textedit_text||;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    padding: 14px;
+    font-size: 9.5pt;
+    selection-background-color: |selection_textedit||;
+    selection-color: |selection_text||;
+    |dv_detail_description||
+}
+
+QTextEdit#detail_description QAbstractScrollArea {
+    background: transparent;
+}
+
+QTextEdit#detail_description QWidget {
+    background: transparent;
+}
 QTextEdit#t {
     background: transparent;
     border: none;
@@ -419,11 +493,6 @@ QTextEdit#t {
     font-size: 9.5pt;
     |dv_textedit_transparent||
 }
-
-
-/* =========================================================
-   CHECKBOX
-   ========================================================= */
 
 QCheckBox {
     background: transparent;
@@ -466,11 +535,6 @@ QCheckBox::indicator:disabled {
     |dv_checkbox_indicator_disabled||
 }
 
-
-/* =========================================================
-   SCROLL AREA & BAR
-   ========================================================= */
-
 QScrollArea {
     background: transparent;
     border: none;
@@ -506,11 +570,6 @@ QScrollBar::sub-page:vertical {
     border: none;
 }
 
-
-/* =========================================================
-   MENU
-   ========================================================= */
-
 QMenu {
     background-color: |surface_menu||;
     border: 1px solid |border_default||;
@@ -541,11 +600,6 @@ QMenu::separator {
     |dv_menu_separator||
 }
 
-
-/* =========================================================
-   SPINBOX
-   ========================================================= */
-
 QSpinBox::up-button,
 QSpinBox::down-button {
     width: 0px;
@@ -559,11 +613,6 @@ QSpinBox::down-arrow {
     width: 0px;
     height: 0px;
 }
-
-
-/* =========================================================
-   TRANSPARENT CONTAINERS
-   ========================================================= */
 
 QWidget#tag_container {
     background-color: transparent;

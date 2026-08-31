@@ -291,7 +291,11 @@ class AddressRowWidget(QWidget):
         self.down_time = "0" if not down_time else down_time
         self.now = "-"
 
-        if title_text:
+        self.is_empty = not site_url
+
+        if self.is_empty:
+            self.title_text = ""
+        elif title_text:
             self.title_text = title_text
         else:
             try:
@@ -305,6 +309,36 @@ class AddressRowWidget(QWidget):
         self.main_frame = QFrame()
         self.main_frame.setObjectName("CardFrame")
 
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 2, 0, 2)
+        main_layout.addWidget(self.main_frame)
+
+        if self.is_empty:
+            card_layout = QVBoxLayout(self.main_frame)
+            card_layout.setContentsMargins(20, 24, 20, 24)
+            card_layout.setSpacing(6)
+            card_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+            welcome_lbl = QLabel("처음 오셨나요?")
+            welcome_lbl.setObjectName("title_lbl")
+            welcome_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+            guide_lbl = QLabel("URL을 입력하여 직접 추가하시거나\n작품을 검색해서 추가하여 당신만의 목록을 만드세요!")
+            guide_lbl.setObjectName("url_lbl")
+            guide_lbl.setWordWrap(True)
+            guide_lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+            guide_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            guide_lbl.setMinimumWidth(0)
+            guide_lbl.setStyleSheet("""
+                                    font-size: 13px;
+                                    font-weight: 570;
+                                    """)
+
+            card_layout.addWidget(welcome_lbl)
+            card_layout.addWidget(guide_lbl)
+
+            return
+
         card_layout = QHBoxLayout(self.main_frame)
         card_layout.setContentsMargins(16, 12, 16, 12)
         card_layout.setSpacing(16)
@@ -315,9 +349,9 @@ class AddressRowWidget(QWidget):
 
         self.title_lbl = QLabel(self.title_text)
         self.title_lbl.setObjectName("title_lbl")
-        self.title_lbl.setMinimumWidth(50) 
+        self.title_lbl.setMinimumWidth(50)
         self.title_lbl.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Preferred)
-        
+
         sub_layout = QHBoxLayout()
         sub_layout.setSpacing(12)
         sub_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
@@ -357,14 +391,10 @@ class AddressRowWidget(QWidget):
         card_layout.addLayout(info_layout, stretch=1)
         card_layout.addLayout(button_layout)
 
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 2, 0, 2)
-        main_layout.addWidget(self.main_frame)
-
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self.show_context_menu)
         self.start_async_fetch()
-                
+
     def start_async_fetch(self):
         self.worker = FetchNewNumberWorker(self.site_url)
         self.worker.finished.connect(self.update_new_label)
@@ -412,7 +442,7 @@ class AddressRowWidget(QWidget):
         dialog = EditTitleDialog(self.title_text, self)
         if dialog.exec():
             new_title = dialog.get_new_title()
-            
+
             if not new_title or new_title == self.title_text:
                 return
 
@@ -564,6 +594,10 @@ class MainWindow(QMainWindow):
         self.click_watcher.add_address.connect(self.add_address_row)
         self.click_watcher.start()
 
+        self.is_first_massage = AddressRowWidget("")
+        self.is_first_massage.hide()
+        self.rows_layout.addWidget(self.is_first_massage)
+        
         self.init_saved_data()
         
         from v import V
@@ -588,8 +622,11 @@ class MainWindow(QMainWindow):
     def load_widgets_from_json(self):
         data = load_data()
         items_dict = data.get("list", {})
+        
+        nu = 0
 
         for title, item in items_dict.items():
+            nu += 1
             site_url = item.get("src", "")
             last_down = item.get("down", "0")
             down_time = item.get("down_time", "0")
@@ -600,6 +637,12 @@ class MainWindow(QMainWindow):
 
             self.rows_layout.addWidget(row)
             self.row_widgets.append(row)
+            
+            if len(self.row_widgets) > 0:
+                self.is_first_massage.hide()
+            
+        if nu == 0:
+            self.is_first_massage.show()
 
         self.apply_filter_and_sort()
 
@@ -642,6 +685,13 @@ class MainWindow(QMainWindow):
 
     def add_address_row(self):
         url = self.main_address_edit.text().strip()
+        
+        if "syosetu.com" in url:
+            if not url.endswith("/"):
+                url += "/"
+        elif "kakuyomu.jp" in url:
+            if url.endswith("/"):
+                url = url.rstrip("/")
 
         if not url:
             return
@@ -688,6 +738,9 @@ class MainWindow(QMainWindow):
 
         self.rows_layout.addWidget(row)
         self.row_widgets.append(row)
+        
+        if len(self.row_widgets) > 0:
+            self.is_first_massage.hide()
 
         self.apply_filter_and_sort()
         self.scroll_area.verticalScrollBar().setValue(self.scroll_area.verticalScrollBar().maximum())
@@ -703,6 +756,9 @@ class MainWindow(QMainWindow):
 
         if row_widget in self.row_widgets:
             self.row_widgets.remove(row_widget)
+            
+        if len(self.row_widgets) <= 0:
+            self.is_first_massage.show()
 
         row_widget.deleteLater()
 
@@ -793,9 +849,8 @@ close_event = None
 
 def main(callback = None, close = None):
     global app, close_event
-    if sys.platform == "win32":  # 윈도우 환경일 경우에만 실행
+    if sys.platform == "win32":
         try:
-            # 고유한 임의의 문자열 지정 (형식은 자유)
             myappid = 'mine.mn.downloader.v1'
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
         except Exception:

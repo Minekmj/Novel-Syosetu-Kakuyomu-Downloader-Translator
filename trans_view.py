@@ -37,8 +37,7 @@ class TranslateDialog(QDialog):
 
         self.setWindowTitle("AI 번역")
         self.resize(640, 800)
-        self.setMinimumSize(640, 800)
-        self.setFixedSize(640, 800)
+        self.setMinimumSize(450, 730)
         self.setAcceptDrops(True)
 
         self.init_ui()

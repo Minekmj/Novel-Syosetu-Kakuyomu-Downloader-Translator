@@ -343,86 +343,50 @@ class TagFlowWidget(QWidget):
                 )
 
 class TagSelectDialog(QDialog):
-    def __init__(
-        self,
-        target_line_edit,
-        categories_data,
-        title='태그 선택',
-        parent=None
-    ):
+    def __init__(self, target_line_edit, categories_data, title='태그 선택', parent=None):
         super().__init__(parent)
 
         self.setWindowTitle(title)
-
-        self.resize(560, 520)
-
-        self.setMinimumSize(
-            460,
-            400
-        )
+        self.resize(600, 620)
+        self.setMinimumSize(500, 450)
 
         layout = QVBoxLayout(self)
-
-        layout.setContentsMargins(
-            14,
-            14,
-            14,
-            14
-        )
-
-        layout.setSpacing(10)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(8)
 
         title_label = QLabel(title)
+        title_label.setObjectName('detail_dialog_title')
+        layout.addWidget(title_label)
 
-        title_label.setObjectName(
-            'title_label'
-        )
-
-        layout.addWidget(
-            title_label
-        )
-
-        desc = QLabel(
-            '태그를 클릭하면 선택 또는 해제됩니다.'
-        )
-
-        desc.setObjectName(
-            'new_and_now'
-        )
-
+        desc = QLabel('원하는 태그를 클릭하여 검색 조건에 추가하거나 제거할 수 있습니다.')
+        desc.setObjectName('dialog_description')
+        desc.setWordWrap(True)
         layout.addWidget(desc)
 
-        self.tag_panel = TagFlowWidget(
-            target_line_edit,
-            categories_data
-        )
+        self.tag_panel = TagFlowWidget(target_line_edit, categories_data, self)
+        layout.addWidget(self.tag_panel, 1)
 
-        layout.addWidget(
-            self.tag_panel,
-            stretch=1
-        )
+        bottom_line = QFrame()
+        bottom_line.setObjectName('dialog_separator')
+        bottom_line.setFixedHeight(1)
+        layout.addWidget(bottom_line)
 
         bottom_layout = QHBoxLayout()
+        bottom_layout.setContentsMargins(0, 6, 0, 0)
 
-        bottom_layout.addStretch()
+        selected_label = QLabel('선택된 태그는 검색어 입력란에 자동으로 반영됩니다.')
+        selected_label.setObjectName('dialog_hint')
+        selected_label.setWordWrap(True)
+
+        bottom_layout.addWidget(selected_label, 1)
 
         btn_close = QPushButton('완료')
+        btn_close.setObjectName('primaryBtn')
+        btn_close.setMinimumWidth(90)
+        btn_close.clicked.connect(self.accept)
 
-        btn_close.setObjectName(
-            'primaryBtn'
-        )
-
-        btn_close.clicked.connect(
-            self.accept
-        )
-
-        bottom_layout.addWidget(
-            btn_close
-        )
-
-        layout.addLayout(
-            bottom_layout
-        )
+        bottom_layout.addWidget(btn_close)
+        layout.addLayout(bottom_layout)
 
 class SearchWorker(QThread):
     finished = Signal(dict)
@@ -559,14 +523,7 @@ class DetailWorker(QThread):
         )
 
 class WorkCardWidget(QWidget):
-    def __init__(
-        self,
-        item_data,
-        auto_translate,
-        data_setter,
-        is_k,
-        parent=None
-    ):
+    def __init__(self, item_data, auto_translate, data_setter, is_k, parent=None):
         super().__init__(parent)
 
         self.item_data = item_data
@@ -819,200 +776,136 @@ class CopyTagButton(QPushButton):
         )
 
 class DetailDialog(QDialog):
-    def __init__(
-        self,
-        item_data,
-        auto_translate,
-        is_k,
-        parent=None
-    ):
+    def __init__(self, item_data, auto_translate, is_k, parent=None):
         super().__init__(parent)
 
         self.item_data = item_data
         self.auto_translate = auto_translate
         self.is_k = is_k
 
-        self.setWindowTitle('상세 정보')
-
-        self.resize(700, 720)
-
-        self.setMinimumSize(
-            560,
-            600
-        )
+        self.setWindowTitle('작품 상세 정보')
+        self.resize(760, 760)
+        self.setMinimumSize(620, 620)
 
         layout = QVBoxLayout(self)
-
-        layout.setContentsMargins(
-            20,
-            20,
-            20,
-            20
-        )
-
+        layout.setContentsMargins(22, 22, 22, 20)
         layout.setSpacing(12)
 
-        title = self.item_data.get(
-            'title_ko',
-            self.item_data.get(
-                'title',
-                ''
-            )
-        )
+        title = self.item_data.get('title_ko', self.item_data.get('title', ''))
+        original_title = self.item_data.get('title', '')
+        stars_value = self.item_data.get('stars', '')
+        status_value = self.item_data.get('status_episodes', '')
+        updated_value = self.item_data.get('updated_at', '')
+        url = self.item_data.get('url', '')
 
         title_label = QLabel(title)
-
-        title_label.setObjectName(
-            'label_title'
-        )
-
+        title_label.setObjectName('detail_dialog_title')
         title_label.setWordWrap(True)
+        layout.addWidget(title_label)
 
-        layout.addWidget(
-            title_label
-        )
+        if original_title and original_title != title:
+            original_label = QLabel(original_title)
+            original_label.setObjectName('detail_original_title')
+            original_label.setWordWrap(True)
+            layout.addWidget(original_label)
 
-        meta = QFormLayout()
+        meta_frame = QFrame()
+        meta_frame.setObjectName('detail_meta')
 
-        original_title = QLabel(
-            self.item_data.get(
-                'title',
-                ''
-            )
-        )
+        meta_layout = QHBoxLayout(meta_frame)
+        meta_layout.setContentsMargins(13, 10, 13, 10)
+        meta_layout.setSpacing(18)
 
-        original_title.setWordWrap(True)
+        rating_label = QLabel(f"{'★' if self.is_k else 'pt'} {stars_value}")
+        rating_label.setObjectName('detail_rating')
+        meta_layout.addWidget(rating_label)
 
-        stars = QLabel(
-            f"{'★' if self.is_k else 'pt'} {self.item_data.get('stars', '')}"
-        )
+        if status_value:
+            status_label = QLabel(str(status_value))
+            status_label.setObjectName('detail_meta_text')
+            meta_layout.addWidget(status_label)
 
-        stars.setObjectName(
-            'lbl_stars'
-        )
+        if updated_value:
+            updated_label = QLabel(f'최근 갱신  ·  {updated_value}')
+            updated_label.setObjectName('detail_meta_text')
+            meta_layout.addWidget(updated_label)
 
-        status = QLabel(
-            self.item_data.get(
-                'status_episodes',
-                ''
-            )
-        )
+        meta_layout.addStretch()
+        layout.addWidget(meta_frame)
 
-        updated = QLabel(
-            self.item_data.get(
-                'updated_at',
-                ''
-            )
-        )
+        if url:
+            url_title = QLabel('작품 주소')
+            url_title.setObjectName('detail_section_title')
+            layout.addWidget(url_title)
 
-        url = self.item_data.get(
-            'url',
-            ''
-        )
+            url_label = ClickableUrlLabel(str(url))
+            url_label.setObjectName('detail_url')
+            url_label.setWordWrap(True)
+            layout.addWidget(url_label)
 
-        url_label = ClickableUrlLabel(
-            f"{url}"
-        )
-        
-        url_label.setObjectName(
-            'lbl_url'
-        )
-
-        url_label.setWordWrap(True)
-
-        meta.addRow(
-            '원제:',
-            original_title
-        )
-
-        meta.addRow(
-            '평점:',
-            stars
-        )
-
-        meta.addRow(
-            '상태:',
-            status
-        )
-
-        meta.addRow(
-            '업데이트:',
-            updated
-        )
-
-        meta.addRow(
-            'URL:',
-            url_label
-        )
-
-        layout.addLayout(meta)
+        description_title = QLabel('작품 소개')
+        description_title.setObjectName('detail_section_title')
+        layout.addWidget(description_title)
 
         self.text_detail = QTextEdit()
-
+        self.text_detail.setObjectName('detail_description')
         self.text_detail.setReadOnly(True)
-
-        self.text_detail.setText(
-            '상세 정보를 불러오는 중입니다...'
+        self.text_detail.setPlaceholderText('작품 소개가 없습니다.')
+        self.text_detail.setText('상세 정보를 불러오는 중입니다...')
+        self.text_detail.viewport().setStyleSheet(
+            "background: transparent;"
         )
+        layout.addWidget(self.text_detail, 1)
 
-        layout.addWidget(
-            self.text_detail,
-            stretch=1
-        )
+        tag_title = QLabel('태그')
+        tag_title.setObjectName('detail_section_title')
+        layout.addWidget(tag_title)
 
-        tag_title = QLabel(
-            '태그 · 클릭하면 일본어 원문이 복사됩니다'
-        )
-
-        tag_title.setObjectName(
-            'cat_label'
-        )
-
-        layout.addWidget(
-            tag_title
-        )
+        tag_desc = QLabel('태그를 클릭하면 일본어 원문이 클립보드에 복사됩니다.')
+        tag_desc.setObjectName('dialog_hint')
+        layout.addWidget(tag_desc)
 
         self.tags_widget = QWidget()
-        self.tags_widget.setObjectName("tag_container")
+        self.tags_widget.setObjectName('detail_tags')
 
-        self.tags_layout = FlowLayout(
-            self.tags_widget,
-            margin=0,
-            spacing=6
-        )
+        self.tags_layout = FlowLayout(self.tags_widget, margin=0, spacing=6)
+        layout.addWidget(self.tags_widget)
 
-        layout.addWidget(
-            self.tags_widget
-        )
+        bottom_line = QFrame()
+        bottom_line.setObjectName('dialog_separator')
+        bottom_line.setFixedHeight(1)
+        layout.addWidget(bottom_line)
 
         bottom = QHBoxLayout()
+        bottom.setContentsMargins(0, 5, 0, 0)
 
         bottom.addStretch()
 
-        add_button = QPushButton('추가')
+        close_button = QPushButton('닫기')
+        close_button.setObjectName('secondaryBtn')
+        close_button.setMinimumWidth(100)
+        close_button.setStyleSheet("""
+                                   QPushButton#secondaryBtn {
+                                        min-height: 22px;
+                                        padding: 8px 16px;
+                                        font-weight: 650;
+                                    }""")
+        close_button.clicked.connect(self.accept)
 
-        add_button.setObjectName(
-            'primaryBtn'
-        )
+        add_button = QPushButton('작품 추가')
+        add_button.setObjectName('primaryBtn')
+        add_button.setMinimumWidth(100)
+        add_button.clicked.connect(self.on_add_clicked)
 
-        add_button.clicked.connect(
-            self.on_add_clicked
-        )
-
-        bottom.addWidget(
-            add_button
-        )
+        bottom.addWidget(close_button)
+        bottom.addWidget(add_button)
 
         layout.addLayout(bottom)
 
         self.load_detail()
 
     def load_detail(self):
-        target_url = (
-            self.item_data['url']
-            if self.is_k
-            else self.item_data['story']
-        )
+        target_url = self.item_data['url'] if self.is_k else self.item_data['story']
 
         self.worker = DetailWorker(
             target_url,
@@ -1020,112 +913,65 @@ class DetailDialog(QDialog):
             self.is_k
         )
 
-        self.worker.finished.connect(
-            self.on_finished
-        )
-
+        self.worker.finished.connect(self.on_finished)
         self.worker.start()
 
-    def on_finished(
-        self,
-        raw_desc,
-        translated_desc
-    ):
-        raw_data = (
-            str(raw_desc)
-            .split('_____tags_____')
-        )
+    def on_finished(self, raw_desc, translated_desc):
+        raw_data = str(raw_desc).split('_____tags_____')
+        translated_data = str(translated_desc).split('_____tags_____')
 
-        translated_data = (
-            str(translated_desc)
-            .split('_____tags_____')
-        )
+        description = translated_data[0].strip()
 
         self.text_detail.setText(
-            translated_data[0].strip()
+            description if description else '작품 소개가 없습니다.'
         )
 
         original_tags = []
         translated_tags = []
 
-        if (
-            len(raw_data) > 1
-            and raw_data[1].strip()
-        ):
+        if len(raw_data) > 1 and raw_data[1].strip():
             original_tags = [
                 tag.strip()
-                for tag in raw_data[1]
-                .strip()
-                .split(',')
+                for tag in raw_data[1].strip().split(',')
                 if tag.strip()
             ]
 
-        if (
-            len(translated_data) > 1
-            and translated_data[1].strip()
-        ):
+        if len(translated_data) > 1 and translated_data[1].strip():
             translated_tags = [
                 tag.strip()
-                for tag in translated_data[1]
-                .strip()
-                .split(',')
+                for tag in translated_data[1].strip().split(',')
                 if tag.strip()
             ]
 
         if original_tags:
-            self.display_tags(
-                original_tags,
-                translated_tags
-            )
+            self.display_tags(original_tags, translated_tags)
 
-    def display_tags(
-        self,
-        original_tags,
-        translated_tags=None
-    ):
+    def display_tags(self, original_tags, translated_tags=None):
         while self.tags_layout.count():
             item = self.tags_layout.takeAt(0)
 
             if item.widget():
                 item.widget().deleteLater()
 
-        translated_tags = (
-            translated_tags
-            or []
-        )
+        translated_tags = translated_tags or []
 
-        for index, original_tag in enumerate(
-            original_tags
-        ):
+        for index, original_tag in enumerate(original_tags):
             if index < len(translated_tags):
-                display_text = (
-                    translated_tags[index]
-                )
-
+                display_text = translated_tags[index]
             else:
                 display_text = original_tag
 
-            button = CopyTagButton(
-                display_text,
-                original_tag
-            )
-
-            self.tags_layout.addWidget(
-                button
-            )
+            button = CopyTagButton(display_text, original_tag)
+            button.setObjectName('detail_tag_btn')
+            self.tags_layout.addWidget(button)
 
     def on_add_clicked(self):
         global click_plus_url
         global click
 
-        click_plus_url = (
-            self.item_data.get(
-                'url',
-                ''
-            )
-        )
-
+        click_plus_url = self.item_data.get('url', '')
         click = True
+        self.accept()
 
 class MyListWidget(QListWidget):
     nearBottom = Signal()

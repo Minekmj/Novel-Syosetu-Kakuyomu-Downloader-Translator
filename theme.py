@@ -50,6 +50,8 @@ def _make_dark_theme(c, dv=None):
         "text_group_title": c["text2"],
         "text_star": c["star"],
 
+        "text_original": c["muted"],
+
         "surface_card": gra(c["surface"], c["surface2"], direction="v"),
         "surface_button": gra(c["surface2"], c["surface3"], direction="v"),
         "surface_input": gra(c["surface"], c["surface2"], direction="v"),
@@ -71,6 +73,8 @@ def _make_dark_theme(c, dv=None):
         "surface_delete_hover": c["delete_bg"],
         "surface_chip_hover": c["surface4"],
 
+        "surface_rating": "transparent",
+
         "primary_bg": gra(c["accent_light"], c["accent"], c["accent_dark"], direction="diag"),
         "primary_text": "#FFFFFF",
         "primary_hover": gra(c["accent_light"], c["accent"], direction="diag"),
@@ -88,6 +92,7 @@ def _make_dark_theme(c, dv=None):
         "chip_checked_text": "#FFFFFF",
 
         "tag_text": c["text2"],
+
         "delete_text": c["muted"],
         "delete_hover_text": c["delete"],
 
@@ -113,17 +118,36 @@ def _make_dark_theme(c, dv=None):
 
         "textedit_text": c["text"],
         "textedit_transparent_text": c["text"],
+
         "scrollbar": c["border"],
         "scrollbar_hover": c["accent"],
+
         "menu_text": c["text2"],
         "menu_selected_text": "#FFFFFF",
+
         "combo_text": c["text"],
+
+        "dv_original_title": "",
+        "dv_detail_title": "",
+        "dv_detail_original_title": "",
+        "dv_detail_section_title": "",
+        "dv_detail_rating": "",
+        "dv_detail_meta_text": "",
+        "dv_detail_url": "",
+        "dv_dialog_description": "",
+        "dv_dialog_hint": "",
+        "dv_detail_tag_btn": "",
+        "dv_detail_tag_btn_hover": "",
+        "dv_detail_tag_btn_pressed": "",
+        "dv_detail_meta": "",
+        "dv_detail_tags": "",
+        "dv_dialog_separator": "",
+        "dv_detail_description": "",
     }
-    
-    # 커스텀 dv_ 디자인 변수 병합
+
     if dv and isinstance(dv, dict):
         theme.update(dv)
-        
+
     return theme
 
 

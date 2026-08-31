@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MINE DOWNLOADER - EXE 다운로드</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100%;
+}
+
+body {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background: #f5f5f5;
+  color: #222;
+  font-family: Arial, "Malgun Gothic", sans-serif;
+}
+
+.download-box {
+  width: min(440px, calc(100% - 40px));
+  padding: 42px 36px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.icon {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 22px;
+}
+
+.icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.subtitle {
+  margin: 8px 0 30px;
+  color: #666;
+  font-size: 14px;
+}
+
+.version {
+  margin-bottom: 20px;
+  color: #444;
+  font-size: 14px;
+}
+
+.download-button {
+  display: block;
+  width: 100%;
+  padding: 13px 20px;
+  border: 0;
+  border-radius: 6px;
+  background: #222;
+  color: #fff;
+  font-size: 15px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.download-button:hover {
+  background: #333;
+}
+
+.status {
+  margin-top: 18px;
+  min-height: 20px;
+  color: #777;
+  font-size: 13px;
+}
+
+.back {
+  display: inline-block;
+  margin-top: 24px;
+  color: #666;
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.back:hover {
+  color: #222;
+  text-decoration: underline;
+}
+
+.error {
+  color: #b00020;
+}
+
+  </style>
+</head>
+
+<body>
+
+  <main class="download-box">
+    <div class="icon">
+      <img src="https://raw.githubusercontent.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/refs/heads/main/main.ico?v=2" alt="MINE DOWNLOADER">
+    </div>
+
+
+<h1>MINE DOWNLOADER</h1>
+<p class="subtitle">Windows EXE 다운로드</p>
+
+<div class="version" id="version">최신 버전 확인 중...</div>
+
+<a id="download-button" class="download-button" href="#" style="display: none;">
+  EXE 다운로드
+</a>
+
+<div id="status" class="status">
+  최신 릴리스를 확인하고 있습니다.
+</div>
+
+<a class="back" href="javascript:history.back();">
+  이전 페이지로 돌아가기
+</a>
+
+
+  </main>
+
+  <script>
+    const API_URL = "https://api.github.com/repos/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/releases/latest";
+
+    fetch(API_URL)
+      .then(response => {
+        if (!response.ok) {
+          throw new Error("GitHub API 요청 실패");
+        }
+        return response.json();
+      })
+      .then(release => {
+        const exe = release.assets.find(asset => asset.name.toLowerCase().endsWith(".exe"));
+
+        if (!exe) {
+          throw new Error("EXE 파일을 찾을 수 없습니다.");
+        }
+
+        const version = release.tag_name;
+        const downloadButton = document.getElementById("download-button");
+        const versionElement = document.getElementById("version");
+        const status = document.getElementById("status");
+
+        versionElement.textContent = `최신 버전 ${version}`;
+        downloadButton.href = exe.browser_download_url;
+        downloadButton.style.display = "block";
+        status.textContent = "다운로드할 준비가 되었습니다.";
+
+        downloadButton.addEventListener("click", () => {
+          status.textContent = "다운로드를 시작합니다.";
+
+          setTimeout(() => {
+            history.back();
+          }, 1000);
+        });
+
+        setTimeout(() => {
+          downloadButton.click();
+        }, 300);
+      })
+      .catch(error => {
+        console.error(error);
+
+        const versionElement = document.getElementById("version");
+        const status = document.getElementById("status");
+
+        versionElement.textContent = "다운로드할 수 없습니다.";
+        status.textContent = "최신 릴리스 정보를 가져오지 못했습니다.";
+        status.classList.add("error");
+      });
+  </script>
+
+</body>
+</html>
