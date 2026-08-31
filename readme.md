@@ -214,6 +214,10 @@ Python이나 별도의 개발 환경을 설치하지 않고 바로 실행하려�
 
 <br/>
 
+<br/>
+
+<br/>
+
 <a href="https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/releases/latest">
   <img src="https://img.shields.io/badge/View%20All%20Releases-GitHub-181717?style=for-the-badge&logo=github&logoColor=white" alt="View All Releases">
 </a>
@@ -341,7 +345,8 @@ USE_LOCAL_AI = True
 * 프로그램의 사용으로 인해 발생할 수 있는 저작권 침해, 서비스 이용 제한, IP 차단, 계정 제한 및 기타 법적·행정적 문제에 대해 개발자는 책임을 지지 않습니다.
 * 번역 기능을 통해 생성된 결과물의 정확성이나 완전성을 보장하지 않습니다.
 * 프로그램의 사용 또는 번역 결과물로 인해 발생하는 직접적·간접적 손해에 대해 개발자는 책임을 지지 않습니다.
-<h2/>
+
+<h2> </h2>
 
 <div align="center">
 
