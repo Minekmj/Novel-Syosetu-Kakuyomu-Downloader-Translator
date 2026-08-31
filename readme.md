@@ -54,27 +54,108 @@
 
 <div align="center">
 
-![프로그램 메인](https://github.com/user-attachments/assets/4d272181-e8d5-4150-aa88-0f426a1838b0)
+![프로그램 메인](https://github.com/user-attachments/assets/8e9cdee6-0266-4583-8218-8a255d2ad514)
 
 <p align="center"><i>프로그램 메인 화면 (목록 화면)</i></p>
 
-![테마 및 환경 설정](https://github.com/user-attachments/assets/4bc2a64f-ac05-44e1-bb5e-94a21c6582ac)
-
-<p align="center"><i>테마 및 환경 설정 화면</i></p>
-
-![ai 번역](https://github.com/user-attachments/assets/3a3eb6d4-a9ad-432e-b15f-fafd64cd6d72)
+![ai 번역](https://github.com/user-attachments/assets/94418491-d1ae-4a12-b8fc-8b913c99909a)
 
 <p align="center"><i>ai 번역기 화면</i></p>
 
-![나로우 파인더](https://github.com/user-attachments/assets/49ab0049-0754-4028-99f5-0bc7654423fc)
+![나로우 파인더](https://github.com/user-attachments/assets/ae4733e2-c2f7-4230-99df-f212d099d965)
 
 <p align="center"><i>나로우 파인더 메인 화면</i></p>
 
-![카쿠요무 파인더](https://github.com/user-attachments/assets/9c68880e-974f-4993-8ce6-2073efa5a0e7)
+![카쿠요무 파인더](https://github.com/user-attachments/assets/516e64c8-72bf-4ee6-844b-0ba40ea43136)
 
 <p align="center"><i>카쿠요무 파인더 메인 화면</i></p>
 
-<p align="center" style="font-size:20px"><i><b>스크린샷 기준 버전 (v1.0.0)</b></i></p>
+<img width="200" height="300" alt="Image" src="https://github.com/user-attachments/assets/8f60b459-851e-4489-9c6a-cb575fdffee9" />
+
+<p align="center"><i>EPUB 출력 결과 표지 예시</i></p>
+
+<h3 align="center"><i><b>스크린샷 기준 버전 (v1.1.2)</b></i></p>
+
+</div>
+
+<br/>
+<br/>
+
+## 스크린샷 - 테마
+
+<details>
+
+<summary><b>테마보기</b></summary>
+
+<div align="center">
+
+<img width="952" height="732" alt="Image" src="https://github.com/user-attachments/assets/759f988c-8ef5-4045-bf29-1d01b4b25922" />
+
+다크
+
+<img width="952" height="732" alt="Image" src="https://github.com/user-attachments/assets/62317ec9-6d0f-49c1-bb41-51b7cafe1380" />
+
+라이트
+
+<img width="952" height="732" alt="Image" src="https://github.com/user-attachments/assets/84e177e3-e120-463f-a596-adc4af24ba43" />
+
+블루
+
+<img width="952" height="732" alt="Image" src="https://github.com/user-attachments/assets/87c20051-7676-4d5d-b173-1a809a13682f" />
+
+퍼플
+
+<img width="952" height="732" alt="Image" src="https://github.com/user-attachments/assets/93d7a504-9e85-446f-a04c-3c10907be86b" />
+
+시안
+
+<img width="952" height="732" alt="Image" src="https://github.com/user-attachments/assets/bdefe340-4284-4123-a8a1-a0772e16076b" />
+
+그린
+
+<img width="952" height="732" alt="Image" src="https://github.com/user-attachments/assets/25d4b2c6-f61c-4cef-ac15-7c8fd6b57ec0" />
+
+레드
+
+<img width="952" height="732" alt="Image" src="https://github.com/user-attachments/assets/35a92352-aa22-416b-ae2f-75ca0d6af823" />
+
+오렌지
+
+<img width="952" height="732" alt="Image" src="https://github.com/user-attachments/assets/a73e3a19-023e-4892-9ce2-5c3732784bd0" />
+
+핑크
+
+<img width="952" height="732" alt="Image" src="https://github.com/user-attachments/assets/1f6913f1-4a44-4bf9-af21-d4c7d4de38a2" />
+
+옐로우
+
+<img width="952" height="732" alt="Image" src="https://github.com/user-attachments/assets/358be041-cbbc-4670-a4a6-9e5be12540af" />
+
+엠버
+
+<img width="952" height="732" alt="Image" src="https://github.com/user-attachments/assets/1ce1b656-1330-4681-9d52-858e9bc45331" />
+
+틸
+
+<img width="952" height="732" alt="Image" src="https://github.com/user-attachments/assets/dd179041-5439-4f1f-a837-f21253add54d" />
+
+인디고
+
+<img width="952" height="732" alt="Image" src="https://github.com/user-attachments/assets/22ca54e0-603e-40de-9d48-cb0fd3471deb" />
+
+슬레이트
+
+<img width="952" height="732" alt="Image" src="https://github.com/user-attachments/assets/d204e4c8-07fb-4aa2-bc75-7dab03404a93" />
+
+모노
+
+<img width="952" height="732" alt="Image" src="https://github.com/user-attachments/assets/319c3f1d-3871-413f-8544-e1d18972cac7" />
+
+OLED
+
+<h3 align="center"><i><b>스크린샷 기준 버전 (v1.1.2)</b></i></p>
+
+</details>
 
 </div>
 
