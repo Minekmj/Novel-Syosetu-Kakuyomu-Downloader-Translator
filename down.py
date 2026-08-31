@@ -673,9 +673,12 @@ strong, b { font-weight: bold; }
         encoding="utf-8",
     ) as f:
         f.write(toc_ncx)
-
-    
-    out_folder = getattr(downin, "OUTFOLDER", base_dir)
+    out_folder = getattr(downin, "OUTFOLDER", "./out/")
+    if not os.path.exists(out_folder):
+        os.mkdir(out_folder)
+    out_folder = os.path.join(out_folder, "epub")
+    if not os.path.exists(out_folder):
+        os.mkdir(out_folder)
     output_epub_path = os.path.join(
         out_folder, re.sub(r'[\/:*?"<>|]', "_", book_title) + ".epub"
     )

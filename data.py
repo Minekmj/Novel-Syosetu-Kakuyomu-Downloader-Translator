@@ -5,6 +5,8 @@ import sys
 from config import DATA_FILE
 from get import *
 
+import re
+
 import theme
 
 THEME_DATA = {
@@ -26,9 +28,28 @@ THEME_DATA = {
     "OLED": "OLED",
 }
 
-THEME_NAME = "BLUE"
+THEME_NAME = "CYAN"
 
 MINIMAL_DARK_THEME = ""
+
+def build_qss(template_qss: str, theme_dict: dict) -> str:
+    def replace_var(match):
+        key = match.group(1).strip()
+        val = theme_dict.get(key, "")
+        
+        if val is None:
+            return ""
+        
+        if key.startswith("dv_") and val and not val.strip().endswith(";"):
+            return f"{val.strip()};"
+        
+        return str(val)
+
+    pattern = re.compile(r"\|([a-zA-Z0-9_]+)\|\|")
+    rendered_qss = pattern.sub(replace_var, template_qss)
+    
+    lines = [line for line in rendered_qss.splitlines() if line.strip() != ""]
+    return "\n".join(lines)
 
 def get_resource_path(relative_path):
     if hasattr(sys, "_MEIPASS"):
@@ -41,7 +62,7 @@ def rest():
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
-                THEME_NAME = json.load(f).get("theme", "BLUE")
+                THEME_NAME = json.load(f).get("theme", "CYAN")
         except Exception:
             pass
 
@@ -50,8 +71,26 @@ def rest():
 
     try:
         with open(css_file_path, "r", encoding="UTF-8") as f:
-            MINIMAL_DARK_THEME = f.read().replace("{", "([(").replace("}", ")])").replace("||","}").replace("|", "{").format(**theme.THEMES[THEME_NAME]).replace("([(", "{").replace(")])", "}")
+            MINIMAL_DARK_THEME = build_qss(f.read(), theme.THEMES[THEME_NAME])
     except FileNotFoundError:
         print(f"CSS 파일을 찾을 수 없습니다: {css_file_path}")
 
-rest()
+import platform
+import subprocess
+def open_folder(path):
+    
+    if path == "./out/":
+        path = os.path.join(os.getcwd(), "out")
+    
+    if not path or not os.path.exists(path):
+        return
+    
+    try:
+        if platform.system() == "Windows":
+            os.startfile(path)
+        elif platform.system() == "Darwin":
+            subprocess.run(["open", path])
+        else:
+            subprocess.run(["xdg-open", path])
+    except Exception as e:
+        print(f"폴더 열기 실패: {e}")

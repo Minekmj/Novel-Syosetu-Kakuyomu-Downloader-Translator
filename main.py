@@ -1,8 +1,6 @@
 import sys
 import os
 import json
-import platform
-import subprocess
 import webbrowser
 from datetime import datetime
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
@@ -15,32 +13,18 @@ from PySide6.QtGui import QIcon
 import ctypes
 
 import down
+from data import open_folder
 import data as data_iteam
+data_iteam.rest()
 import findsyou
 import thread_pyqt
 from thread_pyqt import *
 thread_pyqt.DOWN = down
-from trans_view import TranslateDialog
+import trans_view
+
+trans_view.OUT = down.downin.OUTFOLDER
 
 from config import DATA_FILE
-
-def open_folder(path):
-    
-    if path == "./out/":
-        path = os.path.join(os.getcwd(), "out")
-    
-    if not path or not os.path.exists(path):
-        return
-    
-    try:
-        if platform.system() == "Windows":
-            os.startfile(path)
-        elif platform.system() == "Darwin":
-            subprocess.run(["open", path])
-        else:
-            subprocess.run(["xdg-open", path])
-    except Exception as e:
-        print(f"폴더 열기 실패: {e}")
 
 def load_data():
     if os.path.exists(DATA_FILE):
@@ -289,9 +273,9 @@ class DownloadDetailDialog(QDialog):
                     data["list"][self.title_text]["down_time"] = now_time_str
                     save_data(data)
 
-            target_folder = getattr(down.downin, 'OUTFOLDER', '')
+            target_folder = getattr(down.downin, 'OUTFOLDER', './out/')
             self.row_widget.update_download_info(end, now_time_str)
-            open_folder(target_folder)
+            open_folder(target_folder if (target_folder[len(target_folder) - 1] == "\\" or target_folder[len(target_folder) - 1] == "/") else (target_folder + "/"))
             self.accept()
         else:
             QMessageBox.critical(self, "오류", err_msg)
@@ -473,7 +457,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.row_widgets = []
 
-        self.setWindowTitle("다운로더")
+        self.setWindowTitle("MINE DOWNLOADER - Novel(Syosetu, Kakuyomu) Downloader & Translator")
         self.resize(950, 700)
         self.setMinimumSize(650, 550)
         self.setWindowIcon(QIcon(resource_path("main.ico")))
@@ -597,6 +581,7 @@ class MainWindow(QMainWindow):
 
         if data.get("src"):
             down.downin.OUTFOLDER = data["src"]
+            trans_view.OUT = data["src"]
             
         self.load_widgets_from_json()
 
@@ -737,6 +722,7 @@ class MainWindow(QMainWindow):
             
             if selected_path:
                 down.downin.OUTFOLDER = selected_path
+                trans_view.OUT = selected_path
                 data["src"] = selected_path
                 data["theme"] = selected_theme
             
@@ -759,7 +745,7 @@ class MainWindow(QMainWindow):
         dialog.show()
 
     def open_translate_dialog(self):
-        dialog = TranslateDialog(self)
+        dialog = trans_view.TranslateDialog(self)
         dialog.show()
 
     def convert_txt_to_epub(self):

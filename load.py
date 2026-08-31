@@ -20,7 +20,7 @@ THEME_CONFIG = {
     "sub_color": "#AAAAAA",
     "progress_color": "#007ACC",
     "font_family": "맑은 고딕",
-    "window_size": (360, 190),
+    "window_size": (360, 210),
 }
 
 V = None
@@ -129,7 +129,8 @@ def resource_path(relative_path):
 
 
 def update_status(root, label, text):
-    root.after(0, lambda: label.config(text=text))
+    if root.winfo_exists():
+        root.after(0, lambda: label.config(text=text))
 
 
 def start_main_app(root, sub_label, pre_file):
@@ -167,6 +168,11 @@ def start_main_app(root, sub_label, pre_file):
     )
 
 
+def close_app(root):
+    root.destroy()
+    sys.exit(0)
+
+
 def create_splash(pre_file=None):
     root = tk.Tk()
     root.overrideredirect(True)
@@ -187,16 +193,35 @@ def create_splash(pre_file=None):
         highlightbackground=THEME_CONFIG["border_color"],
     )
 
-    # ------------------------------------------------------------
-    # ICO 이미지 표시
-    # ------------------------------------------------------------
+    top_bar = tk.Frame(root, bg=THEME_CONFIG["bg_color"])
+    top_bar.pack(fill="x", side="top")
+
+    close_btn = tk.Label(
+        top_bar,
+        text="✕",
+        font=(THEME_CONFIG["font_family"], 10, "bold"),
+        fg=THEME_CONFIG["sub_color"],
+        bg=THEME_CONFIG["bg_color"],
+        width=3,
+        height=1,
+        cursor="hand2"
+    )
+    close_btn.pack(side="right", padx=2, pady=2)
+
+
+    close_btn.bind("<Enter>", lambda e: close_btn.config(bg="#E81123", fg="#FFFFFF"))
+    close_btn.bind("<Leave>", lambda e: close_btn.config(bg=THEME_CONFIG["bg_color"], fg=THEME_CONFIG["sub_color"]))
+
+    close_btn.bind("<Button-1>", lambda e: close_app(root))
+
+
     icon_path = resource_path("main.ico")
 
     if os.path.exists(icon_path):
         try:
             icon_image = Image.open(icon_path)
             icon_image = icon_image.convert("RGBA")
-            icon_image.thumbnail((64, 64), Image.Resampling.LANCZOS)
+            icon_image.thumbnail((56, 56), Image.Resampling.LANCZOS)
 
             icon_photo = ImageTk.PhotoImage(icon_image)
 
@@ -206,7 +231,7 @@ def create_splash(pre_file=None):
                 bg=THEME_CONFIG["bg_color"],
             )
             icon_label.image = icon_photo
-            icon_label.pack(pady=(18, 5))
+            icon_label.pack(pady=(5, 5))
 
         except Exception as e:
             print(f"[ICO] 이미지 로딩 실패: {e}")

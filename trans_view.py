@@ -2,12 +2,29 @@ from PySide6.QtWidgets import (QVBoxLayout,
                             QHBoxLayout, QLineEdit, QPushButton, QLabel,
                             QFileDialog, QDialog, QMessageBox, QTextEdit,
                             QComboBox, QProgressBar)
+from PySide6.QtGui import QKeyEvent, QKeySequence
 from PySide6.QtCore import Qt
 import html
 import os
 import json
 
-from thread_pyqt import TranslateThread, ModelLoadThread
+from data import open_folder
+
+from thread_pyqt import TranslateThread, ModelLoadThread, trans_ai
+
+OUT = "./out/"
+
+class PasteOnlyLineEdit(QLineEdit):
+
+    def keyPressEvent(self, event: QKeyEvent):
+        if (
+            event.matches(QKeySequence.StandardKey.Paste)
+            or event.matches(QKeySequence.StandardKey.Copy)
+            or event.matches(QKeySequence.StandardKey.SelectAll)
+        ):
+            super().keyPressEvent(event)
+        else:
+            event.ignore()
 
 class TranslateDialog(QDialog):
     SETTINGS_FILE = "./data.json"
@@ -120,8 +137,8 @@ class TranslateDialog(QDialog):
 
        
         api_layout = QHBoxLayout()
-        self.api_edit = QLineEdit()
-        self.api_edit.setPlaceholderText("Gemini API Key")
+        self.api_edit = PasteOnlyLineEdit()
+        self.api_edit.setPlaceholderText("Gemini API Key (붙여 넣기만 가능)")
         self.api_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self.api_show_btn = QPushButton("보기")
         self.api_show_btn.setObjectName("secondaryBtn")
@@ -237,6 +254,11 @@ class TranslateDialog(QDialog):
         max_chars = str(data.get("translate_max_chars", 5000))
 
         self.api_edit.setText(api)
+        def set_api(api):
+            trans_ai.set_api_key(api)
+            self.load_gemini_models()
+            
+        self.api_edit.textChanged.connect(set_api)
 
         if model_name:
             self.model_combo.addItem(model_name)
@@ -308,7 +330,7 @@ class TranslateDialog(QDialog):
             self.set_file(urls[0].toLocalFile())
 
     def browse_file(self):
-        path, _ = QFileDialog.getOpenFileName(self, "번역할 파일 선택", "", "지원 파일 (*.txt *.json)")
+        path, _ = QFileDialog.getOpenFileName(self, "번역할 파일 선택", OUT, "지원 파일 (*.txt *.json)")
         if path:
             self.set_file(path)
 
@@ -506,8 +528,7 @@ class TranslateDialog(QDialog):
             self.add_log("\n번역이 정상적으로 완료되었습니다.")
             QMessageBox.information(self, "번역 완료", message)
             if output_dir:
-               
-                pass
+                open_folder(output_dir)
         else:
             self.status_label.setText("번역 실패")
             self.add_log(f"번역 실패: {message}")

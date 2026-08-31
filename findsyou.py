@@ -1,6 +1,6 @@
 import requests
 
-from PySide6.QtCore import QThread, Signal, Qt, QSize, QRect, QPoint, QTimer
+from PySide6.QtCore import QThread, Signal, Qt, QSize, QRect, QPoint, QTimer, QUrl
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QListWidget, QListWidgetItem, QTextEdit,
@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QScrollArea, QSizePolicy, QFormLayout, QSplitter,
     QLayout, QFrame, QApplication
 )
+from PySide6.QtGui import QCursor, QDesktopServices
 
 from trans import Translator
 from data import TAG_CATEGORIES, NaroSearch, KakuyomuSearch
@@ -18,6 +19,21 @@ click_plus_url = ''
 IS_KAKU = False
 istaiain = []
 
+class ClickableUrlLabel(QLabel):
+
+    def __init__(self, url_string, parent=None):
+        super().__init__(url_string, parent)
+        self.url_string = url_string
+
+        self.setCursor(QCursor(Qt.PointingHandCursor))
+        self.setWordWrap(True)
+        self.setObjectName("lbl_url")
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            QDesktopServices.openUrl(QUrl(self.url_string))
+        super().mousePressEvent(event)
+        
 class FlowLayout(QLayout):
     def __init__(self, parent=None, margin=0, spacing=4):
         super().__init__(parent)
@@ -894,11 +910,13 @@ class DetailDialog(QDialog):
             ''
         )
 
-        url_label = QLabel(
-            f"<a href='{url}'>{url}</a>"
+        url_label = ClickableUrlLabel(
+            f"{url}"
         )
-
-        url_label.setOpenExternalLinks(True)
+        
+        url_label.setObjectName(
+            'lbl_url'
+        )
 
         url_label.setWordWrap(True)
 

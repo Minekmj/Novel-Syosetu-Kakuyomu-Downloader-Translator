@@ -1,12 +1,14 @@
-# Novel(Syosetu, Kakuyomu) Downloader & Translator
-
-일본 소설 플랫폼(소설가가 되자, 카쿠요무)의 웹소설 수집, 태그 검색, 번역, EPUB 전자책 변환을 일괄 처리하는 통합 Desktop GUI 애플리케이션입니다.
-
 <div align="center">
 
 ![](https://raw.githubusercontent.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/refs/heads/main/main.ico)
 
+# MINE DOWNLOADER <br/> ~ Novel(Syosetu, Kakuyomu) Downloader & Translator ~
+
 </div>
+
+[![최신 버전](https://img.shields.io/github/v/release/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator?display_name=tag&sort=date)](https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/releases/latest)
+
+일본 소설 플랫폼(소설가가 되자, 카쿠요무)의 웹소설 수집, 태그 검색, 번역, EPUB 전자책 변환을 일괄 처리하는 통합 Desktop GUI 애플리케이션입니다.
 
 ## 주요 기능
 
@@ -45,6 +47,8 @@
   * 멀티스레드 기반 다운로드 및 번역 진행 상황 실시간 제공
 
   * 자동 최신 버전 다운로드 기능 (.exe)
+
+  * 업데이트 내역 알림이 기능
 
 ## 스크린샷
 
@@ -128,6 +132,8 @@ pip install -r requirements_ai.txt
 ```
 
 *(참고: `requirements_ai.txt` 내 `torch` 패키지 등은 사용 중인 시스템의 CUDA 버전에 맞춰 설치해야 합니다.)*
+
+*(https://pytorch.org/get-started/locally/ 접속, 필요한 버전 따로 찾아 설치)*
 
 2. **`config.py` 파일 설정 변경**
 `config.py` 파일 내 `USE_LOCAL_AI` 옵션을 `True`로 수정합니다.

@@ -4,7 +4,7 @@ _I = '[\\\\/:*?"<>|]'
 _H = "OUTFOLDER"
 _G = "+---+"
 _F = False
-_E = "None"
+_E = ""
 _D = None
 _C = True
 _B = "\n"
@@ -27,7 +27,7 @@ MODEL_NAME = "gemini-3.5-flash-lite"
 def set_api_key(api_key):
     global API, client
     API = api_key.strip() or _E
-    client = genai.Client(api_key=API)
+    client = genai.Client(api_key=API if API != "" else "None")
     data = {}
     if os.path.exists(DATA_FILE):
         try:
@@ -49,7 +49,7 @@ def rest():
         except Exception:
             pass
 
-client = genai.Client(api_key=API)
+client = genai.Client(api_key=API if API != "" else "None")
 rest()
 
 SYSTEM_PROMPT = """## 개요

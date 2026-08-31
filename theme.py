@@ -1,66 +1,47 @@
-def gra(*colors, direction="v"):
+def gra(*colors, direction="v", mode="linear"):
     if not colors:
         return "#000000"
 
     colors = tuple(str(c) for c in colors if c)
-
     if len(colors) == 1:
         return colors[0]
 
-    if direction == "h":
-        x1, y1, x2, y2 = 0, 0, 1, 0
-    elif direction == "diag":
-        x1, y1, x2, y2 = 0, 0, 1, 1
-    elif direction == "reverse":
-        x1, y1, x2, y2 = 1, 1, 0, 0
-    else:
-        x1, y1, x2, y2 = 0, 0, 0, 1
+    if mode == "radial":
+        step = 1.0 / (len(colors) - 1)
+        stops = ", ".join(f"stop: {i * step:g} {color}" for i, color in enumerate(colors))
+        return f"qradialgradient(cx: 0.5, cy: 0.5, radius: 0.8, fx: 0.5, fy: 0.5, {stops})"
+
+    dirs = {
+        "h": (0, 0, 1, 0),
+        "diag": (0, 0, 1, 1),
+        "reverse": (1, 1, 0, 0),
+        "v": (0, 0, 0, 1)
+    }
+    x1, y1, x2, y2 = dirs.get(direction, (0, 0, 0, 1))
 
     step = 1.0 / (len(colors) - 1)
+    stops = ", ".join(f"stop: {i * step:g} {color}" for i, color in enumerate(colors))
 
-    stops = ", ".join(
-        f"stop: {i * step:g} {color}"
-        for i, color in enumerate(colors)
-    )
+    return f"qlineargradient(x1: {x1}, y1: {y1}, x2: {x2}, y2: {y2}, {stops})"
 
-    return (
-        f"qlineargradient("
-        f"x1: {x1}, y1: {y1}, "
-        f"x2: {x2}, y2: {y2}, "
-        f"{stops})"
-    )
-
-# ============================================================
-# THEME BUILDER
-# ============================================================
-
-def _make_theme(c):
-    return {
-       
-       
-       
-
-        "bg": gra(c["bg"], c["bg2"]),
+def _make_dark_theme(c, dv=None):
+    theme = {
+        "bg": gra(c["bg"], c["bg2"], direction="v"),
         "text": c["text"],
-
-       
-       
-       
-
         "text_primary": c["text"],
         "text_title": c["text"],
         "text_title_bright": c["accent_light"],
-        "text_title_sub": c["text"],
+        "text_title_sub": c["text2"],
         "text_secondary": c["text2"],
         "text_secondary_light": c["text2"],
         "text_input": c["text"],
         "text_input_list": c["text2"],
-        "text_button": c["text2"],
-        "text_button_hover": c["text"],
+        "text_button": c["text"],
+        "text_button_hover": "#FFFFFF",
         "text_button_pressed": c["text2"],
         "text_muted": c["muted"],
         "text_meta": c["muted"],
-        "text_url": c["accent"],
+        "text_url": c["accent_light"],
         "text_category": c["muted"],
         "text_dim": c["dim"],
         "text_disabled": c["dim"],
@@ -69,104 +50,46 @@ def _make_theme(c):
         "text_group_title": c["text2"],
         "text_star": c["star"],
 
-       
-       
-       
-
-        "surface_card": gra(c["surface"], c["surface2"]),
-        "surface_button": gra(c["surface2"], c["surface3"]),
-        "surface_input": gra(c["surface2"], c["surface3"]),
-        "surface_textedit": gra(c["surface"], c["surface2"]),
-        "surface_chip": gra(c["surface2"], c["surface3"]),
-        "surface_tag": gra(c["surface2"], c["surface3"]),
-        "surface_hover": gra(c["surface2"], c["surface3"]),
-        "surface_button_hover": gra(c["surface3"], c["surface4"]),
-        "surface_input_hover": gra(c["surface2"], c["surface3"]),
-        "surface_input_focus": gra(c["surface3"], c["surface4"]),
-        "surface_textedit_hover": gra(c["surface2"], c["surface3"]),
-        "surface_textedit_focus": gra(c["surface3"], c["surface4"]),
-        "surface_button_pressed": gra(c["surface"], c["surface2"]),
-        "surface_disabled": c["surface"],
-        "surface_checkbox_hover": gra(c["surface2"], c["surface3"]),
-        "surface_menu": gra(c["surface"], c["surface2"]),
-        "surface_menu_selected": gra(c["surface2"], c["surface3"]),
-        "surface_combo_selected": gra(c["surface2"], c["surface3"]),
+        "surface_card": gra(c["surface"], c["surface2"], direction="v"),
+        "surface_button": gra(c["surface2"], c["surface3"], direction="v"),
+        "surface_input": gra(c["surface"], c["surface2"], direction="v"),
+        "surface_textedit": gra(c["surface"], c["surface2"], direction="v"),
+        "surface_chip": gra(c["surface2"], c["surface3"], direction="h"),
+        "surface_tag": c["surface2"],
+        "surface_hover": c["surface3"],
+        "surface_button_hover": gra(c["surface3"], c["surface4"], direction="v"),
+        "surface_input_hover": gra(c["surface2"], c["surface3"], direction="v"),
+        "surface_input_focus": c["surface2"],
+        "surface_textedit_hover": c["surface2"],
+        "surface_textedit_focus": c["surface2"],
+        "surface_button_pressed": c["surface"],
+        "surface_disabled": c["bg"],
+        "surface_checkbox_hover": c["surface3"],
+        "surface_menu": c["surface"],
+        "surface_menu_selected": c["surface3"],
+        "surface_combo_selected": c["surface3"],
         "surface_delete_hover": c["delete_bg"],
-        "surface_chip_hover": gra(c["surface2"], c["surface3"]),
+        "surface_chip_hover": c["surface4"],
 
-       
-       
-       
-
-        "primary_bg": gra(
-            c["accent_light"],
-            c["accent"],
-            c["accent_dark"]
-        ),
-
+        "primary_bg": gra(c["accent_light"], c["accent"], c["accent_dark"], direction="diag"),
         "primary_text": "#FFFFFF",
-
-        "primary_hover": gra(
-            c["accent_light"],
-            c["accent"]
-        ),
-
+        "primary_hover": gra(c["accent_light"], c["accent"], direction="diag"),
         "primary_hover_text": "#FFFFFF",
+        "primary_pressed": gra(c["accent"], c["accent_dark"], direction="diag"),
 
-        "primary_pressed": gra(
-            c["accent"],
-            c["accent_dark"]
-        ),
-
-       
-       
-       
-
-        "secondary_bg": gra(
-            c["surface2"],
-            c["surface3"]
-        ),
-
+        "secondary_bg": gra(c["surface2"], c["surface3"], direction="v"),
         "secondary_text": c["text2"],
-
-        "secondary_hover": gra(
-            c["surface3"],
-            c["surface4"]
-        ),
-
+        "secondary_hover": c["surface4"],
         "secondary_hover_text": c["text"],
 
-       
-       
-       
-
-        "chip_text": c["muted"],
-        "chip_hover_text": c["text2"],
-
-        "chip_checked": gra(
-            c["accent_light"],
-            c["accent"],
-            c["accent_dark"]
-        ),
-
+        "chip_text": c["text2"],
+        "chip_hover_text": c["text"],
+        "chip_checked": gra(c["accent_light"], c["accent"], direction="h"),
         "chip_checked_text": "#FFFFFF",
 
-       
-       
-       
-
         "tag_text": c["text2"],
-
-       
-       
-       
-
         "delete_text": c["muted"],
         "delete_hover_text": c["delete"],
-
-       
-       
-       
 
         "border_subtle": c["border"],
         "border_default": c["border"],
@@ -174,581 +97,251 @@ def _make_theme(c):
         "border_input_focus": c["accent"],
         "border_textedit_focus": c["accent"],
         "border_checkbox": c["border2"],
-        "border_checkbox_hover": c["accent"],
+        "border_checkbox_hover": c["accent_light"],
         "border_disabled": c["border"],
-
-       
-       
-       
 
         "selection_input": c["selection"],
         "selection_textedit": c["selection"],
         "selection_text": "#FFFFFF",
 
-       
-       
-       
-
         "checkbox_text": c["text2"],
-        "checkbox_bg": gra(c["surface2"], c["surface3"]),
-        "checkbox_hover_bg": gra(c["surface3"], c["surface4"]),
-
-        "checkbox_checked": gra(
-            c["accent_light"],
-            c["accent"],
-            c["accent_dark"]
-        ),
-
+        "checkbox_bg": c["surface2"],
+        "checkbox_hover_bg": c["surface3"],
+        "checkbox_checked": gra(c["accent_light"], c["accent"], direction="diag"),
         "checkbox_checked_border": c["accent"],
-        "checkbox_disabled_bg": c["surface"],
+        "checkbox_disabled_bg": c["bg"],
 
-       
-       
-       
-
-        "textedit_text": c["text2"],
+        "textedit_text": c["text"],
         "textedit_transparent_text": c["text"],
-
-       
-       
-       
-
-        "scrollbar": gra(
-            c["border"],
-            c["border2"]
-        ),
-
+        "scrollbar": c["border"],
         "scrollbar_hover": c["accent"],
-
-       
-       
-       
-
         "menu_text": c["text2"],
         "menu_selected_text": "#FFFFFF",
-
-       
-       
-       
-
         "combo_text": c["text"],
     }
+    
+    # 커스텀 dv_ 디자인 변수 병합
+    if dv and isinstance(dv, dict):
+        theme.update(dv)
+        
+    return theme
 
-# ============================================================
-# DARK
-# ============================================================
 
-COLORS_DARK_THEME = _make_theme({
-    "bg": "#111214",
-    "bg2": "#18191C",
+def _make_light_theme(c, dv=None):
+    theme = _make_dark_theme(c, dv)
+    theme.update({
+        "primary_text": "#FFFFFF",
+        "surface_card": gra(c["surface"], c["surface2"], direction="v"),
+        "surface_button": gra(c["surface"], c["surface2"], direction="v"),
+        "surface_button_hover": gra(c["surface2"], c["surface3"], direction="v"),
+        "surface_button_pressed": c["surface3"],
+        "border_card_hover": c["accent_light"],
+        "scrollbar": c["border2"],
+        "scrollbar_hover": c["accent"],
+    })
+    return theme
 
-    "surface": "#18191B",
-    "surface2": "#202124",
-    "surface3": "#292A2D",
-    "surface4": "#34363A",
 
-    "text": "#E8E9EB",
-    "text2": "#B9BABE",
-    "muted": "#85868B",
-    "dim": "#626368",
 
-    "border": "#303135",
-    "border2": "#414247",
-
-    "accent": "#A8AAAF",
-    "accent_light": "#D2D4D8",
-    "accent_dark": "#7F8186",
-
-    "selection": "#414348",
-
-    "star": "#D5A36C",
-    "delete": "#FF7078",
-    "delete_bg": "#32191C",
+COLORS_DARK_THEME = _make_dark_theme({
+    "bg": "#121316", "bg2": "#1A1B1F",
+    "surface": "#1E2024", "surface2": "#25282E", "surface3": "#2E323A", "surface4": "#383D47",
+    "text": "#ECEEDF", "text2": "#9EA4B0", "muted": "#6B7280", "dim": "#4B5563",
+    "border": "#2D3139", "border2": "#3F4552",
+    "accent": "#6366F1", "accent_light": "#818CF8", "accent_dark": "#4F46E5",
+    "selection": "#3730A3", "star": "#F59E0B", "delete": "#EF4444", "delete_bg": "#3B1719",
+}, dv={
+    "dv_app_title": "letter-spacing: 0.5px;",
+    "dv_card": "border: 1px solid #2D3139; border-radius: 8px;",
+    "dv_button": "letter-spacing: 0.3px;",
 })
 
-# ============================================================
-# LIGHT
-# ============================================================
-
-COLORS_LIGHT_THEME = _make_theme({
-    "bg": "#F3F3F1",
-    "bg2": "#EAEAE7",
-
-    "surface": "#FFFFFF",
-    "surface2": "#F2F2EF",
-    "surface3": "#E8E8E4",
-    "surface4": "#DDDDD8",
-
-    "text": "#202124",
-    "text2": "#56575A",
-    "muted": "#77787B",
-    "dim": "#9B9C9F",
-
-    "border": "#D5D5D0",
-    "border2": "#C3C3BE",
-
-    "accent": "#617487",
-    "accent_light": "#8194A6",
-    "accent_dark": "#465A6D",
-
-    "selection": "#C5D2DD",
-
-    "star": "#C48D45",
-    "delete": "#D95760",
-    "delete_bg": "#F7E5E6",
+# 2. Light (라이트)
+COLORS_LIGHT_THEME = _make_light_theme({
+    "bg": "#F8F9FA", "bg2": "#EDF0F2",
+    "surface": "#FFFFFF", "surface2": "#F1F3F5", "surface3": "#E9ECEF", "surface4": "#DEE2E6",
+    "text": "#212529", "text2": "#495057", "muted": "#868E96", "dim": "#ADB5BD",
+    "border": "#E9ECEF", "border2": "#CED4DA",
+    "accent": "#4F46E5", "accent_light": "#6366F1", "accent_dark": "#3730A3",
+    "selection": "#E0E7FF", "star": "#D97706", "delete": "#DC2626", "delete_bg": "#FEE2E2",
+}, dv={
+    "dv_card": "border: 1px solid #E9ECEF; border-radius: 8px;",
+    "dv_chip": "font-weight: 500;",
 })
 
-# ============================================================
-# BLUE
-# ============================================================
-
-COLORS_BLUE_THEME = _make_theme({
-    "bg": "#0D1724",
-    "bg2": "#142235",
-
-    "surface": "#142235",
-    "surface2": "#1A2C43",
-    "surface3": "#243A54",
-    "surface4": "#304B68",
-
-    "text": "#E3EEF9",
-    "text2": "#B4C9DD",
-    "muted": "#8199B1",
-    "dim": "#61768C",
-
-    "border": "#29415D",
-    "border2": "#365675",
-
-    "accent": "#4F9BE8",
-    "accent_light": "#78B7F2",
-    "accent_dark": "#3978C4",
-
-    "selection": "#315D8A",
-
-    "star": "#D7A85F",
-    "delete": "#FF7078",
-    "delete_bg": "#352026",
+# 3. Blue (딥 블루)
+COLORS_BLUE_THEME = _make_dark_theme({
+    "bg": "#0B132B", "bg2": "#1C2541",
+    "surface": "#1C2541", "surface2": "#273459", "surface3": "#3A4A78", "surface4": "#47598F",
+    "text": "#E0E6ED", "text2": "#95A5A6", "muted": "#5C6B73", "dim": "#3D4A52",
+    "border": "#253342", "border2": "#37495B",
+    "accent": "#3A86FF", "accent_light": "#60A5FA", "accent_dark": "#2563EB",
+    "selection": "#1D4ED8", "star": "#F59E0B", "delete": "#F87171", "delete_bg": "#371A22",
+}, dv={
+    "dv_app_title": "letter-spacing: 1px;",
+    "dv_card": "border: 1px solid #253342; border-radius: 8px;",
 })
 
-# ============================================================
-# PURPLE
-# ============================================================
-
-COLORS_PURPLE_THEME = _make_theme({
-    "bg": "#160F21",
-    "bg2": "#1D132A",
-
-    "surface": "#21172F",
-    "surface2": "#2A1E3D",
-    "surface3": "#35264C",
-    "surface4": "#42305B",
-
-    "text": "#F0E8F7",
-    "text2": "#C8B8D7",
-    "muted": "#9582A7",
-    "dim": "#705E80",
-
-    "border": "#493661",
-    "border2": "#60497D",
-
-    "accent": "#A97AE8",
-    "accent_light": "#C19BEF",
-    "accent_dark": "#8959C9",
-
-    "selection": "#68458D",
-
-    "star": "#D7A85F",
-    "delete": "#FF7188",
-    "delete_bg": "#38202C",
+# 4. Purple (퍼플 네온)
+COLORS_PURPLE_THEME = _make_dark_theme({
+    "bg": "#130E1B", "bg2": "#1A1425",
+    "surface": "#211A2E", "surface2": "#2C233D", "surface3": "#392E4E", "surface4": "#473A61",
+    "text": "#F3EFF8", "text2": "#B3A7C3", "muted": "#7B6F8E", "dim": "#564B67",
+    "border": "#352A4A", "border2": "#4B3C68",
+    "accent": "#9D4EDD", "accent_light": "#C77DFF", "accent_dark": "#7B2CBF",
+    "selection": "#5A189A", "star": "#FFB703", "delete": "#F72585", "delete_bg": "#391225",
+}, dv={
+    "dv_card": "border: 1px solid #352A4A; border-radius: 8px;",
+    "dv_app_title": "letter-spacing: 1.2px;",
 })
 
-# ============================================================
-# CYAN
-# ============================================================
-
-COLORS_CYAN_THEME = _make_theme({
-    "bg": "#09191C",
-    "bg2": "#0E2226",
-
-    "surface": "#10262A",
-    "surface2": "#163237",
-    "surface3": "#1D3E44",
-    "surface4": "#285057",
-
-    "text": "#E2F2F4",
-    "text2": "#B2D2D6",
-    "muted": "#789DA2",
-    "dim": "#57777B",
-
-    "border": "#285159",
-    "border2": "#35666E",
-
-    "accent": "#42C7D6",
-    "accent_light": "#70DCE7",
-    "accent_dark": "#2DAAB9",
-
-    "selection": "#286A73",
-
-    "star": "#D7A85F",
-    "delete": "#FF7078",
-    "delete_bg": "#352026",
+# 5. Cyan (시안 사이버)
+COLORS_CYAN_THEME = _make_dark_theme({
+    "bg": "#081417", "bg2": "#0E1E22",
+    "surface": "#13272C", "surface2": "#1C363D", "surface3": "#264750", "surface4": "#315964",
+    "text": "#E1FAF9", "text2": "#94C2C7", "muted": "#5C8B90", "dim": "#3D6367",
+    "border": "#1F424A", "border2": "#2F5D68",
+    "accent": "#00B4D8", "accent_light": "#90E0EF", "accent_dark": "#0077B6",
+    "selection": "#023E8A", "star": "#FFB703", "delete": "#FF5A5F", "delete_bg": "#38171E",
+}, dv={
+    "dv_card": "border: 1px solid #1F424A; border-radius: 8px;",
 })
 
-# ============================================================
-# GREEN
-# ============================================================
-
-COLORS_GREEN_THEME = _make_theme({
-    "bg": "#0C1811",
-    "bg2": "#112219",
-
-    "surface": "#13251A",
-    "surface2": "#19301F",
-    "surface3": "#203B27",
-    "surface4": "#2B4933",
-
-    "text": "#E3F2E8",
-    "text2": "#B5D5BE",
-    "muted": "#7FA48A",
-    "dim": "#5B7964",
-
-    "border": "#2C5135",
-    "border2": "#396745",
-
-    "accent": "#4DCB7A",
-    "accent_light": "#79DD9B",
-    "accent_dark": "#3BAE69",
-
-    "selection": "#2E7548",
-
-    "star": "#D7A85F",
-    "delete": "#FF7078",
-    "delete_bg": "#342026",
+# 6. Green (에메랄드 그린)
+COLORS_GREEN_THEME = _make_dark_theme({
+    "bg": "#0C140E", "bg2": "#131F17",
+    "surface": "#18271D", "surface2": "#223528", "surface3": "#2D4736", "surface4": "#395944",
+    "text": "#E8F5E9", "text2": "#A3C9A8", "muted": "#699470", "dim": "#47694E",
+    "border": "#273E2E", "border2": "#385942",
+    "accent": "#2EC4B6", "accent_light": "#80ED99", "accent_dark": "#107A72",
+    "selection": "#155D57", "star": "#FFB703", "delete": "#E63946", "delete_bg": "#351518",
+}, dv={
+    "dv_card": "border: 1px solid #273E2E; border-radius: 8px;",
+    "dv_chip": "letter-spacing: 0.2px;",
 })
 
-# ============================================================
-# RED
-# ============================================================
-
-COLORS_RED_THEME = _make_theme({
-    "bg": "#1C0C10",
-    "bg2": "#251116",
-
-    "surface": "#2A1318",
-    "surface2": "#35191F",
-    "surface3": "#421F26",
-    "surface4": "#512832",
-
-    "text": "#F7E6E8",
-    "text2": "#D8B5B9",
-    "muted": "#A27A80",
-    "dim": "#7C585D",
-
-    "border": "#5A2B34",
-    "border2": "#713843",
-
-    "accent": "#E85D68",
-    "accent_light": "#F0838B",
-    "accent_dark": "#C94858",
-
-    "selection": "#73333D",
-
-    "star": "#E0A65D",
-    "delete": "#FF7A83",
-    "delete_bg": "#4A2025",
+# 7. Red (크림슨 레드)
+COLORS_RED_THEME = _make_dark_theme({
+    "bg": "#190B0E", "bg2": "#241216",
+    "surface": "#2D171C", "surface2": "#3B1E25", "surface3": "#4C2830", "surface4": "#5E333E",
+    "text": "#FDF0F2", "text2": "#D4A5AD", "muted": "#966B73", "dim": "#69454C",
+    "border": "#47232B", "border2": "#63323D",
+    "accent": "#E63946", "accent_light": "#F87171", "accent_dark": "#9B1C1C",
+    "selection": "#7F1D1D", "star": "#F59E0B", "delete": "#FF4D4D", "delete_bg": "#421217",
+}, dv={
+    "dv_card": "border: 1px solid #47232B; border-radius: 8px;",
 })
 
-# ============================================================
-# ORANGE
-# ============================================================
-
-COLORS_ORANGE_THEME = _make_theme({
-    "bg": "#1C1108",
-    "bg2": "#24160B",
-
-    "surface": "#2A180C",
-    "surface2": "#351F10",
-    "surface3": "#422712",
-    "surface4": "#523219",
-
-    "text": "#F8E9DA",
-    "text2": "#D9BEA5",
-    "muted": "#A7866D",
-    "dim": "#7D654F",
-
-    "border": "#5A361A",
-    "border2": "#71451F",
-
-    "accent": "#F39A45",
-    "accent_light": "#FFB66D",
-    "accent_dark": "#DD7732",
-
-    "selection": "#80501F",
-
-    "star": "#D9A34D",
-    "delete": "#FF7078",
-    "delete_bg": "#432126",
+# 8. Orange (스파이시 오렌지)
+COLORS_ORANGE_THEME = _make_dark_theme({
+    "bg": "#191009", "bg2": "#24180E",
+    "surface": "#2E1F13", "surface2": "#3C2A1B", "surface3": "#4D3624", "surface4": "#5F442E",
+    "text": "#FCF3EC", "text2": "#D8B79D", "muted": "#9B7A60", "dim": "#6A503B",
+    "border": "#473121", "border2": "#63452F",
+    "accent": "#F97316", "accent_light": "#FB923C", "accent_dark": "#C2410C",
+    "selection": "#9A3412", "star": "#F59E0B", "delete": "#EF4444", "delete_bg": "#3D1414",
+}, dv={
+    "dv_card": "border: 1px solid #473121; border-radius: 8px;",
 })
 
-# ============================================================
-# PINK
-# ============================================================
-
-COLORS_PINK_THEME = _make_theme({
-    "bg": "#1C0C15",
-    "bg2": "#25101C",
-
-    "surface": "#2A1320",
-    "surface2": "#35192A",
-    "surface3": "#421F34",
-    "surface4": "#51283F",
-
-    "text": "#F8E5EE",
-    "text2": "#D9B5C6",
-    "muted": "#A47B91",
-    "dim": "#7B5A6C",
-
-    "border": "#592B46",
-    "border2": "#703858",
-
-    "accent": "#E96C9E",
-    "accent_light": "#F18DB5",
-    "accent_dark": "#D4558B",
-
-    "selection": "#743654",
-
-    "star": "#D8A05E",
-    "delete": "#FF7188",
-    "delete_bg": "#43202E",
+# 9. Pink (핫 핑크)
+COLORS_PINK_THEME = _make_dark_theme({
+    "bg": "#180C13", "bg2": "#23131D",
+    "surface": "#2C1A25", "surface2": "#3B2432", "surface3": "#4B2E40", "surface4": "#5D3A50",
+    "text": "#FDF2F7", "text2": "#D4A7C1", "muted": "#966D85", "dim": "#69485C",
+    "border": "#46283C", "border2": "#613953",
+    "accent": "#EC4899", "accent_light": "#F472B6", "accent_dark": "#BE185D",
+    "selection": "#831843", "star": "#F59E0B", "delete": "#F43F5E", "delete_bg": "#3D121F",
+}, dv={
+    "dv_card": "border: 1px solid #46283C; border-radius: 8px;",
 })
 
-# ============================================================
-# YELLOW
-# ============================================================
-
-COLORS_YELLOW_THEME = _make_theme({
-    "bg": "#191708",
-    "bg2": "#211D0B",
-
-    "surface": "#27230D",
-    "surface2": "#332E12",
-    "surface3": "#403A17",
-    "surface4": "#4F471C",
-
-    "text": "#F5F0D9",
-    "text2": "#D5CFA8",
-    "muted": "#9E966D",
-    "dim": "#766F4F",
-
-    "border": "#584F1F",
-    "border2": "#70652A",
-
-    "accent": "#DCC447",
-    "accent_light": "#EBD66C",
-    "accent_dark": "#C4A934",
-
-    "selection": "#756A20",
-
-    "star": "#E0A44D",
-    "delete": "#FF7078",
-    "delete_bg": "#443025",
+# 10. Yellow (선셋 옐로우)
+COLORS_YELLOW_THEME = _make_dark_theme({
+    "bg": "#16140A", "bg2": "#211D0F",
+    "surface": "#2B2615", "surface2": "#38321C", "surface3": "#474025", "surface4": "#584F30",
+    "text": "#FAF7EC", "text2": "#CEC7A7", "muted": "#918A6A", "dim": "#635D43",
+    "border": "#443D23", "border2": "#5E5533",
+    "accent": "#EAB308", "accent_light": "#FACC15", "accent_dark": "#A16207",
+    "selection": "#713F12", "star": "#F59E0B", "delete": "#EF4444", "delete_bg": "#3C1513",
+}, dv={
+    "dv_card": "border: 1px solid #443D23; border-radius: 8px;",
 })
 
-# ============================================================
-# AMBER
-# ============================================================
-
-COLORS_AMBER_THEME = _make_theme({
-    "bg": "#1B1207",
-    "bg2": "#23180A",
-
-    "surface": "#291A0A",
-    "surface2": "#35230D",
-    "surface3": "#422C11",
-    "surface4": "#513719",
-
-    "text": "#F7EBDD",
-    "text2": "#D7BE9C",
-    "muted": "#A48865",
-    "dim": "#7C654A",
-
-    "border": "#5A3C18",
-    "border2": "#714B1E",
-
-    "accent": "#E6A33D",
-    "accent_light": "#F3BD62",
-    "accent_dark": "#C98729",
-
-    "selection": "#754A19",
-
-    "star": "#E0A04B",
-    "delete": "#FF7078",
-    "delete_bg": "#442126",
+# 11. Amber (클래식 앰버)
+COLORS_AMBER_THEME = _make_dark_theme({
+    "bg": "#171109", "bg2": "#22190E",
+    "surface": "#2C2113", "surface2": "#3A2C1B", "surface3": "#4A3924", "surface4": "#5C472E",
+    "text": "#FAF4ED", "text2": "#D6C3AA", "muted": "#98846A", "dim": "#675743",
+    "border": "#463521", "border2": "#604A30",
+    "accent": "#D97706", "accent_light": "#F59E0B", "accent_dark": "#92400E",
+    "selection": "#78350F", "star": "#F59E0B", "delete": "#EF4444", "delete_bg": "#3B1413",
+}, dv={
+    "dv_card": "border: 1px solid #463521; border-radius: 8px;",
 })
 
-# ============================================================
-# TEAL
-# ============================================================
-
-COLORS_TEAL_THEME = _make_theme({
-    "bg": "#081815",
-    "bg2": "#0D211C",
-
-    "surface": "#0F2520",
-    "surface2": "#15302A",
-    "surface3": "#1C3B34",
-    "surface4": "#285047",
-
-    "text": "#E0F1ED",
-    "text2": "#B0D2C9",
-    "muted": "#789E95",
-    "dim": "#56766F",
-
-    "border": "#285047",
-    "border2": "#35645A",
-
-    "accent": "#43C5B1",
-    "accent_light": "#70D9C7",
-    "accent_dark": "#2FA692",
-
-    "selection": "#276E62",
-
-    "star": "#D5A36C",
-    "delete": "#FF7078",
-    "delete_bg": "#352026",
+# 12. Teal (딥 틸)
+COLORS_TEAL_THEME = _make_dark_theme({
+    "bg": "#091414", "bg2": "#0F1F1F",
+    "surface": "#142828", "surface2": "#1C3737", "surface3": "#264747", "surface4": "#315858",
+    "text": "#E6FAFA", "text2": "#97C5C5", "muted": "#5E8E8E", "dim": "#3E6363",
+    "border": "#1F4242", "border2": "#2F5D5D",
+    "accent": "#14B8A6", "accent_light": "#2DD4BF", "accent_dark": "#0F766E",
+    "selection": "#115E59", "star": "#F59E0B", "delete": "#F87171", "delete_bg": "#371818",
+}, dv={
+    "dv_card": "border: 1px solid #1F4242; border-radius: 8px;",
 })
 
-# ============================================================
-# INDIGO
-# ============================================================
-
-COLORS_INDIGO_THEME = _make_theme({
-    "bg": "#0D1020",
-    "bg2": "#12162A",
-
-    "surface": "#151932",
-    "surface2": "#1B2040",
-    "surface3": "#22294E",
-    "surface4": "#2E3760",
-
-    "text": "#E7EAF7",
-    "text2": "#B8C0DD",
-    "muted": "#7F89AE",
-    "dim": "#5F6889",
-
-    "border": "#303967",
-    "border2": "#3F4B80",
-
-    "accent": "#7187E8",
-    "accent_light": "#94A6F0",
-    "accent_dark": "#596FD0",
-
-    "selection": "#3D4C92",
-
-    "star": "#D7A85F",
-    "delete": "#FF7078",
-    "delete_bg": "#352026",
+# 13. Indigo (인디고 블루)
+COLORS_INDIGO_THEME = _make_dark_theme({
+    "bg": "#0E101D", "bg2": "#15182B",
+    "surface": "#1C2038", "surface2": "#252B4A", "surface3": "#31385E", "surface4": "#3E4775",
+    "text": "#EEF2FF", "text2": "#A5B4FC", "muted": "#6366F1", "dim": "#4338CA",
+    "border": "#283054", "border2": "#374272",
+    "accent": "#6366F1", "accent_light": "#818CF8", "accent_dark": "#4338CA",
+    "selection": "#312E81", "star": "#F59E0B", "delete": "#EF4444", "delete_bg": "#361622",
+}, dv={
+    "dv_card": "border: 1px solid #283054; border-radius: 8px;",
 })
 
-# ============================================================
-# SLATE
-# ============================================================
-
-COLORS_SLATE_THEME = _make_theme({
-    "bg": "#11171D",
-    "bg2": "#171F27",
-
-    "surface": "#192129",
-    "surface2": "#202B35",
-    "surface3": "#293640",
-    "surface4": "#354550",
-
-    "text": "#E5EBEF",
-    "text2": "#BAC7CF",
-    "muted": "#82919B",
-    "dim": "#63717A",
-
-    "border": "#354550",
-    "border2": "#455764",
-
-    "accent": "#8199AD",
-    "accent_light": "#A2B5C5",
-    "accent_dark": "#667E92",
-
-    "selection": "#40515E",
-
-    "star": "#D5A36C",
-    "delete": "#FF7078",
-    "delete_bg": "#352026",
+# 14. Slate (테크 슬레이트)
+COLORS_SLATE_THEME = _make_dark_theme({
+    "bg": "#0F172A", "bg2": "#1E293B",
+    "surface": "#1E293B", "surface2": "#334155", "surface3": "#475569", "surface4": "#64748B",
+    "text": "#F8FAFC", "text2": "#94A3B8", "muted": "#64748B", "dim": "#475569",
+    "border": "#334155", "border2": "#475569",
+    "accent": "#38BDF8", "accent_light": "#7DD3FC", "accent_dark": "#0284C7",
+    "selection": "#0369A1", "star": "#F59E0B", "delete": "#F87171", "delete_bg": "#381B25",
+}, dv={
+    "dv_card": "border: 1px solid #334155; border-radius: 8px;",
+    "dv_app_title": "letter-spacing: 0.8px;",
 })
 
-# ============================================================
-# MONO
-# ============================================================
-
-COLORS_MONO_THEME = _make_theme({
-    "bg": "#111111",
-    "bg2": "#181818",
-
-    "surface": "#191919",
-    "surface2": "#222222",
-    "surface3": "#2B2B2B",
-    "surface4": "#373737",
-
-    "text": "#E8E8E8",
-    "text2": "#B8B8B8",
-    "muted": "#858585",
-    "dim": "#626262",
-
-    "border": "#363636",
-    "border2": "#454545",
-
-    "accent": "#A8A8A8",
-    "accent_light": "#D0D0D0",
-    "accent_dark": "#858585",
-
-    "selection": "#444444",
-
-    "star": "#BFA16A",
-    "delete": "#FF7078",
-    "delete_bg": "#332020",
+# 15. Mono (모노크롬)
+COLORS_MONO_THEME = _make_dark_theme({
+    "bg": "#121212", "bg2": "#181818",
+    "surface": "#1E1E1E", "surface2": "#282828", "surface3": "#333333", "surface4": "#3F3F3F",
+    "text": "#F5F5F5", "text2": "#A0A0A0", "muted": "#6E6E6E", "dim": "#4A4A4A",
+    "border": "#2C2C2C", "border2": "#3D3D3D",
+    "accent": "#D4D4D4", "accent_light": "#FFFFFF", "accent_dark": "#A3A3A3",
+    "selection": "#404040", "star": "#EAB308", "delete": "#EF4444", "delete_bg": "#331818",
+}, dv={
+    "dv_card": "border: 1px solid #2C2C2C; border-radius: 8px;",
+    "dv_app_title": "letter-spacing: 1.5px;",
 })
 
-# ============================================================
-# OLED
-# ============================================================
-
-COLORS_OLED_THEME = _make_theme({
-    "bg": "#000000",
-    "bg2": "#050505",
-
-    "surface": "#080808",
-    "surface2": "#101010",
-    "surface3": "#181818",
-    "surface4": "#222222",
-
-    "text": "#F5F5F5",
-    "text2": "#C2C2C2",
-    "muted": "#888888",
-    "dim": "#606060",
-
-    "border": "#252525",
-    "border2": "#353535",
-
-    "accent": "#4D9EFF",
-    "accent_light": "#82C0FF",
-    "accent_dark": "#347DD0",
-
-    "selection": "#254F7D",
-
-    "star": "#D5A36C",
-    "delete": "#FF7078",
-    "delete_bg": "#32191C",
+# 16. OLED (트루 블랙)
+COLORS_OLED_THEME = _make_dark_theme({
+    "bg": "#000000", "bg2": "#080808",
+    "surface": "#0F0F0F", "surface2": "#171717", "surface3": "#242424", "surface4": "#303030",
+    "text": "#FFFFFF", "text2": "#A3A3A3", "muted": "#666666", "dim": "#404040",
+    "border": "#222222", "border2": "#333333",
+    "accent": "#38BDF8", "accent_light": "#7DD3FC", "accent_dark": "#0284C7",
+    "selection": "#1D4ED8", "star": "#FACC15", "delete": "#F87171", "delete_bg": "#2B0F14",
+}, dv={
+    "dv_card": "border: 1px solid #222222; border-radius: 8px;",
 })
 
-# ============================================================
-# ALL THEMES
-# ============================================================
 
 THEMES = {
     "DARK": COLORS_DARK_THEME,
@@ -768,49 +361,3 @@ THEMES = {
     "MONO": COLORS_MONO_THEME,
     "OLED": COLORS_OLED_THEME,
 }
-
-# ============================================================
-# THEME NAMES
-# ============================================================
-
-THEME_NAMES = {
-    "DARK": "다크",
-    "LIGHT": "라이트",
-    "BLUE": "블루",
-    "PURPLE": "퍼플",
-    "CYAN": "시안",
-    "GREEN": "그린",
-    "RED": "레드",
-    "ORANGE": "오렌지",
-    "PINK": "핑크",
-    "YELLOW": "옐로우",
-    "AMBER": "앰버",
-    "TEAL": "틸",
-    "INDIGO": "인디고",
-    "SLATE": "슬레이트",
-    "MONO": "모노",
-    "OLED": "OLED",
-}
-
-# ============================================================
-# GET THEME
-# ============================================================
-
-def get_theme(name="DARK"):
-    return THEMES.get(str(name).upper(), COLORS_DARK_THEME)
-
-# ============================================================
-# APPLY QSS
-# ============================================================
-
-def apply_theme(widget, qss, theme="DARK"):
-    colors = get_theme(theme)
-
-    try:
-        stylesheet = qss.format(**colors)
-    except KeyError as e:
-        raise KeyError(f"QSS에서 정의되지 않은 색상 변수: {e}") from e
-
-    widget.setStyleSheet(stylesheet)
-
-    return stylesheet

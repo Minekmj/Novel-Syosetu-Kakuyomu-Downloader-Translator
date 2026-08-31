@@ -52,9 +52,7 @@ class EpubConvertThread(QThread):
                
                 DOWN.create_epub_from_merged_txt(path, )
             
-            output_dir = getattr(DOWN.downin, 'OUTFOLDER', '')
-            if not output_dir and self.txt_paths:
-                output_dir = os.path.dirname(self.txt_paths[0])
+            output_dir = os.path.join(getattr(DOWN.downin, 'OUTFOLDER', './out/'), "epub")
 
             self.finished_signal.emit(True, "EPUB 변환이 완료되었습니다.", output_dir)
         except Exception as e:
@@ -135,7 +133,7 @@ class TranslateThread(QThread):
                     log_callback=self.log_changed.emit
                 )
 
-            output_dir = getattr(DOWN.downin, "OUTFOLDER", "./out/")
+            output_dir = os.path.join(getattr(DOWN.downin, "OUTFOLDER", "./out/"), "epub")
 
             self.log_changed.emit("=" * 60)
             self.log_changed.emit("번역 완료")
