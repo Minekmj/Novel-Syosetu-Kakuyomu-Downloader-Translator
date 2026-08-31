@@ -10,9 +10,11 @@
   <a href="https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/releases/latest">
     <img src="https://img.shields.io/github/v/release/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator?display_name=tag&sort=date" alt="Latest Release">
   </a>
+  
   <a href="https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/releases">
     <img src="https://img.shields.io/github/downloads/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/total" alt="Downloads">
   </a>
+
   <a href="https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator">
     <img src="https://img.shields.io/github/stars/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator" alt="Stars">
   </a>
@@ -23,10 +25,10 @@
 번역 및 EPUB 전자책 변환까지 한 곳에서 처리할 수 있는 Windows Desktop Application입니다.
 </p>
 
-<br>
+<br/>
 
-<a href="https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/releases/download/v1.1.2/Novel-Syosetu-Kakuyomu-Downloader-Translator-v1.1.2.exe">
-  <img src="https://img.shields.io/badge/Download%20EXE-v1.1.2-2ea44f?style=for-the-badge&logo=windows&logoColor=white" alt="Download EXE">
+<a href="https://minekmj.github.io/Novel-Syosetu-Kakuyomu-Downloader-Translator/latest.html">
+  <img src="https://img.shields.io/badge/Download-Latest%20Version-2ea44f?style=for-the-badge&logo=windows&logoColor=white" alt="Download Latest Version">
 </a>
 
 </div>
@@ -209,6 +211,8 @@ Python이나 별도의 개발 환경을 설치하지 않고 바로 실행하려�
 <a href="https://minekmj.github.io/Novel-Syosetu-Kakuyomu-Downloader-Translator/latest.html">
   <img src="https://img.shields.io/badge/Download-Latest%20Version-2ea44f?style=for-the-badge&logo=windows&logoColor=white" alt="Download Latest Version">
 </a>
+
+<br/>
 
 <a href="https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/releases/latest">
   <img src="https://img.shields.io/badge/View%20All%20Releases-GitHub-181717?style=for-the-badge&logo=github&logoColor=white" alt="View All Releases">
