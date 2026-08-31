@@ -1,12 +1,12 @@
 <div align="center">
 
-![](https://raw.githubusercontent.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/refs/heads/main/main.ico)
+![](https://raw.githubusercontent.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/refs/heads/main/main.ico?v=2)
 
 # MINE DOWNLOADER <br/> ~ Novel(Syosetu, Kakuyomu) Downloader & Translator ~
 
-</div>
-
 [![최신 버전](https://img.shields.io/github/v/release/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator?display_name=tag&sort=date)](https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/releases/latest)
+
+</div>
 
 일본 소설 플랫폼(소설가가 되자, 카쿠요무)의 웹소설 수집, 태그 검색, 번역, EPUB 전자책 변환을 일괄 처리하는 통합 Desktop GUI 애플리케이션입니다.
 
@@ -84,7 +84,7 @@
 
 ### 1. EXE 다운로드
 
-[exe 다운로드 (v1.1.1)](https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/releases/download/v1.1.1/Novel-Syosetu-Kakuyomu-Downloader-Translator-v1.1.1.exe)
+[exe 다운로드 (v1.1.1)](https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/releases/download/v1.1.2/Novel-Syosetu-Kakuyomu-Downloader-Translator-v1.1.2.exe)
 
 혹은 아래와 같이
 
