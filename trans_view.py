@@ -8,7 +8,7 @@ import html
 import os
 import json
 
-from data import open_folder
+from data import open_folder, return_theme
 
 from thread_pyqt import TranslateThread, ModelLoadThread, trans_ai
 
@@ -467,36 +467,70 @@ class TranslateDialog(QDialog):
         percent = int(done * 100 / max(total, 1))
         self.progress_bar.setValue(percent)
         self.status_label.setText(message)
+        
+    def get_brightness(self, hex_color):
+        """Hex 색상에서 밝기(0~255)를 계산합니다."""
+        hex_color = hex_color.lstrip('#')
+        r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+        # 상대적 명도 계산 공식 (W3C 표준)
+        return (r * 299 + g * 587 + b * 114) / 1000
 
     def add_log(self, text):
         if not text:
             return
+        
+        text_i = text
+        
+        if text.find(":") != -1:
+            text = text[text.find(":") - 2:text.find(":")]
+        else:
+            text = ""
 
-       
         log_type = "NORMAL"
-        color = "#e0e0e0" 
-
-        if "오류" in text or "실패" in text or "예외 발생" in text or "error" in text.lower():
+        
+        # 1. 로그 타입 판별
+        if "오류" in text or "실패" in text or "에러" in text:
             log_type = "ERROR"
-            color = "#ff5555" 
-        elif "경고" in text or "재시도" in text or "불일치" in text or "미설정" in text:
+        elif "경고" in text: 
             log_type = "WARN"
-            color = "#ffb86c" 
         elif "성공" in text or "완료" in text or "통과" in text:
             log_type = "SUCCESS"
-            color = "#50fa7b" 
         elif "시작" in text or "로드" in text or "감지" in text:
             log_type = "INFO"
-            color = "#8be9fd" 
 
-       
+        # 2. 테마 배경색 분석 (밝기 판별)
+        bg_color = return_theme()  # 예: "#1e1e1e" 또는 "#ffffff"
+        is_dark = self.get_brightness(bg_color) < 128
+
+        # 3. 테마 상태(Dark / Light)에 따른 색상 팔레트 정의
+        color_map = {
+            "DARK": {
+                "NORMAL": "#e0e0e0",
+                "ERROR":  "#ff5555",
+                "WARN":   "#ffb86c",
+                "SUCCESS":"#50fa7b",
+                "INFO":   "#8be9fd"
+            },
+            "LIGHT": {
+                "NORMAL": "#222222",
+                "ERROR":  "#d32f2f",
+                "WARN":   "#e65100",
+                "SUCCESS":"#2e7d32",
+                "INFO":   "#0288d1"
+            }
+        }
+
+        mode = "DARK" if is_dark else "LIGHT"
+        color = color_map[mode][log_type]
+        
+        text = text_i  # 원본 텍스트를 사용
+
+        # 4. HTML 변환 및 append
         safe_text = html.escape(str(text)).replace("\n", "<br>")
         formatted_html = f'<span style="color: {color}; font-family: Consolas, monospace;">{safe_text}</span>'
 
-       
         self.log_history.append((log_type, formatted_html))
 
-       
         current_filter = self.log_filter_combo.currentText()
         if self._matches_filter(log_type, current_filter):
             self.log_edit.append(formatted_html)

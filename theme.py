@@ -147,12 +147,14 @@ def _make_dark_theme(c, dv=None):
 
     if dv and isinstance(dv, dict):
         theme.update(dv)
+        
+    base_color = c["surface2"]
 
-    return theme
+    return base_color, theme
 
 
 def _make_light_theme(c, dv=None):
-    theme = _make_dark_theme(c, dv)
+    _, theme = _make_dark_theme(c, dv)
     theme.update({
         "primary_text": "#FFFFFF",
         "surface_card": gra(c["surface"], c["surface2"], direction="v"),
@@ -163,11 +165,13 @@ def _make_light_theme(c, dv=None):
         "scrollbar": c["border2"],
         "scrollbar_hover": c["accent"],
     })
-    return theme
+    
+    base_color = "#FFFFFF"
+    return base_color ,theme
 
 
 
-COLORS_DARK_THEME = _make_dark_theme({
+COLORS_DARK, COLORS_DARK_THEME = _make_dark_theme({
     "bg": "#121316", "bg2": "#1A1B1F",
     "surface": "#1E2024", "surface2": "#25282E", "surface3": "#2E323A", "surface4": "#383D47",
     "text": "#ECEEDF", "text2": "#9EA4B0", "muted": "#6B7280", "dim": "#4B5563",
@@ -181,7 +185,7 @@ COLORS_DARK_THEME = _make_dark_theme({
 })
 
 # 2. Light (라이트)
-COLORS_LIGHT_THEME = _make_light_theme({
+COLORS_LIGHT, COLORS_LIGHT_THEME = _make_light_theme({
     "bg": "#F8F9FA", "bg2": "#EDF0F2",
     "surface": "#FFFFFF", "surface2": "#F1F3F5", "surface3": "#E9ECEF", "surface4": "#DEE2E6",
     "text": "#212529", "text2": "#495057", "muted": "#868E96", "dim": "#ADB5BD",
@@ -194,7 +198,7 @@ COLORS_LIGHT_THEME = _make_light_theme({
 })
 
 # 3. Blue (딥 블루)
-COLORS_BLUE_THEME = _make_dark_theme({
+COLORS_BLUE, COLORS_BLUE_THEME = _make_dark_theme({
     "bg": "#0B132B", "bg2": "#1C2541",
     "surface": "#1C2541", "surface2": "#273459", "surface3": "#3A4A78", "surface4": "#47598F",
     "text": "#E0E6ED", "text2": "#95A5A6", "muted": "#5C6B73", "dim": "#3D4A52",
@@ -207,7 +211,7 @@ COLORS_BLUE_THEME = _make_dark_theme({
 })
 
 # 4. Purple (퍼플 네온)
-COLORS_PURPLE_THEME = _make_dark_theme({
+COLORS_PURPLE, COLORS_PURPLE_THEME = _make_dark_theme({
     "bg": "#130E1B", "bg2": "#1A1425",
     "surface": "#211A2E", "surface2": "#2C233D", "surface3": "#392E4E", "surface4": "#473A61",
     "text": "#F3EFF8", "text2": "#B3A7C3", "muted": "#7B6F8E", "dim": "#564B67",
@@ -220,7 +224,7 @@ COLORS_PURPLE_THEME = _make_dark_theme({
 })
 
 # 5. Cyan (시안 사이버)
-COLORS_CYAN_THEME = _make_dark_theme({
+COLORS_CYAN, COLORS_CYAN_THEME = _make_dark_theme({
     "bg": "#081417", "bg2": "#0E1E22",
     "surface": "#13272C", "surface2": "#1C363D", "surface3": "#264750", "surface4": "#315964",
     "text": "#E1FAF9", "text2": "#94C2C7", "muted": "#5C8B90", "dim": "#3D6367",
@@ -232,7 +236,7 @@ COLORS_CYAN_THEME = _make_dark_theme({
 })
 
 # 6. Green (에메랄드 그린)
-COLORS_GREEN_THEME = _make_dark_theme({
+COLORS_GREEN, COLORS_GREEN_THEME = _make_dark_theme({
     "bg": "#0C140E", "bg2": "#131F17",
     "surface": "#18271D", "surface2": "#223528", "surface3": "#2D4736", "surface4": "#395944",
     "text": "#E8F5E9", "text2": "#A3C9A8", "muted": "#699470", "dim": "#47694E",
@@ -245,7 +249,7 @@ COLORS_GREEN_THEME = _make_dark_theme({
 })
 
 # 7. Red (크림슨 레드)
-COLORS_RED_THEME = _make_dark_theme({
+COLORS_RED, COLORS_RED_THEME = _make_dark_theme({
     "bg": "#190B0E", "bg2": "#241216",
     "surface": "#2D171C", "surface2": "#3B1E25", "surface3": "#4C2830", "surface4": "#5E333E",
     "text": "#FDF0F2", "text2": "#D4A5AD", "muted": "#966B73", "dim": "#69454C",
@@ -257,7 +261,7 @@ COLORS_RED_THEME = _make_dark_theme({
 })
 
 # 8. Orange (스파이시 오렌지)
-COLORS_ORANGE_THEME = _make_dark_theme({
+COLORS_ORANGE, COLORS_ORANGE_THEME = _make_dark_theme({
     "bg": "#191009", "bg2": "#24180E",
     "surface": "#2E1F13", "surface2": "#3C2A1B", "surface3": "#4D3624", "surface4": "#5F442E",
     "text": "#FCF3EC", "text2": "#D8B79D", "muted": "#9B7A60", "dim": "#6A503B",
@@ -269,7 +273,7 @@ COLORS_ORANGE_THEME = _make_dark_theme({
 })
 
 # 9. Pink (핫 핑크)
-COLORS_PINK_THEME = _make_dark_theme({
+COLORS_PINK, COLORS_PINK_THEME = _make_dark_theme({
     "bg": "#180C13", "bg2": "#23131D",
     "surface": "#2C1A25", "surface2": "#3B2432", "surface3": "#4B2E40", "surface4": "#5D3A50",
     "text": "#FDF2F7", "text2": "#D4A7C1", "muted": "#966D85", "dim": "#69485C",
@@ -281,7 +285,7 @@ COLORS_PINK_THEME = _make_dark_theme({
 })
 
 # 10. Yellow (선셋 옐로우)
-COLORS_YELLOW_THEME = _make_dark_theme({
+COLORS_YELLOW, COLORS_YELLOW_THEME = _make_dark_theme({
     "bg": "#16140A", "bg2": "#211D0F",
     "surface": "#2B2615", "surface2": "#38321C", "surface3": "#474025", "surface4": "#584F30",
     "text": "#FAF7EC", "text2": "#CEC7A7", "muted": "#918A6A", "dim": "#635D43",
@@ -293,7 +297,7 @@ COLORS_YELLOW_THEME = _make_dark_theme({
 })
 
 # 11. Amber (클래식 앰버)
-COLORS_AMBER_THEME = _make_dark_theme({
+COLORS_AMBER, COLORS_AMBER_THEME = _make_dark_theme({
     "bg": "#171109", "bg2": "#22190E",
     "surface": "#2C2113", "surface2": "#3A2C1B", "surface3": "#4A3924", "surface4": "#5C472E",
     "text": "#FAF4ED", "text2": "#D6C3AA", "muted": "#98846A", "dim": "#675743",
@@ -305,7 +309,7 @@ COLORS_AMBER_THEME = _make_dark_theme({
 })
 
 # 12. Teal (딥 틸)
-COLORS_TEAL_THEME = _make_dark_theme({
+COLORS_TEAL, COLORS_TEAL_THEME = _make_dark_theme({
     "bg": "#091414", "bg2": "#0F1F1F",
     "surface": "#142828", "surface2": "#1C3737", "surface3": "#264747", "surface4": "#315858",
     "text": "#E6FAFA", "text2": "#97C5C5", "muted": "#5E8E8E", "dim": "#3E6363",
@@ -317,7 +321,7 @@ COLORS_TEAL_THEME = _make_dark_theme({
 })
 
 # 13. Indigo (인디고 블루)
-COLORS_INDIGO_THEME = _make_dark_theme({
+COLORS_INDIGO, COLORS_INDIGO_THEME = _make_dark_theme({
     "bg": "#0E101D", "bg2": "#15182B",
     "surface": "#1C2038", "surface2": "#252B4A", "surface3": "#31385E", "surface4": "#3E4775",
     "text": "#EEF2FF", "text2": "#A5B4FC", "muted": "#6366F1", "dim": "#4338CA",
@@ -329,7 +333,7 @@ COLORS_INDIGO_THEME = _make_dark_theme({
 })
 
 # 14. Slate (테크 슬레이트)
-COLORS_SLATE_THEME = _make_dark_theme({
+COLORS_SLATE, COLORS_SLATE_THEME = _make_dark_theme({
     "bg": "#0F172A", "bg2": "#1E293B",
     "surface": "#1E293B", "surface2": "#334155", "surface3": "#475569", "surface4": "#64748B",
     "text": "#F8FAFC", "text2": "#94A3B8", "muted": "#64748B", "dim": "#475569",
@@ -342,7 +346,7 @@ COLORS_SLATE_THEME = _make_dark_theme({
 })
 
 # 15. Mono (모노크롬)
-COLORS_MONO_THEME = _make_dark_theme({
+COLORS_MONO, COLORS_MONO_THEME = _make_dark_theme({
     "bg": "#121212", "bg2": "#181818",
     "surface": "#1E1E1E", "surface2": "#282828", "surface3": "#333333", "surface4": "#3F3F3F",
     "text": "#F5F5F5", "text2": "#A0A0A0", "muted": "#6E6E6E", "dim": "#4A4A4A",
@@ -355,7 +359,7 @@ COLORS_MONO_THEME = _make_dark_theme({
 })
 
 # 16. OLED (트루 블랙)
-COLORS_OLED_THEME = _make_dark_theme({
+COLORS_OLED, COLORS_OLED_THEME = _make_dark_theme({
     "bg": "#000000", "bg2": "#080808",
     "surface": "#0F0F0F", "surface2": "#171717", "surface3": "#242424", "surface4": "#303030",
     "text": "#FFFFFF", "text2": "#A3A3A3", "muted": "#666666", "dim": "#404040",

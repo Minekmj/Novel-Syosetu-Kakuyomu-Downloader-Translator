@@ -630,3 +630,29 @@ QGroupBox#group_box::title {
     background-color: transparent;
     |dv_group_box_title_transparent||
 }
+
+QToolButton#link_button {
+    background-color: |surface_chip||;
+    color: |chip_text||;
+    border: 1px solid transparent;
+    padding: 5px 11px;
+    font-size: 8pt;
+    font-weight: 500;
+    border-radius: 10px;
+}
+
+QToolButton#link_button:hover {
+    background-color: |surface_chip_hover||;
+    color: |chip_hover_text||;
+    border: 1px solid |border_card_hover||;
+}
+
+QToolButton#link_button:pressed {
+    background-color: |chip_checked||;
+    color: |chip_checked_text||;
+}
+
+QFrame#hr_line{
+    background-color: |border_subtle||;
+    border: none;
+}

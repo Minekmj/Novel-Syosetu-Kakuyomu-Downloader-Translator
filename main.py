@@ -3,12 +3,12 @@ import os
 import json
 import webbrowser
 from datetime import datetime
-from PySide6.QtWidgets import (QApplication, QMainWindow, QToolButton, QWidget, QVBoxLayout,
+from PySide6.QtWidgets import (QApplication, QMainWindow, QSpacerItem, QToolButton, QWidget, QVBoxLayout,
                             QHBoxLayout, QLineEdit, QPushButton, QLabel,
                             QFileDialog, QScrollArea, QFrame, QDialog, QMessageBox, QTextBrowser,
                             QMenu, QCheckBox, QSizePolicy, QComboBox)
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QAction, QFont
+from PySide6.QtCore import QUrl, Qt, Signal
+from PySide6.QtGui import QAction, QDesktopServices, QFont
 from PySide6.QtGui import QIcon
 import ctypes
 
@@ -21,6 +21,8 @@ import thread_pyqt
 from thread_pyqt import *
 thread_pyqt.DOWN = down
 import trans_view
+
+import v as vsc
 
 trans_view.OUT = down.downin.OUTFOLDER
 
@@ -51,7 +53,7 @@ class PathSettingsDialog(QDialog):
         self.min_width = 400
         self.min_height = 220
         
-        self.max_height = 300
+        self.max_height = 380
         
         self.setFixedSize(400, self.min_height)
 
@@ -97,9 +99,8 @@ class PathSettingsDialog(QDialog):
         advanced_button.setChecked(False)
         advanced_button.setArrowType(Qt.RightArrow)
         advanced_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
-        
         advanced_button.setObjectName("lbl_original_title")
-        
+
         advanced_button.setStyleSheet("""
             QToolButton {
                 background-color: transparent;
@@ -112,31 +113,28 @@ class PathSettingsDialog(QDialog):
                 background-color: transparent;
             }
         """)
-        
+
         def toggle_advanced(checked):
             advanced_widget.setVisible(checked)
             advanced_button.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
             self.setFixedSize(self.width(), self.max_height if checked else self.min_height)
-            
-        advanced_button.toggled.connect(toggle_advanced)
 
+        advanced_button.toggled.connect(toggle_advanced)
         layout.addWidget(advanced_button)
 
         advanced_widget = QWidget(self)
-        
+        advanced_widget.setObjectName("advanced_widget")
         advanced_widget.setStyleSheet("""
             QWidget#advanced_widget {
                 background-color: transparent;
                 border: none;
             }
         """)
-        
-        advanced_widget.setObjectName("advanced_widget")
-        
+
         advanced_layout = QVBoxLayout(advanced_widget)
         advanced_layout.setContentsMargins(0, 4, 0, 0)
         advanced_layout.setSpacing(4)
-        
+
         raw_layout = QHBoxLayout()
         raw_layout.setSpacing(8)
         raw_layout.setContentsMargins(0, 0, 0, 0)
@@ -153,25 +151,74 @@ class PathSettingsDialog(QDialog):
         raw_layout.addWidget(raw_label)
         raw_layout.addWidget(self.raw_text_toggle)
         raw_layout.addStretch()
-
         advanced_layout.addLayout(raw_layout)
 
-        raw_description = QLabel(
-            "다운로드 시 파일을 원문 그대로 다운로드합니다."
-        )
+        raw_description = QLabel("다운로드 시 파일을 원문 그대로 다운로드합니다.\n원문의 줄바꿈 구조를 유지하고, txt 상태에서 읽기 쉽도록 조정합니다.\nRAW 다운로드 파일이 ai번역 시 줄바꿈을 유지하여 번역되며 출력시 txt 파일이 epub와 같이 출력 됩니다.")
         raw_description.setWordWrap(True)
         raw_description.setObjectName("lbl_original_title")
-
         advanced_layout.addWidget(raw_description)
+
+        link_layout = QHBoxLayout()
+        link_layout.setContentsMargins(0, 8, 0, 0)
+        link_layout.setSpacing(6)
+
+        def create_link_button(text, url):
+            button = QToolButton(self)
+            button.setText(text)
+            button.setCursor(Qt.PointingHandCursor)
+            button.setAutoRaise(True)
+            button.setToolButtonStyle(Qt.ToolButtonTextOnly)
+            button.setStyleSheet("""
+                QToolButton {
+                    padding: 4px 6px;
+                    font-size: 9pt;
+                }
+            """)
+            button.setObjectName("link_button")
+            button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(url)))
+            return button
+
+        opinion_button = create_link_button(
+            "의견 보내기",
+            "https://minekmj.github.io/Novel-Syosetu-Kakuyomu-Downloader-Translator/opinion/home.html"
+        )
+
+        release_button = create_link_button(
+            "릴리스",
+            "https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/releases"
+        )
+
+        github_button = create_link_button(
+            "GitHub",
+            "https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator"
+        )
+
+        link_layout.addWidget(opinion_button)
+        link_layout.addWidget(release_button)
+        link_layout.addWidget(github_button)
+        link_layout.addStretch()
+        
+        link_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        advanced_layout.addSpacerItem(QSpacerItem(0, 8, QSizePolicy.Minimum, QSizePolicy.Expanding))
+        
+        hr_line = QFrame(self)
+        hr_line.setFrameShape(QFrame.HLine)
+        hr_line.setFrameShadow(QFrame.Sunken)
+        hr_line.setObjectName("hr_line")
+        
+        advanced_layout.addWidget(hr_line)
+
+        advanced_layout.addLayout(link_layout)
+        
+        v_label = QLabel("현재 버전 : " + vsc.V, self)
+        v_label.setObjectName("lbl_original_title")
+        advanced_layout.addWidget(v_label)
+        
+        advanced_layout.addSpacerItem(QSpacerItem(0, 8, QSizePolicy.Minimum, QSizePolicy.Expanding))
 
         advanced_widget.setVisible(False)
         layout.addWidget(advanced_widget)
-
-        def toggle_advanced(checked):
-            advanced_widget.setVisible(checked)
-            advanced_button.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
-
-        advanced_button.toggled.connect(toggle_advanced)
 
         layout.addStretch()
 
@@ -579,7 +626,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.row_widgets = []
 
-        self.setWindowTitle("MINE DOWNLOADER - Novel(Syosetu, Kakuyomu) Downloader & Translator")
+        self.setWindowTitle(f"MINE DOWNLOADER - Novel(Syosetu, Kakuyomu) Downloader & Translator - {vsc.V}")
         self.resize(950, 700)
         self.setMinimumSize(650, 550)
         self.setWindowIcon(QIcon(resource_path("main.ico")))

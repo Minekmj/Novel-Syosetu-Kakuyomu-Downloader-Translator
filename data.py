@@ -74,6 +74,16 @@ def rest():
             MINIMAL_DARK_THEME = build_qss(f.read(), theme.THEMES[THEME_NAME])
     except FileNotFoundError:
         print(f"CSS 파일을 찾을 수 없습니다: {css_file_path}")
+        
+def return_theme():
+    th = "#000000"
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
+                th = getattr(theme, f"COLORS_{json.load(f).get('theme', 'CYAN')}", "#000000")
+        except Exception:
+            pass
+    return th
 
 import platform
 import subprocess

@@ -306,7 +306,10 @@ async def translate_chunk_safe_async(
 
     current_chunk = chunk
     is_censored = False
-    expected_delimiter_count = chunk.count(_G)
+    if raw:
+        expected_delimiter_count = len(re.findall(r'^={4,}$', chunk, re.MULTILINE))
+    else:
+        expected_delimiter_count = chunk.count(_G)
 
     attempt = 1
     while attempt <= max_retries:
@@ -314,7 +317,7 @@ async def translate_chunk_safe_async(
         prefix_log = f"[{chunk_idx} - {censored_label}] [{depth}] [시도 {attempt}/{max_retries}]"
 
         if log_callback:
-            log_callback(f"{prefix_log} 번역 시도 (라인 수: {len(lines)}, temperature: {temperature})")
+            log_callback(f"{prefix_log} 번역 시도: (라인 수: {len(lines)}, temperature: {temperature})")
 
         await rate_limiter.wait()
 
@@ -353,34 +356,68 @@ async def translate_chunk_safe_async(
                         attempt += 1
                         is_censored = False
                         continue
+                    
+                if raw and "====" in chunk:
+                    # 한 줄 전체가 '=' 4개 이상으로 이루어진 라인 개수 카운트
+                    actual_delimiter_count = len(re.findall(r'^={4,}$', res_text, re.MULTILINE))
+                    if actual_delimiter_count != expected_delimiter_count:
+                        if log_callback:
+                            log_callback(f"{prefix_log} 경고: '====...' 라인 개수 불일치 (기대: {expected_delimiter_count}, 결과: {actual_delimiter_count}) -> 재시도")
+                        current_chunk = chunk
+                        attempt += 1
+                        is_censored = False
+                        continue
 
                 jp_ratio = get_japanese_ratio(res_text)
                 ko_ratio = get_korean_ratio(res_text)
 
+                # 1. chunk 길이에 따른 가변 기준 설정
+                text_len = len(chunk.strip())
+
+                if text_len < 100:
+                    min_ko_ratio = 60.0
+                    max_jp_ratio = 5.0
+                    min_line_ratio = 30.0
+                elif text_len < 600:
+                    min_ko_ratio = 70.0
+                    max_jp_ratio = 2.0
+                    min_line_ratio = 70.0
+                elif text_len < 1500:
+                    min_ko_ratio = 75.0
+                    max_jp_ratio = 1.0
+                    min_line_ratio = 75.0
+                else:
+                    min_ko_ratio = 80.0
+                    max_jp_ratio = 0.5
+                    min_line_ratio = 90.0
+
+                # 2. 번역 검증 로직
                 if raw:
                     line_ratio = get_linebreak_preservation_ratio(chunk, res_text)
 
-                    if jp_ratio < 0.5 and ko_ratio >= 80.0 and line_ratio >= 90.0:
+                    if jp_ratio < max_jp_ratio and ko_ratio >= min_ko_ratio and line_ratio >= min_line_ratio:
                         if log_callback:
-                            log_callback(f"{prefix_log} -> 성공 (줄바꿈 보존율: {line_ratio:.2f}%)")
+                            log_callback(f"{prefix_log} -> 성공: (줄바꿈 보존율: {line_ratio:.2f}%)")
                         return res_text, len(lines)
 
                     if log_callback:
                         log_callback(
                             f"{prefix_log} 경고: 번역 조건 미달 "
-                            f"(한글 비율: {ko_ratio:.2f}%, 일어 비율: {jp_ratio:.2f}%, "
-                            f"줄바꿈 보존율: {line_ratio:.2f}% [기준 90%]) -> 재시도"
+                            f"(한글: {ko_ratio:.2f}% [기준 {min_ko_ratio}%], "
+                            f"일어: {jp_ratio:.2f}% [기준 <{max_jp_ratio}%], "
+                            f"줄바꿈: {line_ratio:.2f}% [기준 {min_line_ratio}%]) -> 재시도"
                         )
                 else:
-                    if jp_ratio < 0.5 and ko_ratio >= 80.0:
+                    if jp_ratio < max_jp_ratio and ko_ratio >= min_ko_ratio:
                         if log_callback:
-                            log_callback(f"{prefix_log} -> 성공")
+                            log_callback(f"{prefix_log} -> 성공: 완료")
                         return res_text, len(lines)
 
                     if log_callback:
                         log_callback(
                             f"{prefix_log} 경고: 번역 조건 미달 "
-                            f"(한글 비율: {ko_ratio:.2f}% [기준 80%], 일어 비율: {jp_ratio:.2f}%) -> 재시도"
+                            f"(한글: {ko_ratio:.2f}% [기준 {min_ko_ratio}%], "
+                            f"일어: {jp_ratio:.2f}% [기준 <{max_jp_ratio}%]) -> 재시도"
                         )
 
                 current_chunk = chunk
@@ -403,7 +440,7 @@ async def translate_chunk_safe_async(
             is_censored = False
             attempt += 1
 
-    if len(lines) <= 2 or depth >= 3:
+    if len(lines) <= 2 or depth >= 4:
         if log_callback:
             log_callback(f"[{chunk_idx} - ] [{depth}] 오류: [최대초과] 최대 재시도 초과 및 분할 한계 도달 -> 원문 유지")
         return chunk, len(lines)
@@ -492,7 +529,7 @@ async def _translate_light_novel_async(
 ):
     if API == _E:
         if log_callback:
-            log_callback("API 키가 설정되지 않았습니다.")
+            log_callback("에러: API 키가 설정되지 않았습니다.")
         return "error"
 
     chunks = split_text_by_lines(text, max_chars=max_chars)
@@ -544,12 +581,12 @@ async def _translate_light_novel_async(
                     completed_count += 1
 
                     if progress_callback:
-                        progress_callback(completed_count, len(chunks), f"{completed_count}/{len(chunks)} 청크 완료")
+                        progress_callback(completed_count, len(chunks), f"{completed_count}/{len(chunks)} 청크 완료: 성공")
 
                 return
 
         async with semaphore:
-            start_msg = f"[{idx}/{len(chunks)}] 청크 번역 시작... ({len(chunk)}자)"
+            start_msg = f"[{idx}/{len(chunks)}] 청크 번역 시작: {len(chunk)}자 | {len(chunk.splitlines())}줄"
 
             if log_callback:
                 log_callback(start_msg)
@@ -574,7 +611,7 @@ async def _translate_light_novel_async(
                     translated_parts_raw[idx - 1] = result_text
 
                 if log_callback:
-                    log_callback(f"[{idx}/{len(chunks)}] 청크 번역 완료")
+                    log_callback(f"[{idx}/{len(chunks)}] 청크 번역 완료: 성공")
 
             except Exception as e:
                 err_msg = f" └ [{idx}번 청크] 번역 최종 실패: {e}"
@@ -597,7 +634,7 @@ async def _translate_light_novel_async(
                 completed_count += 1
 
                 if progress_callback:
-                    progress_callback(completed_count, len(chunks), f"{completed_count}/{len(chunks)} 청크 완료")
+                    progress_callback(completed_count, len(chunks), f"{completed_count}/{len(chunks)} 청크 완료: 성공")
 
     tasks = [process_chunk(idx, chunk) for idx, chunk in enumerate(chunks, 1)]
     await asyncio.gather(*tasks)
@@ -666,7 +703,7 @@ def TransAi_All(
 
         if log_callback:
             log_callback(
-                f"TransAi_All RAW 시작: 제목 '{raw_title}', "
+                f"RAW 번역 시작: 제목 '{raw_title}', "
                 f"청크 크기: {max_chars}, 동시 작업수: {max_concurrent}"
             )
 
@@ -712,7 +749,7 @@ def TransAi_All(
 
     if log_callback:
         log_callback(
-            f"TransAi_All 시작: 제목 '{t}', 청크 크기: {max_chars}, 동시 작업수: {max_concurrent}"
+            f"전체 번역 시작: 제목 '{t}', 청크 크기: {max_chars}, 동시 작업수: {max_concurrent}"
         )
 
     translated_result = _K + translate_light_novel(
@@ -750,7 +787,7 @@ async def _TransAi_From_Json_async(
     log_callback,
 ):
     if not os.path.exists(json_path):
-        msg = f"JSON 파일을 찾을 수 없습니다: {json_path}"
+        msg = f"에러: JSON 파일을 찾을 수 없습니다 | {json_path}"
 
         if log_callback:
             log_callback(msg)
@@ -808,7 +845,7 @@ async def _TransAi_From_Json_async(
         jp_ratio = get_japanese_ratio(chunk_text)
 
         if jp_ratio >= 0.5:
-            re_msg = f"[{idx}/{len(chunk_keys)}] 재번역 필요 (일본어 비율: {jp_ratio:.4f}%)"
+            re_msg = f"[{idx}/{len(chunk_keys)}] 재번역 필요: 일본어 비율 {jp_ratio:.4f}%"
 
             if log_callback:
                 log_callback(re_msg)
@@ -832,7 +869,7 @@ async def _TransAi_From_Json_async(
                     result_text = chunk_text
         else:
             if log_callback:
-                log_callback(f"[{idx}/{len(chunk_keys)}] 청크 통과 (일본어 비율: {jp_ratio:.4f}%)")
+                log_callback(f"[{idx}/{len(chunk_keys)}] 청크 통과: 일본어 비율 {jp_ratio:.4f}%")
 
             result_text = chunk_text
 
@@ -848,7 +885,7 @@ async def _TransAi_From_Json_async(
                 progress_callback(
                     completed_count,
                     len(chunk_keys),
-                    f"{completed_count}/{len(chunk_keys)} 청크 완료",
+                    f"{completed_count}/{len(chunk_keys)} 청크 완료: 성공",
                 )
 
     tasks = [
