@@ -210,15 +210,11 @@
 
 Python이나 별도의 개발 환경을 설치하지 않고 바로 실행하려면 EXE 버전을 사용할 수 있습니다.
 
-<div align="center">
-
 <a href="https://minekmj.github.io/Novel-Syosetu-Kakuyomu-Downloader-Translator/latest.html">
   <img src="https://img.shields.io/badge/Download-Latest%20Version-2ea44f?style=for-the-badge&logo=windows&logoColor=white" alt="Download Latest Version">
 </a>
 
 <br/>
-
-</div>
 
 > EXE 버전은 별도의 Python 설치 없이 사용할 수 있습니다.
 
