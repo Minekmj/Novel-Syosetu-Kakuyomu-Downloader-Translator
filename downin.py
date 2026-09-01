@@ -7,6 +7,8 @@ import shutil
 from trans import Translator
 import threading
 
+EXPORT_TEXT = False
+
 SPLIT_POINT = "+---+"
 
 HEADERS = {
@@ -48,6 +50,42 @@ def create_merged_txt(folder_path, output_txt_path, book_title, extract_number_f
     sub_title = parts[1].strip() if len(parts) > 1 else ""
 
     delimiter = SPLIT_POINT
+
+    if EXPORT_TEXT:
+        with open(output_txt_path, "w", encoding="utf-8") as out_f:
+            out_f.write(f"{main_title}\n")
+            out_f.write(f"{sub_title}\n")
+            out_f.write("(raw)\n")
+            out_f.write(f"+---+\n{main_title} | {sub_title}\n\n")
+
+            for file_name in txt_files:
+                file_path = os.path.join(folder_path, file_name)
+
+                try:
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        lines = f.readlines()
+                except UnicodeDecodeError:
+                    with open(file_path, "r", encoding="cp949") as f:
+                        lines = f.readlines()
+
+                if not lines:
+                    continue
+
+                out_f.write(f"\n{'=' * 30}\n")
+                subtitle = lines[0].strip()
+                out_f.write(f"{subtitle}\n")
+                out_f.write(f"{'=' * 30}\n\n")
+
+                for line in lines[1:]:
+                    if line:
+                        processed_text = process_text_line(line)
+                        if processed_text != '':
+                            out_f.write(f"{processed_text}\n")
+                        else:
+                            out_f.write("\n")
+                
+                out_f.write("\n")
+        return True
 
     with open(output_txt_path, "w", encoding="utf-8") as out_f:
         
@@ -244,12 +282,16 @@ def fetch_syosetu_episode(
                 ruby.replace_with(
                     ruby.get_text(strip=True)
                 )
+                
+            if EXPORT_TEXT:
+                for br in body_tag.find_all(["br", "br/"]):
+                    br.replace_with("\n")
 
             body = "\n".join(
                 [
                     p.get_text(" ", strip=True)
                     for p in body_tag.find_all("p")
-                    if p.get_text(strip=True)
+                    if p.get_text(strip=True) or (EXPORT_TEXT and not p.get_text(strip=True))
                 ]
             )
 
@@ -454,6 +496,11 @@ def fetch_kakuyomu_episode(
             body_paragraphs = []
 
             for p in content_element.find_all("p"):
+                
+                if EXPORT_TEXT:
+                    for br in p.find_all(["br", "br/"]):
+                        br.replace_with("\n")
+                    
                 p_text = p.decode_contents()
 
                 p_text = p_text.replace(
@@ -480,7 +527,7 @@ def fetch_kakuyomu_episode(
                     " \t"
                 ).rstrip()
 
-                if p_text:
+                if p_text or (EXPORT_TEXT and not p_text):
                     p_text = re.sub(
                         r'《《(.+?)》》',
                         r'\1',
@@ -490,7 +537,7 @@ def fetch_kakuyomu_episode(
                     body_paragraphs.append(
                         p_text
                     )
-
+            
             body = "\n".join(
                 body_paragraphs
             )
@@ -571,10 +618,6 @@ def download_kakuyomu_async(
     session.headers.update(
         req_headers
     )
-
-    
-    def ANDROID_LABEL(text):
-        label.text = text
 
     label_callback = label.setText
 

@@ -185,6 +185,10 @@ class TranslateDialog(QDialog):
         self.log_edit.setReadOnly(True)
         self.log_edit.setMinimumHeight(180)
         self.log_edit.setPlaceholderText("번역 로그가 여기에 표시됩니다.")
+        self.log_edit.setObjectName('detail_description')
+        self.log_edit.viewport().setStyleSheet(
+            "background: transparent;"
+        )
         layout.addWidget(self.log_edit, 1)
 
        

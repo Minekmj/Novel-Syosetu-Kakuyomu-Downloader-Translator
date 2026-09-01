@@ -54,6 +54,13 @@ QLabel#lbl_original_title {
     |dv_original_title||
 }
 
+QToolButton#lbl_original_title {
+    color: |text_original||;
+    font-size: 8.5pt;
+    padding-top: 1px;
+    |dv_original_title||
+}
+
 QLabel#new_lbl,
 QLabel#new_and_now,
 QLabel#label_meta {

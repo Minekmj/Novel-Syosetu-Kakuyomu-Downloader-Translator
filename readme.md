@@ -212,16 +212,6 @@ Python이나 별도의 개발 환경을 설치하지 않고 바로 실행하려�
   <img src="https://img.shields.io/badge/Download-Latest%20Version-2ea44f?style=for-the-badge&logo=windows&logoColor=white" alt="Download Latest Version">
 </a>
 
-<br/>
-
-<br/>
-
-<br/>
-
-<a href="https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/releases/latest">
-  <img src="https://img.shields.io/badge/View%20All%20Releases-GitHub-181717?style=for-the-badge&logo=github&logoColor=white" alt="View All Releases">
-</a>
-
 </div>
 
 > EXE 버전은 별도의 Python 설치 없이 사용할 수 있습니다.

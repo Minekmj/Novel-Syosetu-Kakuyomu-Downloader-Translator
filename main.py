@@ -3,7 +3,7 @@ import os
 import json
 import webbrowser
 from datetime import datetime
-from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
+from PySide6.QtWidgets import (QApplication, QMainWindow, QToolButton, QWidget, QVBoxLayout,
                             QHBoxLayout, QLineEdit, QPushButton, QLabel,
                             QFileDialog, QScrollArea, QFrame, QDialog, QMessageBox, QTextBrowser,
                             QMenu, QCheckBox, QSizePolicy, QComboBox)
@@ -45,9 +45,15 @@ def save_data(data):
 class PathSettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.current_theme_key="다크"
+        self.current_theme_key = "다크"
         self.setWindowTitle("환경 설정")
-        self.setFixedSize(400, 180)
+        
+        self.min_width = 400
+        self.min_height = 220
+        
+        self.max_height = 300
+        
+        self.setFixedSize(400, self.min_height)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -55,9 +61,10 @@ class PathSettingsDialog(QDialog):
 
         path_layout = QHBoxLayout()
         path_layout.setSpacing(8)
+
         self.path_edit = QLineEdit(self)
         self.path_edit.setPlaceholderText("저장 폴더 경로")
-        self.path_edit.setReadOnly(True) 
+        self.path_edit.setReadOnly(True)
 
         folder_btn = QPushButton("찾기", self)
         folder_btn.setObjectName("secondaryBtn")
@@ -66,18 +73,16 @@ class PathSettingsDialog(QDialog):
         path_layout.addWidget(self.path_edit, stretch=1)
         path_layout.addWidget(folder_btn)
         layout.addLayout(path_layout)
-        
+
         theme_layout = QHBoxLayout()
         theme_layout.setSpacing(8)
-        
+
         theme_label = QLabel("테마 설정", self)
         self.theme_combo = QComboBox(self)
-        
-       
         self.theme_combo.addItems(list(data_iteam.THEME_DATA.keys()))
-        
+
         g = {}
-        for i , h  in data_iteam.THEME_DATA.items():
+        for i, h in data_iteam.THEME_DATA.items():
             g[h] = i
 
         self.theme_combo.setCurrentText(g[data_iteam.THEME_NAME])
@@ -85,7 +90,90 @@ class PathSettingsDialog(QDialog):
         theme_layout.addWidget(theme_label)
         theme_layout.addWidget(self.theme_combo, stretch=1)
         layout.addLayout(theme_layout)
+
+        advanced_button = QToolButton(self)
+        advanced_button.setText("고급 옵션")
+        advanced_button.setCheckable(True)
+        advanced_button.setChecked(False)
+        advanced_button.setArrowType(Qt.RightArrow)
+        advanced_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         
+        advanced_button.setObjectName("lbl_original_title")
+        
+        advanced_button.setStyleSheet("""
+            QToolButton {
+                background-color: transparent;
+                border: none;
+            }
+            QToolButton:hover {
+                background-color: transparent;
+            }
+            QToolButton:pressed {
+                background-color: transparent;
+            }
+        """)
+        
+        def toggle_advanced(checked):
+            advanced_widget.setVisible(checked)
+            advanced_button.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
+            self.setFixedSize(self.width(), self.max_height if checked else self.min_height)
+            
+        advanced_button.toggled.connect(toggle_advanced)
+
+        layout.addWidget(advanced_button)
+
+        advanced_widget = QWidget(self)
+        
+        advanced_widget.setStyleSheet("""
+            QWidget#advanced_widget {
+                background-color: transparent;
+                border: none;
+            }
+        """)
+        
+        advanced_widget.setObjectName("advanced_widget")
+        
+        advanced_layout = QVBoxLayout(advanced_widget)
+        advanced_layout.setContentsMargins(0, 4, 0, 0)
+        advanced_layout.setSpacing(4)
+        
+        raw_layout = QHBoxLayout()
+        raw_layout.setSpacing(8)
+        raw_layout.setContentsMargins(0, 0, 0, 0)
+
+        raw_label = QLabel("원문 다운로드", self)
+        self.raw_text_toggle = QCheckBox(self)
+        self.raw_text_toggle.setChecked(False)
+
+        raw_label.setCursor(Qt.PointingHandCursor)
+        raw_label.mousePressEvent = lambda *event: self.raw_text_toggle.setChecked(
+            not self.raw_text_toggle.isChecked()
+        )
+
+        raw_layout.addWidget(raw_label)
+        raw_layout.addWidget(self.raw_text_toggle)
+        raw_layout.addStretch()
+
+        advanced_layout.addLayout(raw_layout)
+
+        raw_description = QLabel(
+            "다운로드 시 파일을 원문 그대로 다운로드합니다."
+        )
+        raw_description.setWordWrap(True)
+        raw_description.setObjectName("lbl_original_title")
+
+        advanced_layout.addWidget(raw_description)
+
+        advanced_widget.setVisible(False)
+        layout.addWidget(advanced_widget)
+
+        def toggle_advanced(checked):
+            advanced_widget.setVisible(checked)
+            advanced_button.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
+
+        advanced_button.toggled.connect(toggle_advanced)
+
+        layout.addStretch()
 
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(8)
@@ -93,20 +181,20 @@ class PathSettingsDialog(QDialog):
         save_btn = QPushButton("저장", self)
         save_btn.setObjectName("primaryBtn")
         save_btn.clicked.connect(self.accept)
-        save_btn.setStyleSheet("width:100%")
 
         btn_layout.addWidget(save_btn)
-        
-        layout.spacing()
         layout.addLayout(btn_layout)
 
     def browse_folder(self):
         directory = QFileDialog.getExistingDirectory(self, "폴더 선택")
         if directory:
             self.path_edit.setText(directory)
-            
+
     def get_theme_display_name(self):
         return self.theme_combo.currentText()
+
+    def get_raw_text(self):
+        return self.raw_text_toggle.isChecked()
 
 class EditTitleDialog(QDialog):
     def __init__(self, current_title, parent=None):
@@ -478,6 +566,10 @@ class UpdateView(QDialog):
         self.text_browser.setMarkdown(
             open(resource_path("update.md"), "r", encoding="UTF-8").read()
         )
+        self.text_browser.setObjectName('detail_description')
+        self.text_browser.viewport().setStyleSheet(
+            "background: transparent;"
+        )
 
         layout.addWidget(self.text_browser)
     
@@ -616,6 +708,8 @@ class MainWindow(QMainWindow):
         if data.get("src"):
             down.downin.OUTFOLDER = data["src"]
             trans_view.OUT = data["src"]
+            
+            down.downin.EXPORT_TEXT = data.get("RAW_TEXT", False)
             
         self.load_widgets_from_json()
 
@@ -764,26 +858,36 @@ class MainWindow(QMainWindow):
 
     def open_manager_path_dialog(self):
         data = load_data()
+
         if data.get("theme"):
             data_iteam.THEME_NAME = data["theme"]
+
         dialog = PathSettingsDialog(self)
+
         if data.get("src"):
             dialog.path_edit.setText(data["src"])
         elif hasattr(down.downin, 'OUTFOLDER'):
             dialog.path_edit.setText(down.downin.OUTFOLDER)
 
+        dialog.raw_text_toggle.setChecked(data.get("RAW_TEXT", False))
+
         if dialog.exec():
             selected_path = dialog.path_edit.text().strip()
             selected_theme = data_iteam.THEME_DATA.get(dialog.theme_combo.currentText(), "DARK")
-            
+            raw_text = dialog.get_raw_text()
+
             if selected_path:
                 down.downin.OUTFOLDER = selected_path
                 trans_view.OUT = selected_path
                 data["src"] = selected_path
-                data["theme"] = selected_theme
-            
+                
+            down.downin.EXPORT_TEXT = raw_text
+
+            data["theme"] = selected_theme
+            data["RAW_TEXT"] = raw_text
+
             save_data(data)
-            
+
             if data["theme"] != data_iteam.THEME_NAME:
                 data_iteam.THEME_NAME = data["theme"]
                 data_iteam.rest()
