@@ -97,11 +97,15 @@
 
 <p><i>번역 화면</i></p>
 
-<img src="https://github.com/user-attachments/assets/ae4733e2-c2f7-4230-99df-f212d099d965" alt="나로우 파인더">
+<img src="https://github.com/user-attachments/assets/5b5d2e9c-c2a9-4f85-9b7f-ae588901070e" alt="환경 설정">
+
+<p><i>환경 설정</i></p>
+
+<img src="https://github.com/user-attachments/assets/1da3ab85-45a6-44ab-8934-40fa04767aac" alt="나로우 파인더">
 
 <p><i>소설가가 되자 작품 검색</i></p>
 
-<img src="https://github.com/user-attachments/assets/516e64c8-72bf-4ee6-844b-0ba40ea43136" alt="카쿠요무 파인더">
+<img src="https://github.com/user-attachments/assets/559a7c73-c279-4982-b8c3-59f8b31f3026" alt="카쿠요무 파인더">
 
 <p><i>카쿠요무 작품 검색</i></p>
 
@@ -111,7 +115,7 @@
 
 <br>
 
-<p><b>스크린샷 기준 버전 · v1.1.2</b></p>
+<p><b>스크린샷 기준 버전 · v1.2.0</b></p>
 
 </div>
 
