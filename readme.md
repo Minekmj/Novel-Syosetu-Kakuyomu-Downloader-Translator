@@ -54,13 +54,17 @@
 * 작품의 전체 회차 일괄 다운로드
 * 기존에 저장한 작품의 신규 회차 확인
 * 작품 목록 및 다운로드 정보 관리
+* 원문 형식의 다운로드 기능
 
 ### 번역
 
 * Google Gemini API를 이용한 번역
 * Naver Papago API 연동
-* 긴 소설을 여러 단위로 나누어 처리하는 번역 방식
+* 청크 방식의 분활 번역
 * 번역 결과를 EPUB 변환 과정과 연계 가능
+* 사용자 지정 번역 프롬포트 설정 가능
+* 동적 작품별 용어집으로 번역 일관성 기능
+  * 작품별로 각각 자동 지정
 
 ### EPUB 변환
 
@@ -93,11 +97,15 @@
 
 <p><i>프로그램 메인 화면 · 작품 및 다운로드 목록</i></p>
 
-<img src="https://github.com/user-attachments/assets/94418491-d1ae-4a12-b8fc-8b913c99909a" alt="AI 번역 화면">
+<img src="https://github.com/user-attachments/assets/ea786cf8-5fcf-411e-a2a1-309647bd891f" alt="AI 번역 화면">
 
 <p><i>번역 화면</i></p>
 
-<img src="https://github.com/user-attachments/assets/5b5d2e9c-c2a9-4f85-9b7f-ae588901070e" alt="환경 설정">
+<img src="https://github.com/user-attachments/assets/66d8ad70-164b-495f-81b3-f2a7d8708f6e" alt="용어집 번역 화면">
+
+<p><i>용어집 화면</i></p>
+
+<img src="https://github.com/user-attachments/assets/c94b82ef-39e2-4d1b-9dd6-face6b678334" alt="환경 설정">
 
 <p><i>환경 설정</i></p>
 
@@ -115,7 +123,7 @@
 
 <br>
 
-<p><b>스크린샷 기준 버전 · v1.2.0</b></p>
+<p><b>스크린샷 기준 버전 · v1.3.0</b></p>
 
 </div>
 
@@ -228,8 +236,6 @@ Python이나 별도의 개발 환경을 설치하지 않고 바로 실행하려�
 
 * Windows
 * Python 3.12 이상
-* 인터넷 연결
-* 번역 API 사용 시 해당 API의 사용 권한 및 API Key
 
 ### 1. 저장소 클론
 
