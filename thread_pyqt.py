@@ -77,7 +77,7 @@ class TranslateThread(QThread):
     log_changed = Signal(str)
     finished_signal = Signal(bool, str, str)
 
-    def __init__(self, file_path, model_name, rpm, temperature, max_concurrent, max_chars):
+    def __init__(self, file_path, model_name, rpm, temperature, max_concurrent, max_chars, dicts={}):
         super().__init__()
 
         self.file_path = file_path
@@ -86,6 +86,7 @@ class TranslateThread(QThread):
         self.temperature = temperature
         self.max_concurrent = max_concurrent
         self.max_chars = max_chars
+        self.dict = dicts
 
     def run(self):
         try:
@@ -113,7 +114,8 @@ class TranslateThread(QThread):
                     temperature=self.temperature,
                     max_concurrent=self.max_concurrent,
                     progress_callback=progress,
-                    log_callback=self.log_changed.emit
+                    log_callback=self.log_changed.emit,
+                    dicts=self.dict
                 )
 
             else:
@@ -130,7 +132,8 @@ class TranslateThread(QThread):
                     temperature=self.temperature,
                     max_concurrent=self.max_concurrent,
                     progress_callback=progress,
-                    log_callback=self.log_changed.emit
+                    log_callback=self.log_changed.emit,
+                    dicts=self.dict
                 )
 
             output_dir = os.path.join(getattr(DOWN.downin, "OUTFOLDER", "./out/"), "epub")
@@ -200,3 +203,43 @@ class ModelLoadThread(QThread):
             self.finished.emit(sorted(set(model_names)), "")
         except Exception as e:
             self.finished.emit([], str(e))
+            
+class GlossaryExtractThread(QThread):
+    log_signal = Signal(str)
+    finished_signal = Signal(dict, str)
+
+    def __init__(self, all_text, paserent, chunk, parent=None):
+        super().__init__(parent)
+        self.all_text = all_text
+        self.paserent = paserent
+        self.chunk = chunk
+
+    def run(self):
+        try:
+            def log_callback(text):
+                self.log_signal.emit(str(text))
+
+            self.log_signal.emit(
+                f"AI 용어집 분석 시작 / 분석 비율: {self.paserent}% / 청크: {self.chunk}"
+            )
+
+            result = trans_ai.extract_glossary(
+                self.all_text,
+                paserent=self.paserent,
+                chunk=self.chunk,
+                log_callback=log_callback
+            )
+
+            if not isinstance(result, dict):
+                result = {}
+
+            self.finished_signal.emit(
+                result,
+                ""
+            )
+
+        except Exception as e:
+            self.finished_signal.emit(
+                {},
+                str(e)
+            )

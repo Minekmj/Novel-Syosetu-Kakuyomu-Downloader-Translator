@@ -104,3 +104,19 @@ def open_folder(path):
             subprocess.run(["xdg-open", path])
     except Exception as e:
         print(f"폴더 열기 실패: {e}")
+        
+def load_data():
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {"src": "", "list": {}}
+
+def save_data(data):
+    try:
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        print(f"데이터 저장 실패: {e}")

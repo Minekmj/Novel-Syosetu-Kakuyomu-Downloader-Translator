@@ -656,3 +656,131 @@ QFrame#hr_line{
     background-color: |border_subtle||;
     border: none;
 }
+
+QCheckBox#isCo:hover{
+    |dv_is_remainder_point_color||
+}
+
+/* ================================
+   Dictionary
+   ================================ */
+
+QDialog#dictionaryDialog {
+    background-color: |bg||;
+    color: |text||;
+    |dv_dictionary_dialog||
+}
+
+QLabel#dictionaryTitle {
+    color: |text_title||;
+    font-size: 11pt;
+    font-weight: 650;
+    padding: 2px 2px 5px 2px;
+    |dv_dictionary_title||
+}
+
+QWidget#dictionaryContainer {
+    background: transparent;
+    |dv_dictionary_container||
+}
+
+QWidget#dictionaryItem {
+    background-color: |surface_card||;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    min-height: 42px;
+    |dv_dictionary_item||
+}
+
+QWidget#dictionaryItem:hover {
+    background-color: |surface_hover||;
+    border: 1px solid |border_card_hover||;
+    |dv_dictionary_item_hover||
+}
+
+QLineEdit#dictionarySource,
+QLineEdit#dictionaryTarget {
+    background-color: transparent;
+    color: |text_input||;
+    border: none;
+    border-radius: 7px;
+    min-height: 20px;
+    padding: 5px 6px;
+    font-size: 9pt;
+    selection-background-color: |selection_input||;
+    selection-color: |selection_text||;
+    |dv_dictionary_input||
+}
+
+QLineEdit#dictionarySource:hover,
+QLineEdit#dictionaryTarget:hover {
+    background-color: |surface_input_hover||;
+    |dv_dictionary_input_hover||
+}
+
+QLineEdit#dictionarySource:focus,
+QLineEdit#dictionaryTarget:focus {
+    background-color: |surface_input_focus||;
+    border: 1px solid |border_input_focus||;
+    |dv_dictionary_input_focus||
+}
+
+QLabel#dictionaryArrow {
+    background: transparent;
+    color: |text_dim||;
+    font-size: 10pt;
+    font-weight: 600;
+    padding: 0px 4px;
+    |dv_dictionary_arrow||
+}
+
+QPushButton#dictionaryRemove {
+    background-color: transparent;
+    color: |delete_text||;
+    border: none;
+    border-radius: 7px;
+    min-height: 22px;
+    min-width: 22px;
+    padding: 2px 5px;
+    font-size: 12pt;
+    font-weight: 500;
+    |dv_dictionary_remove||
+}
+
+QPushButton#dictionaryRemove:hover {
+    background-color: |surface_delete_hover||;
+    color: |delete_hover_text||;
+    |dv_dictionary_remove_hover||
+}
+
+QPushButton#dictionaryAdd {
+    background-color: |surface_chip||;
+    color: |chip_text||;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    min-height: 22px;
+    padding: 7px 12px;
+    font-size: 8.5pt;
+    font-weight: 500;
+    |dv_dictionary_add||
+}
+
+QPushButton#dictionaryAdd:hover {
+    background-color: |surface_chip_hover||;
+    color: |chip_hover_text||;
+    border: 1px solid |border_card_hover||;
+    |dv_dictionary_add_hover||
+}
+
+QPushButton#dictionaryAdd:pressed {
+    background-color: |chip_checked||;
+    color: |chip_checked_text||;
+    |dv_dictionary_add_pressed||
+}
+
+QLabel#setting_title_txt{
+    color: |checkbox_text||;
+    spacing: 7px;
+    padding: 2px 0px;
+    font-size: 9pt;
+}

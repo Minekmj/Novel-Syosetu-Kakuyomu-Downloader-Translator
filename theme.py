@@ -143,6 +143,7 @@ def _make_dark_theme(c, dv=None):
         "dv_detail_tags": "",
         "dv_dialog_separator": "",
         "dv_detail_description": "",
+        "dv_is_remainder_point_color": "",
     }
 
     if dv and isinstance(dv, dict):
@@ -164,6 +165,7 @@ def _make_light_theme(c, dv=None):
         "border_card_hover": c["accent_light"],
         "scrollbar": c["border2"],
         "scrollbar_hover": c["accent"],
+        "dv_is_remainder_point_color": "color: #A3A3A3;",
     })
     
     base_color = "#FFFFFF"

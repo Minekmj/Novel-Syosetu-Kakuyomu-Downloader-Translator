@@ -3,17 +3,19 @@ import os
 import json
 import webbrowser
 from datetime import datetime
-from PySide6.QtWidgets import (QApplication, QMainWindow, QSpacerItem, QToolButton, QWidget, QVBoxLayout,
-                            QHBoxLayout, QLineEdit, QPushButton, QLabel,
-                            QFileDialog, QScrollArea, QFrame, QDialog, QMessageBox, QTextBrowser,
-                            QMenu, QCheckBox, QSizePolicy, QComboBox)
+from PySide6.QtWidgets import (
+    QApplication, QMainWindow, QSpacerItem, QToolButton, QWidget, QVBoxLayout,
+    QHBoxLayout, QLineEdit, QPushButton, QLabel,
+    QFileDialog, QScrollArea, QFrame, QDialog, QMessageBox, QTextBrowser,
+    QTextEdit, QMenu, QCheckBox, QSizePolicy, QComboBox
+)
 from PySide6.QtCore import QUrl, Qt, Signal
 from PySide6.QtGui import QAction, QDesktopServices, QFont
 from PySide6.QtGui import QIcon
 import ctypes
 
 import down
-from data import open_folder
+from data import open_folder, save_data, load_data
 import data as data_iteam
 data_iteam.rest()
 import findsyou
@@ -26,36 +28,20 @@ import v as vsc
 
 trans_view.OUT = down.downin.OUTFOLDER
 
-from config import DATA_FILE
-
-def load_data():
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {"src": "", "list": {}}
-
-def save_data(data):
-    try:
-        with open(DATA_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=4)
-    except Exception as e:
-        print(f"데이터 저장 실패: {e}")
-
 class PathSettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.current_theme_key = "다크"
         self.setWindowTitle("환경 설정")
         
-        self.min_width = 400
+        self.widths = 600
         self.min_height = 220
         
-        self.max_height = 380
+        self.max_height = 550
         
-        self.setFixedSize(400, self.min_height)
+        self.setBaseSize(self.widths, self.min_height)
+        self.setFixedSize(self.widths, self.min_height)
+        self.setMaximumWidth(self.widths)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -152,11 +138,32 @@ class PathSettingsDialog(QDialog):
         raw_layout.addWidget(self.raw_text_toggle)
         raw_layout.addStretch()
         advanced_layout.addLayout(raw_layout)
-
+        
         raw_description = QLabel("다운로드 시 파일을 원문 그대로 다운로드합니다.\n원문의 줄바꿈 구조를 유지하고, txt 상태에서 읽기 쉽도록 조정합니다.\nRAW 다운로드 파일이 ai번역 시 줄바꿈을 유지하여 번역되며 출력시 txt 파일이 epub와 같이 출력 됩니다.")
         raw_description.setWordWrap(True)
         raw_description.setObjectName("lbl_original_title")
         advanced_layout.addWidget(raw_description)
+
+        advanced_layout.addSpacing(10)
+        
+        prompt_label = QLabel("사용자 지정 AI 번역 프롬프트", self)
+        prompt_label.setObjectName("setting_title_txt")
+        advanced_layout.addWidget(prompt_label)
+
+        self.ai_prompt_edit = QTextEdit(self)
+        self.ai_prompt_edit.setPlaceholderText(
+            "AI 번역 시 사용할 추가 프롬프트를 입력하세요.\n"
+            "비워두면 기본 번역 프롬프트만 사용합니다."
+        )
+        self.ai_prompt_edit.setMinimumHeight(90)
+        self.ai_prompt_edit.setMaximumHeight(130)
+        self.ai_prompt_edit.setObjectName(
+            "detail_description"
+        )
+        self.ai_prompt_edit.viewport().setStyleSheet(
+            "background: transparent;"
+        )
+        advanced_layout.addWidget(self.ai_prompt_edit)
 
         link_layout = QHBoxLayout()
         link_layout.setContentsMargins(0, 8, 0, 0)
@@ -236,16 +243,19 @@ class PathSettingsDialog(QDialog):
         directory = QFileDialog.getExistingDirectory(self, "폴더 선택")
         if directory:
             self.path_edit.setText(directory)
-
     def get_theme_display_name(self):
         return self.theme_combo.currentText()
 
     def get_raw_text(self):
         return self.raw_text_toggle.isChecked()
 
+    def get_ai_prompt(self):
+        return self.ai_prompt_edit.toPlainText().strip()
+
 class EditTitleDialog(QDialog):
     def __init__(self, current_title, parent=None):
         super().__init__(parent)
+
         self.setWindowTitle("제목 수정")
         self.setFixedSize(800, 140)
 
@@ -274,6 +284,7 @@ class EditTitleDialog(QDialog):
 
         btn_layout.addWidget(cancel_btn)
         btn_layout.addWidget(save_btn)
+
         layout.addLayout(btn_layout)
 
     def get_new_title(self):
@@ -575,6 +586,7 @@ class AddressRowWidget(QWidget):
 
     def open_edit_title_dialog(self):
         dialog = EditTitleDialog(self.title_text, self)
+
         if dialog.exec():
             new_title = dialog.get_new_title()
 
@@ -582,13 +594,33 @@ class AddressRowWidget(QWidget):
                 return
 
             data = load_data()
+
+            # 작품 목록 제목 변경
             if "list" in data and self.title_text in data["list"]:
                 item_data = data["list"].pop(self.title_text)
                 data["list"][new_title] = item_data
-                save_data(data)
 
-                self.title_text = new_title
-                self.title_lbl.setText(new_title)
+            # 용어집 제목도 같이 변경
+            dictionary = data.get("dictionary", {})
+
+            if isinstance(dictionary, dict) and self.title_text in dictionary:
+                # 새 제목의 용어집이 이미 있으면 기존 용어집을 덮어쓰지 않음
+                if new_title in dictionary:
+                    QMessageBox.warning(
+                        self,
+                        "알림",
+                        f"'{new_title}'의 용어집이 이미 존재합니다."
+                    )
+                    return
+
+                dictionary[new_title] = dictionary.pop(self.title_text)
+
+            data["dictionary"] = dictionary
+
+            save_data(data)
+
+            self.title_text = new_title
+            self.title_lbl.setText(new_title)
 
     def open_browser(self):
         webbrowser.open(self.site_url)
@@ -707,6 +739,7 @@ class MainWindow(QMainWindow):
 
         self.filter_chk = QCheckBox("남은 화수 있음", self)
         self.filter_chk.stateChanged.connect(self.apply_filter_and_sort)
+        self.filter_chk.setObjectName("isCo")
 
         control_layout.addWidget(self.search_edit, stretch=1)
         control_layout.addWidget(self.sort_combo)
@@ -752,12 +785,14 @@ class MainWindow(QMainWindow):
     def init_saved_data(self):
         data = load_data()
 
+        trans_view.trans_ai.CUSTOM_AI_PROMPT = data.get("AI_PROMPT", "")
+        down.downin.EXPORT_TEXT = data.get("RAW_TEXT", False)
+        
         if data.get("src"):
             down.downin.OUTFOLDER = data["src"]
             trans_view.OUT = data["src"]
             
-            down.downin.EXPORT_TEXT = data.get("RAW_TEXT", False)
-            
+
         self.load_widgets_from_json()
 
     def load_widgets_from_json(self):
@@ -917,23 +952,26 @@ class MainWindow(QMainWindow):
             dialog.path_edit.setText(down.downin.OUTFOLDER)
 
         dialog.raw_text_toggle.setChecked(data.get("RAW_TEXT", False))
+        dialog.ai_prompt_edit.setPlainText(data.get("AI_PROMPT", ""))
 
         if dialog.exec():
             selected_path = dialog.path_edit.text().strip()
             selected_theme = data_iteam.THEME_DATA.get(dialog.theme_combo.currentText(), "DARK")
             raw_text = dialog.get_raw_text()
+            ai_prompt = dialog.get_ai_prompt()
 
             if selected_path:
                 down.downin.OUTFOLDER = selected_path
                 trans_view.OUT = selected_path
                 data["src"] = selected_path
-                
-            down.downin.EXPORT_TEXT = raw_text
 
+            down.downin.EXPORT_TEXT = raw_text
             data["theme"] = selected_theme
             data["RAW_TEXT"] = raw_text
-
+            data["AI_PROMPT"] = ai_prompt
             save_data(data)
+
+            trans_view.trans_ai.CUSTOM_AI_PROMPT = ai_prompt
 
             if data["theme"] != data_iteam.THEME_NAME:
                 data_iteam.THEME_NAME = data["theme"]
