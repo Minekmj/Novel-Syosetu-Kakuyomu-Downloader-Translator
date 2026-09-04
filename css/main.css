@@ -657,7 +657,7 @@ QFrame#hr_line{
     border: none;
 }
 
-QCheckBox#isCo:hover{
+#isCo:hover{
     |dv_is_remainder_point_color||
 }
 
@@ -748,8 +748,8 @@ QPushButton#dictionaryRemove {
 }
 
 QPushButton#dictionaryRemove:hover {
-    background-color: |surface_delete_hover||;
-    color: |delete_hover_text||;
+    background-color: |surface_delete||;
+    color: white;
     |dv_dictionary_remove_hover||
 }
 

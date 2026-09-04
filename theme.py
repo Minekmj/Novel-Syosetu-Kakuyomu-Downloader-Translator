@@ -1,3 +1,5 @@
+import colorsys
+
 def gra(*colors, direction="v", mode="linear"):
     if not colors:
         return "#000000"
@@ -23,6 +25,25 @@ def gra(*colors, direction="v", mode="linear"):
     stops = ", ".join(f"stop: {i * step:g} {color}" for i, color in enumerate(colors))
 
     return f"qlineargradient(x1: {x1}, y1: {y1}, x2: {x2}, y2: {y2}, {stops})"
+
+def color_blend(base, theme, strength=1.0):
+    base = base.lstrip('#')
+    theme = theme.lstrip('#')
+
+    br, bg, bb = [int(base[i:i+2], 16) / 255 for i in (0, 2, 4)]
+    tr, tg, tb = [int(theme[i:i+2], 16) / 255 for i in (0, 2, 4)]
+
+    bh, bs, bv = colorsys.rgb_to_hsv(br, bg, bb)
+    th, ts, tv = colorsys.rgb_to_hsv(tr, tg, tb)
+
+    h = th
+
+    s = bs * (1 - strength) + ts * strength
+    v = bv * (1 - strength) + tv * strength
+
+    r, g, b = colorsys.hsv_to_rgb(h, s, v)
+
+    return f'#{round(r * 255):02X}{round(g * 255):02X}{round(b * 255):02X}'
 
 def _make_dark_theme(c, dv=None):
     theme = {
@@ -71,6 +92,7 @@ def _make_dark_theme(c, dv=None):
         "surface_menu_selected": c["surface3"],
         "surface_combo_selected": c["surface3"],
         "surface_delete_hover": c["delete_bg"],
+        "surface_delete": gra(color_blend("#E03737", c["delete_bg"], 0.4),color_blend("#E03737", c["delete_bg"], 0.6), direction="h"),
         "surface_chip_hover": c["surface4"],
 
         "surface_rating": "transparent",

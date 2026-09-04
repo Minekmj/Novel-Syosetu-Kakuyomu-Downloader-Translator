@@ -208,11 +208,13 @@ class GlossaryExtractThread(QThread):
     log_signal = Signal(str)
     finished_signal = Signal(dict, str)
 
-    def __init__(self, all_text, paserent, chunk, parent=None):
+    def __init__(self, all_text, paserent, chunk, model, rpm, parent=None):
         super().__init__(parent)
         self.all_text = all_text
         self.paserent = paserent
         self.chunk = chunk
+        self.model = model
+        self.rpm = rpm
 
     def run(self):
         try:
@@ -227,7 +229,9 @@ class GlossaryExtractThread(QThread):
                 self.all_text,
                 paserent=self.paserent,
                 chunk=self.chunk,
-                log_callback=log_callback
+                log_callback=log_callback,
+                model=self.model,
+                RPM=self.rpm
             )
 
             if not isinstance(result, dict):

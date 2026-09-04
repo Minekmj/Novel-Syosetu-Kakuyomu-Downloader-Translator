@@ -19,6 +19,8 @@ import time
 import unicodedata
 import ast
 from collections import Counter
+import math
+from collections import Counter, defaultdict
 
 from google import genai
 from google.genai import types
@@ -1594,12 +1596,7 @@ def save_translation_txt(
             + "".join(translated_parts_raw)
         )
 
-
 def _extract_glossary_sample(all_text, paserent):
-    """
-    전체 텍스트에서 paserent(%)만큼 분석용 텍스트를 추출한다.
-    텍스트의 앞부분만 자르지 않고 전체 구간에 골고루 분포하도록 한다.
-    """
     if not all_text:
         return ""
 
@@ -1610,66 +1607,589 @@ def _extract_glossary_sample(all_text, paserent):
 
     paserent = max(0.1, min(100.0, paserent))
 
+    lines = all_text.splitlines()
+    valid_lines = []
+
+    # ------------------------------------------------------------
+    # 기본 전처리
+    # ------------------------------------------------------------
+
+    for line in lines:
+        line = line.strip()
+
+        if not line:
+            continue
+
+        # 기호만 있는 줄 제거
+        if not any(ch.isalnum() for ch in line):
+            continue
+
+        # 5자 이하 짧은 줄 제거
+        if len(line) <= 5:
+            continue
+
+        valid_lines.append(line)
+
+    if not valid_lines:
+        return ""
+
+    full_text = "\n".join(valid_lines)
+
     if paserent >= 100.0:
-        return all_text
+        return full_text
 
-    target_length = max(1, int(len(all_text) * paserent / 100.0))
+    budget = max(1, int(len(full_text) * paserent / 100.0))
 
-    if target_length >= len(all_text):
-        return all_text
+    if budget >= len(full_text):
+        return full_text
 
-    # 전체 텍스트에서 일정 간격으로 여러 구간을 뽑는다.
-    # 한 곳에 몰리지 않게 하기 위한 방식.
-    segment_count = max(
-        1,
-        min(20, len(all_text) // max(1, target_length // 4))
+    # ------------------------------------------------------------
+    # 문자 패턴
+    # ------------------------------------------------------------
+
+    KANJI = r'\u3400-\u4dbf\u4e00-\u9fff々〆〇ヶ'
+    HIRAGANA = r'\u3040-\u309f'
+    KATAKANA = r'\u30a0-\u30ffー'
+    JAPANESE = KANJI + HIRAGANA + KATAKANA
+
+    # 일반적인 단어
+    word_pattern = re.compile(
+        rf'[{KANJI}]{{2,}}'
+        rf'|[{KATAKANA}]{{2,}}'
+        rf'|[{HIRAGANA}]{{3,}}'
+        rf'|[{KANJI}][{HIRAGANA}]+'
+        rf'|[{KANJI}]+[{KATAKANA}]+'
+        rf'|[{KATAKANA}]+[{KANJI}]+'
+        rf'|[A-Za-z][A-Za-z0-9_\-\.]{{1,}}'
+        rf'|\d+(?:\.\d+)?(?:[{JAPANESE}]{{1,}}|[%％])'
     )
 
-    segment_length = max(
-        1,
-        target_length // segment_count
-    )
+    # 문장 분리
+    sentences = []
 
-    if segment_length * segment_count > target_length:
-        segment_length = max(
-            1,
-            target_length // segment_count
+    for line_index, line in enumerate(valid_lines):
+        parts = re.split(
+            r'(?<=[。！？!?])\s*'
+            r'|(?<=[…‥])\s*'
+            r'|(?<=[」』】》〉）)])\s*',
+            line
         )
 
-    result = []
+        for part in parts:
+            part = part.strip()
 
-    max_start = len(all_text) - segment_length
+            if len(part) <= 5:
+                continue
 
-    if segment_count == 1:
-        positions = [max_start // 2]
-    else:
-        positions = [
-            int(
-                max_start * i / (segment_count - 1)
-            )
-            for i in range(segment_count)
+            sentences.append({
+                "text": part,
+                "line": line_index,
+                "length": len(part)
+            })
+
+    if not sentences:
+        sentences = [
+            {"text": x, "line": i, "length": len(x)}
+            for i, x in enumerate(valid_lines)
         ]
 
-    for start in positions:
-        part = all_text[
-            start:start + segment_length
+    # ------------------------------------------------------------
+    # 모든 후보 생성
+    # ------------------------------------------------------------
+
+    candidate_occurrences = defaultdict(list)
+    candidate_types = defaultdict(set)
+    candidate_counter = Counter()
+
+    for sentence_index, sentence in enumerate(sentences):
+        text = sentence["text"]
+
+        def add_candidate(value, kind, weight=1.0):
+            value = value.strip()
+
+            if len(value) < 2:
+                return
+
+            if len(value) > 40:
+                return
+
+            # 지나치게 일반적인 후보 제거
+            if re.fullmatch(r'[ぁ-ん]+', value) and len(value) < 4:
+                return
+
+            candidate_counter[value] += weight
+            candidate_occurrences[value].append(sentence_index)
+            candidate_types[value].add(kind)
+
+        # --------------------------------------------------------
+        # 1. 기본 단어
+        # --------------------------------------------------------
+
+        words = word_pattern.findall(text)
+
+        for word in words:
+            add_candidate(word, "word")
+
+        # --------------------------------------------------------
+        # 2. 한자 연속 조합
+        # --------------------------------------------------------
+
+        for match in re.finditer(rf'[{KANJI}]{{2,20}}', text):
+            value = match.group()
+            add_candidate(value, "kanji")
+
+            # 내부 조합도 전부 생성
+            for n in range(2, min(8, len(value) + 1)):
+                for i in range(len(value) - n + 1):
+                    add_candidate(
+                        value[i:i + n],
+                        "kanji_ngram",
+                        0.7
+                    )
+
+        # --------------------------------------------------------
+        # 3. 카타카나 명칭
+        # --------------------------------------------------------
+
+        for match in re.finditer(rf'[{KATAKANA}]{{2,30}}', text):
+            value = match.group()
+            add_candidate(value, "katakana", 1.5)
+
+            # 카타카나 내부 조합
+            if len(value) >= 4:
+                for n in range(3, min(12, len(value) + 1)):
+                    for i in range(len(value) - n + 1):
+                        add_candidate(
+                            value[i:i + n],
+                            "katakana_ngram",
+                            0.5
+                        )
+
+        # --------------------------------------------------------
+        # 4. 한자 + 히라가나
+        # --------------------------------------------------------
+
+        for match in re.finditer(
+            rf'[{KANJI}]{{1,10}}[{HIRAGANA}]{{1,10}}',
+            text
+        ):
+            add_candidate(match.group(), "kanji_hiragana", 1.4)
+
+        # --------------------------------------------------------
+        # 5. 한자 + 카타카나
+        # --------------------------------------------------------
+
+        for match in re.finditer(
+            rf'[{KANJI}]{{1,15}}[{KATAKANA}]{{1,15}}',
+            text
+        ):
+            add_candidate(match.group(), "kanji_katakana", 1.7)
+
+        # --------------------------------------------------------
+        # 6. 카타카나 + 한자
+        # --------------------------------------------------------
+
+        for match in re.finditer(
+            rf'[{KATAKANA}]{{1,15}}[{KANJI}]{{1,15}}',
+            text
+        ):
+            add_candidate(match.group(), "katakana_kanji", 1.7)
+
+        # --------------------------------------------------------
+        # 7. の 연결
+        # --------------------------------------------------------
+
+        for match in re.finditer(
+            rf'[{JAPANESE}]{{2,15}}の[{JAPANESE}]{{2,20}}',
+            text
+        ):
+            add_candidate(match.group(), "no_compound", 2.2)
+
+        # --------------------------------------------------------
+        # 8. な 연결
+        # --------------------------------------------------------
+
+        for match in re.finditer(
+            rf'[{JAPANESE}]{{2,15}}な[{JAPANESE}]{{2,20}}',
+            text
+        ):
+            add_candidate(match.group(), "na_compound", 1.3)
+
+        # --------------------------------------------------------
+        # 9. ・ 연결
+        # --------------------------------------------------------
+
+        for match in re.finditer(
+            rf'[{JAPANESE}A-Za-z0-9]{{2,20}}・'
+            rf'[{JAPANESE}A-Za-z0-9]{{2,20}}',
+            text
+        ):
+            add_candidate(match.group(), "dot_compound", 2.5)
+
+        # --------------------------------------------------------
+        # 10. ＝ / = 연결
+        # --------------------------------------------------------
+
+        for match in re.finditer(
+            rf'[{JAPANESE}A-Za-z0-9]{{2,20}}[＝=]'
+            rf'[{JAPANESE}A-Za-z0-9]{{2,20}}',
+            text
+        ):
+            add_candidate(match.group(), "equal_compound", 1.8)
+
+        # --------------------------------------------------------
+        # 11. 숫자 + 단위
+        # --------------------------------------------------------
+
+        for match in re.finditer(
+            rf'\d+(?:\.\d+)?[{JAPANESE}]{{1,10}}',
+            text
+        ):
+            add_candidate(match.group(), "number_unit", 1.5)
+
+        # --------------------------------------------------------
+        # 12. 영어 / 코드명
+        # --------------------------------------------------------
+
+        for match in re.finditer(
+            r'\b[A-Z][A-Za-z0-9_\-]{2,}\b',
+            text
+        ):
+            add_candidate(match.group(), "english", 2.0)
+
+        # --------------------------------------------------------
+        # 13. 따옴표/괄호 안
+        # --------------------------------------------------------
+
+        quote_patterns = [
+            r'[「『](.{2,50})[」』]',
+            r'[【《〈](.{2,50})[】》〉]',
+            r'[（(](.{2,50})[）)]',
+            r'"(.{2,50})"',
+            r"'(.{2,50})'"
         ]
 
-        if part:
-            result.append(part)
+        for pattern in quote_patterns:
+            for match in re.finditer(pattern, text):
+                value = match.group(1).strip()
+                add_candidate(value, "quoted", 3.5)
 
-    sample = "\n".join(result)
+        # --------------------------------------------------------
+        # 14. 칭호 / 직업 / 신분
+        # --------------------------------------------------------
 
-    # 실제 사용량이 목표보다 약간 달라질 수 있으므로
-    # 최종적으로 목표 길이만큼 제한
-    return sample[:target_length]
+        title_suffixes = (
+            "王", "女王", "皇帝", "皇女", "王子", "王女",
+            "姫", "公爵", "侯爵", "伯爵", "子爵", "男爵",
+            "騎士", "団長", "隊長", "将軍", "司令",
+            "魔王", "勇者", "聖女", "賢者", "神官",
+            "巫女", "剣士", "魔術師", "魔導師",
+            "冒険者", "商人", "貴族", "兵士"
+        )
+
+        for suffix in title_suffixes:
+            for match in re.finditer(
+                rf'[{JAPANESE}]{{2,20}}{re.escape(suffix)}',
+                text
+            ):
+                add_candidate(
+                    match.group(),
+                    "title",
+                    3.0
+                )
+
+        # --------------------------------------------------------
+        # 15. 조직 / 장소
+        # --------------------------------------------------------
+
+        structural_suffixes = (
+            "国", "王国", "帝国", "共和国",
+            "領", "城", "街", "町", "村",
+            "都市", "学院", "学園",
+            "教会", "神殿", "寺院",
+            "騎士団", "兵団", "軍団",
+            "ギルド", "パーティー", "組織"
+        )
+
+        for suffix in structural_suffixes:
+            for match in re.finditer(
+                rf'[{JAPANESE}]{{2,20}}{re.escape(suffix)}',
+                text
+            ):
+                add_candidate(
+                    match.group(),
+                    "organization_place",
+                    2.8
+                )
+
+        # --------------------------------------------------------
+        # 16. 무기 / 아이템
+        # --------------------------------------------------------
+
+        item_suffixes = (
+            "剣", "刀", "槍", "弓", "杖", "盾",
+            "鎧", "兜", "指輪", "首飾り",
+            "魔法", "術", "技", "スキル",
+            "武器", "防具", "薬", "秘薬",
+            "宝", "神器", "聖具", "魔具"
+        )
+
+        for suffix in item_suffixes:
+            for match in re.finditer(
+                rf'[{JAPANESE}]{{2,20}}{re.escape(suffix)}',
+                text
+            ):
+                add_candidate(
+                    match.group(),
+                    "item_skill",
+                    3.0
+                )
+
+        # --------------------------------------------------------
+        # 17. 종족 / 분류
+        # --------------------------------------------------------
+
+        race_suffixes = (
+            "族", "種", "人", "獣", "竜",
+            "妖精", "精霊", "悪魔", "天使",
+            "吸血鬼", "魔族", "人族"
+        )
+
+        for suffix in race_suffixes:
+            for match in re.finditer(
+                rf'[{JAPANESE}]{{2,20}}{re.escape(suffix)}',
+                text
+            ):
+                add_candidate(
+                    match.group(),
+                    "race",
+                    2.5
+                )
+
+        # --------------------------------------------------------
+        # 18. 일반적인 복합명사 조합
+        # --------------------------------------------------------
+
+        compact_words = [
+            x for x in words
+            if len(x) >= 2
+        ]
+
+        for n in range(2, 6):
+            for i in range(len(compact_words) - n + 1):
+                combo = "".join(compact_words[i:i + n])
+
+                if 4 <= len(combo) <= 30:
+                    add_candidate(
+                        combo,
+                        f"compound_{n}",
+                        0.9 + n * 0.2
+                    )
+
+        # --------------------------------------------------------
+        # 19. 인접한 일본어 토큰 조합
+        # --------------------------------------------------------
+
+        token_pattern = re.compile(
+            rf'[{JAPANESE}]{{1,20}}'
+            rf'|[A-Za-z0-9_\-]{{2,20}}'
+        )
+
+        tokens = token_pattern.findall(text)
+
+        for n in range(2, 4):
+            for i in range(len(tokens) - n + 1):
+                combo = "".join(tokens[i:i + n])
+
+                if 4 <= len(combo) <= 30:
+                    add_candidate(
+                        combo,
+                        "token_compound",
+                        0.8
+                    )
+
+    # ------------------------------------------------------------
+    # 후보별 통계
+    # ------------------------------------------------------------
+
+    total_sentences = len(sentences)
+    candidate_scores = {}
+
+    for candidate, raw_frequency in candidate_counter.items():
+        occurrences = candidate_occurrences[candidate]
+        frequency = len(occurrences)
+
+        if not frequency:
+            continue
+
+        # 여러 문장에 등장할수록 신뢰도 증가
+        spread = len(set(occurrences)) / max(1, total_sentences)
+
+        # 지나치게 흔한 단어는 감점
+        common_penalty = 1.0
+
+        if frequency > total_sentences * 0.2:
+            common_penalty *= 0.35
+        elif frequency > total_sentences * 0.1:
+            common_penalty *= 0.55
+        elif frequency > total_sentences * 0.05:
+            common_penalty *= 0.8
+
+        # 길이
+        length_score = min(4.0, 1.0 + len(candidate) / 5.0)
+
+        # 종류가 다양하게 검출되면 강한 후보
+        type_bonus = min(
+            4.0,
+            1.0 + len(candidate_types[candidate]) * 0.8
+        )
+
+        # 반복성과 희귀성을 동시에 반영
+        frequency_score = min(
+            5.0,
+            1.0 + math.log2(frequency + 1)
+        )
+
+        spread_score = 1.0 + spread * 3.0
+
+        candidate_scores[candidate] = (
+            length_score *
+            type_bonus *
+            frequency_score *
+            spread_score *
+            common_penalty
+        )
+
+    # ------------------------------------------------------------
+    # 문장별 점수
+    # ------------------------------------------------------------
+
+    for i, sentence in enumerate(sentences):
+        text = sentence["text"]
+        score = 0.0
+        matched = set()
+
+        # 후보 포함 여부
+        for candidate, candidate_score in candidate_scores.items():
+            if candidate in text:
+                if candidate not in matched:
+                    score += candidate_score
+                    matched.add(candidate)
+
+        # 한자 정보량
+        kanji = len(re.findall(rf'[{KANJI}]', text))
+        score += min(6.0, kanji * 0.25)
+
+        # 카타카나 정보량
+        katakana = len(re.findall(rf'[{KATAKANA}]', text))
+        score += min(6.0, katakana * 0.35)
+
+        # 숫자
+        numbers = len(re.findall(r'\d+', text))
+        score += min(3.0, numbers * 0.8)
+
+        # 고유명사처럼 보이는 괄호
+        if re.search(r'[「『【《〈].{2,}[」』】》〉]', text):
+            score += 5.0
+
+        # 영어 명칭
+        if re.search(r'\b[A-Z][A-Za-z0-9_\-]{2,}\b', text):
+            score += 3.0
+
+        # 한자+카타카나 혼합
+        if re.search(rf'[{KANJI}].*[{KATAKANA}]|[{KATAKANA}].*[{KANJI}]', text):
+            score += 4.0
+
+        # 복합명사 밀도
+        complex_words = re.findall(
+            rf'[{KANJI}]{{3,}}|[{KATAKANA}]{{4,}}',
+            text
+        )
+        score += min(5.0, len(complex_words) * 0.8)
+
+        # 너무 평범하게 긴 문장만 뽑히는 것 방지
+        score += min(2.0, len(text) / 300.0)
+
+        sentence["score"] = score
+        sentence["matched"] = matched
+
+    # ------------------------------------------------------------
+    # 문장 선택
+    # ------------------------------------------------------------
+
+    ranked = sorted(
+        range(len(sentences)),
+        key=lambda i: sentences[i]["score"],
+        reverse=True
+    )
+
+    selected = []
+    selected_set = set()
+    used_candidates = set()
+    current_length = 0
+
+    # 후보 다양성을 우선하는 선택
+    while current_length < budget:
+        best_index = None
+        best_score = -1.0
+
+        for index in ranked:
+            if index in selected_set:
+                continue
+
+            sentence = sentences[index]
+            length = sentence["length"]
+
+            if current_length + length > budget:
+                continue
+
+            new_candidates = sentence["matched"] - used_candidates
+
+            diversity_bonus = len(new_candidates) * 2.5
+
+            # 이미 선택한 주변 문장만 계속 뽑는 것을 방지
+            nearby_penalty = 1.0
+
+            if any(
+                abs(sentence["line"] - sentences[x]["line"]) <= 2
+                for x in selected
+            ):
+                nearby_penalty = 0.65
+
+            final_score = (
+                sentence["score"] +
+                diversity_bonus
+            ) * nearby_penalty
+
+            if final_score > best_score:
+                best_score = final_score
+                best_index = index
+
+        if best_index is None:
+            break
+
+        selected.append(best_index)
+        selected_set.add(best_index)
+
+        sentence = sentences[best_index]
+        current_length += sentence["length"]
+        used_candidates.update(sentence["matched"])
+
+    # ------------------------------------------------------------
+    # 선택된 내용은 원문 순서 유지
+    # ------------------------------------------------------------
+
+    selected.sort()
+
+    result = [
+        sentences[index]["text"]
+        for index in selected
+    ]
+
+    return "\n".join(result)[:budget]
 
 
 def _split_glossary_text(text, chunk):
-    """
-    분석 대상 텍스트를 chunk 크기로 분할한다.
-    가능한 경우 줄 단위로 자른다.
-    """
     if not text:
         return []
 
@@ -1821,14 +2341,24 @@ def _parse_glossary_response(response_text, log_callback=None):
 
     return result
 
+GLOSSARY_SEMAPHORE = asyncio.Semaphore(3)
 
 async def _extract_glossary_chunk_async(
     chunk_text,
     chunk_idx,
     total_chunks,
     log_callback=None,
-    max_retries=3
+    max_retries=3,
+    model='gemini-3.5-flash',
+    RPM=5,
+    semaphore=None  # 기본값을 None으로 변경
 ):
+    # 호출 시점에 전달된 세마포어가 없으면 현재 동적 루프 기준으로 생성
+    if semaphore is None:
+        semaphore = asyncio.Semaphore(3)
+
+    delay_between_calls = (60.0 / RPM) * 1.1
+
     system_prompt = """당신은 일본어 라이트노벨 전문 용어집 추출기입니다.
 
 입력된 일본어 본문을 분석하여 작품 전체에서 반복적으로 사용되거나 번역 시 일관성이 중요한 고유명사, 인명, 지명, 조직명, 능력명, 아이템명, 직업명, 호칭, 특수 용어 등을 추출하십시오.
@@ -1837,6 +2367,8 @@ async def _extract_glossary_chunk_async(
 - 일반적인 조사, 동사, 형용사 등은 추출하지 마십시오.
 - 문맥상 번역을 통일할 필요가 있는 단어를 우선하십시오.
 - 인명과 고유명사는 적극적으로 추출하십시오.
+- 일반 사물이나 물건, 음식 등은 필요 추출하지 마십시오.
+- 일반 단어들은 추출하지 마십시오. 
 - 일본어 원문을 왼쪽에 작성하십시오.
 - 자연스럽고 일관된 한국어 번역을 오른쪽에 작성하십시오.
 - 반드시 입력문에 실제로 존재하는 일본어 표현만 추출하십시오.
@@ -1854,74 +2386,164 @@ async def _extract_glossary_chunk_async(
 절대로 JSON으로 출력하지 마십시오.
 """
 
-    for attempt in range(1, max_retries + 1):
-        if log_callback:
-            log_callback(
-                f"[용어집 {chunk_idx}/{total_chunks}] "
-                f"추출 시도 {attempt}/{max_retries}"
-            )
+    async with semaphore:
+        for attempt in range(1, max_retries + 1):
+            if log_callback:
+                log_callback(
+                    f"[용어집 {chunk_idx}/{total_chunks}] "
+                    f"추출 시도 {attempt}/{max_retries}"
+                )
 
-        try:
-            response = await client.aio.models.generate_content(
-                model=MODEL_NAME,
-                contents=(
-                    "다음 일본어 본문에서 용어집을 추출하십시오.\n\n"
-                    f"{chunk_text}"
-                ),
-                config=types.GenerateContentConfig(
-                    system_instruction=system_prompt,
-                    temperature=0.1,
-                    top_p=0.8,
-                    safety_settings=get_safety_settings(),
-                ),
-            )
+            try:
+                await asyncio.sleep(delay_between_calls)
 
-            if not response or not response.text:
+                response = await client.aio.models.generate_content(
+                    model=model,
+                    contents=(
+                        "다음 일본어 본문에서 용어집을 추출하십시오.\n\n"
+                        f"{chunk_text}"
+                    ),
+                    config=types.GenerateContentConfig(
+                        system_instruction=system_prompt,
+                        temperature=0.1,
+                        top_p=0.8,
+                        safety_settings=get_safety_settings(),
+                    ),
+                )
+
+                if not response or not response.text:
+                    if log_callback:
+                        log_callback(
+                            f"[용어집 {chunk_idx}/{total_chunks}] 응답 없음"
+                        )
+                    continue
+
+                parsed = _parse_glossary_response(
+                    response.text,
+                    log_callback
+                )
+
                 if log_callback:
                     log_callback(
                         f"[용어집 {chunk_idx}/{total_chunks}] "
-                        f"응답 없음"
+                        f"{len(parsed)}개 후보 추출"
                     )
 
-                continue
+                return parsed
 
-            parsed = _parse_glossary_response(
-                response.text,
-                log_callback
-            )
+            except Exception as e:
+                backoff_delay = (2 ** attempt) + delay_between_calls
+                if log_callback:
+                    log_callback(
+                        f"[용어집 {chunk_idx}/{total_chunks}] "
+                        f"오류: {e} ({backoff_delay:.1f}초 후 재시도)"
+                    )
 
-            if log_callback:
-                log_callback(
-                    f"[용어집 {chunk_idx}/{total_chunks}] "
-                    f"{len(parsed)}개 후보 추출"
-                )
-
-            return parsed
-
-        except Exception as e:
-            if log_callback:
-                log_callback(
-                    f"[용어집 {chunk_idx}/{total_chunks}] "
-                    f"오류: {e}"
-                )
-
-            await asyncio.sleep(1.0)
+                await asyncio.sleep(backoff_delay)
 
     return {}
 
+async def _filter_glossary_with_ai_async(
+    glossary_dict,
+    log_callback=None,
+    model='gemini-2.5-flash',
+    RPM=5
+):
+    if not glossary_dict:
+        return glossary_dict
+
+    terms_list_str = "\n".join([f"{k}: {v}" for k, v in glossary_dict.items()])
+
+    filter_system_prompt = """당신은 라이트노벨 번역용 용어집 정리 전문가입니다.
+
+전달받은 용어 목록 중에서 **번역 고유성이 필요 없는 일반 명사 및 불필요한 단어**를 찾아내십시오.
+
+[제외 대상]
+- 어디서나 의미가 고정된 일반 사물/개념/단어 (예: 피, 돈, 물, 하늘, 손, 칼, 집, 밥 등)
+- 단어가 아닌 문장들
+- 중복되어 사용된 단어들 (이 경우는 둘 중 하나를 제외)
+- 서브걸쳐에 기본적인 단어들
+- 고유명사나 특정 설정값이 아닌 흔한 일상 어휘
+- 번역자가 굳이 통일 관리하지 않아도 자연스럽게 번역되는 단어
+
+[출력 형식]
+제외해야 할 **일본어 원문**만 쉼표(,)로 구분하여 한 줄로 출력하십시오.
+예시: 血, 金, 空, ご飯, 魔王, 魔物
+
+중요:
+- 제외할 단어가 없다면 아무것도 출력하지 마십시오.
+- 절대로 설명이나 마크다운, 번호 등을 붙이지 마십시오.
+- 오직 일본어 원문 단어만 쉼표로 구분하여 출력하십시오.
+"""
+
+    if log_callback:
+        log_callback(f"[2차 검증] 총 {len(glossary_dict)}개 용어 중 불필요한 일반 명사 필터링 중...")
+
+    try:
+        # RPM 대기
+        await asyncio.sleep((60.0 / RPM) * 1.1)
+
+        response = await client.aio.models.generate_content(
+            model=model,
+            contents=(
+                "다음 용어 목록 중 제외할 일반 명사/불필요 단어를 골라내십시오.\n\n"
+                f"{terms_list_str}"
+            ),
+            config=types.GenerateContentConfig(
+                system_instruction=filter_system_prompt,
+                temperature=0.0,
+                top_p=0.8,
+                safety_settings=get_safety_settings(),
+            ),
+        )
+
+        if not response or not response.text:
+            if log_callback:
+                log_callback("[2차 검증] 응답 없음 (기존 용어집 유지)")
+            return glossary_dict
+
+        # AI 출력 파싱 (쉼표 기준 분할)
+        raw_text = response.text.strip()
+        if not raw_text:
+            if log_callback:
+                log_callback("[2차 검증] 제외할 단어 없음")
+            return glossary_dict
+
+        remove_keywords = [
+            item.strip() 
+            for item in raw_text.replace("\n", ",").split(",") 
+            if item.strip()
+        ]
+
+        filtered_glossary = dict(glossary_dict)
+        removed_count = 0
+
+        for key in remove_keywords:
+            if key in filtered_glossary:
+                del filtered_glossary[key]
+                removed_count += 1
+
+        if log_callback:
+            log_callback(f"[2차 검증 완료] 불필요한 단어 {removed_count}개 제외됨 -> 최종 {len(filtered_glossary)}개 확정")
+
+        return filtered_glossary
+
+    except Exception as e:
+        if log_callback:
+            log_callback(f"[2차 검증 오류] {e} (기존 용어집 유지)")
+        return glossary_dict
 
 async def _extract_glossary_async(
     all_text,
     paserent,
     chunk,
-    log_callback=None
+    log_callback=None,
+    model='gemini-2.5-flash',
+    RPM=5
 ):
     if not all_text:
         if log_callback:
-            log_callback(
-                "용어집 추출 실패: 입력 텍스트가 비어있음"
-            )
-
+            log_callback("용어집 추출 실패: 입력 텍스트가 비어있음")
         return {}
 
     try:
@@ -1941,17 +2563,12 @@ async def _extract_glossary_async(
             f"분석 비율 {paserent_value}% / "
             f"청크 {chunk_value}자"
         )
-    sample_text = _extract_glossary_sample(
-        all_text,
-        paserent_value
-    )
+        
+    sample_text = _extract_glossary_sample(all_text, paserent_value)
 
     if not sample_text:
         if log_callback:
-            log_callback(
-                "용어집 추출 실패: 분석 대상 텍스트가 없음"
-            )
-
+            log_callback("용어집 추출 실패: 분석 대상 텍스트가 없음")
         return {}
 
     if log_callback:
@@ -1960,59 +2577,40 @@ async def _extract_glossary_async(
             f"{len(sample_text)}자 "
             f"({len(sample_text) / len(all_text) * 100:.2f}%)"
         )
-    chunks = _split_glossary_text(
-        sample_text,
-        chunk_value
-    )
+        
+    chunks = _split_glossary_text(sample_text, chunk_value)
 
     if not chunks:
         return {}
 
     if log_callback:
-        log_callback(
-            f"용어집 분석 청크 분할 완료: "
-            f"{len(chunks)}개"
-        )
+        log_callback(f"용어집 분석 청크 분할 완료: {len(chunks)}개")
 
+    semaphore = asyncio.Semaphore(3)
+    
     tasks = [
         _extract_glossary_chunk_async(
             chunk_text,
             idx,
             len(chunks),
-            log_callback
+            log_callback,
+            model=model,
+            RPM=RPM,
+            semaphore=semaphore
         )
-        for idx, chunk_text in enumerate(
-            chunks,
-            1
-        )
+        for idx, chunk_text in enumerate(chunks, 1)
     ]
 
-    results = await asyncio.gather(
-        *tasks,
-        return_exceptions=True
-    )
+    results = await asyncio.gather(*tasks, return_exceptions=True)
     glossary_candidates = {}
 
-    for idx, result in enumerate(
-        results,
-        1
-    ):
-        if isinstance(
-            result,
-            Exception
-        ):
+    for idx, result in enumerate(results, 1):
+        if isinstance(result, Exception):
             if log_callback:
-                log_callback(
-                    f"[용어집 {idx}/{len(chunks)}] "
-                    f"결과 처리 실패: {result}"
-                )
-
+                log_callback(f"[용어집 {idx}/{len(chunks)}] 결과 처리 실패: {result}")
             continue
 
-        if not isinstance(
-            result,
-            dict
-        ):
+        if not isinstance(result, dict):
             continue
 
         for source, target in result.items():
@@ -2022,39 +2620,34 @@ async def _extract_glossary_async(
             if not source or not target:
                 continue
 
-            glossary_candidates.setdefault(
-                source,
-                []
-            ).append(target)
+            glossary_candidates.setdefault(source, []).append(target)
 
-    final_glossary = {}
-
+    candidate_glossary = {}
     for source, targets in glossary_candidates.items():
         if not targets:
             continue
 
         counter = Counter(targets)
-
         target, count = counter.most_common(1)[0]
+        candidate_glossary[source] = target
 
-        final_glossary[source] = target
-
-        if (
-            log_callback
-            and len(counter) > 1
-        ):
+        if log_callback and len(counter) > 1:
             log_callback(
-                f"용어 번역 충돌: "
-                f"'{source}' -> "
-                f"'{target}' 선택 "
-                f"({count}/{len(targets)})"
+                f"용어 번역 충돌: '{source}' -> '{target}' 선택 ({count}/{len(targets)})"
             )
 
     if log_callback:
-        log_callback(
-            f"용어집 추출 완료: "
-            f"{len(final_glossary)}개"
-        )
+        log_callback(f"1차 용어집 추출 완료: {len(candidate_glossary)}개 후보")
+
+    final_glossary = await _filter_glossary_with_ai_async(
+        glossary_dict=candidate_glossary,
+        log_callback=log_callback,
+        model=model,
+        RPM=RPM
+    )
+
+    if log_callback:
+        log_callback(f"최종 용어집 확정: {len(final_glossary)}개")
 
     return final_glossary
 
@@ -2063,13 +2656,17 @@ def extract_glossary(
     all_text,
     paserent=10,
     chunk=5000,
-    log_callback=None
+    log_callback=None,
+    model='gemini-3.5-flash-lite',
+    RPM=5
 ):
     return asyncio.run(
         _extract_glossary_async(
             all_text,
             paserent,
             chunk,
-            log_callback
+            log_callback,
+            model,
+            RPM
         )
     )
