@@ -4,7 +4,7 @@
 a = Analysis(
     ['run.py'],
     pathex=[],
-    binaries=[],
+    binaries=[('glossary_fast/glossary_fast.dll', 'glossary_fast')],
     datas=[('css/main.css', 'css'), ('main.ico', '.'), ('update.md', '.')],
     hiddenimports=[],
     hookspath=[],
