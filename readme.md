@@ -8,7 +8,11 @@
 
 <p>
   <a href="https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/releases/latest">
-    <img src="https://img.shields.io/github/v/release/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator?display_name=tag&style=for-the-badge" alt="Latest Release">
+    <img src="https://img.shields.io/github/v/release/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator?display_name=tag&sort=date" alt="Latest Release">
+  </a>
+
+  <a href="https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/releases">
+    <img src="https://img.shields.io/github/downloads/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/total" alt="Downloads">
   </a>
 
   <a href="https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator">
