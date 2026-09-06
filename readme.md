@@ -22,22 +22,10 @@
   </a>
 
   <a href="https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator">
-    <img src="https://img.shields.io/github/repo-size/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator" alt="Repo Size">
-  </a>
-
-  <a href="https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator">
-    <img src="https://img.shields.io/github/languages/top/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator" alt="Top Language">
-  </a>
-
-  <a href="https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator">
     <img src="https://img.shields.io/github/license/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator" alt="License">
   </a>
   
   <br/>
-
-  <a href="https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/releases">
-    <img src="https://img.shields.io/github/downloads/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/total?label=Downloads" alt="Total Downloads">
-  </a>
 
   <a href="https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/releases/latest">
     <img src="https://img.shields.io/github/downloads/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/latest/total?label=Latest%20Release%20Downloads" alt="Latest Release Downloads">
