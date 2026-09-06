@@ -8,15 +8,39 @@
 
 <p>
   <a href="https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/releases/latest">
-    <img src="https://img.shields.io/github/v/release/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator?display_name=tag&sort=date" alt="Latest Release">
+    <img src="https://img.shields.io/github/v/release/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator?display_name=tag&style=for-the-badge" alt="Latest Release">
   </a>
   
-  <a href="https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/releases">
-    <img src="https://img.shields.io/github/downloads/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/total" alt="Downloads">
+  <a href="https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator">
+    <img src="https://img.shields.io/github/stars/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator?style=for-the-badge" alt="Stars">
+  </a>
+
+  <br/>
+
+  <a href="https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/commits">
+    <img src="https://img.shields.io/github/last-commit/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator" alt="Last Commit">
   </a>
 
   <a href="https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator">
-    <img src="https://img.shields.io/github/stars/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator" alt="Stars">
+    <img src="https://img.shields.io/github/repo-size/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator" alt="Repo Size">
+  </a>
+
+  <a href="https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator">
+    <img src="https://img.shields.io/github/languages/top/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator" alt="Top Language">
+  </a>
+
+  <a href="https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator">
+    <img src="https://img.shields.io/github/license/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator" alt="License">
+  </a>
+  
+  <br/>
+
+  <a href="https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/releases">
+    <img src="https://img.shields.io/github/downloads/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/total?label=Downloads" alt="Total Downloads">
+  </a>
+
+  <a href="https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/releases/latest">
+    <img src="https://img.shields.io/github/downloads/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/latest/total?label=Latest%20Release%20Downloads" alt="Latest Release Downloads">
   </a>
 </p>
 
