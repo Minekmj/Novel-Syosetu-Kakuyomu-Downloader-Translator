@@ -516,7 +516,7 @@ class TranslateDialog(QDialog):
 
         self.rpm_combo = QComboBox()
         self.rpm_combo.addItems(
-            ["5", "10", "15", "20", "30", "60"]
+            ["3", "5", "10", "15", "20", "30", "60"]
         )
         self.rpm_combo.setCurrentText("15")
 
@@ -556,7 +556,7 @@ class TranslateDialog(QDialog):
 
         self.chars_combo = QComboBox()
         self.chars_combo.addItems(
-            ["2000", "3000", "4000", "5000", "7000", "10000"]
+            ["1000", "2000", "3000", "4000", "5000", "7000", "10000", "15000", "20000", "30000"]
         )
         self.chars_combo.setCurrentText("5000")
 

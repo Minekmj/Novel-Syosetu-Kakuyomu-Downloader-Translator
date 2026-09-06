@@ -12,15 +12,16 @@ class ClickWatcher(QThread):
     add_address = Signal()
 
     def run(self):
-        while True:
+        while not self.isInterruptionRequested():
             if findsyou.click:
                 url = findsyou.click_plus_url
                 findsyou.click = False
 
                 self.update_address.emit(url)
                 self.add_address.emit()
-            time.sleep(0.05)
 
+            self.msleep(50)
+            
 class DownloadThread(QThread):
     finished_signal = Signal(bool, str)
 

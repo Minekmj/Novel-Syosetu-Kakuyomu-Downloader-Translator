@@ -8,6 +8,7 @@ import time
 import tkinter as tk
 from tkinter import ttk
 import urllib.request
+import hashlib
 from PIL import Image, ImageTk
 
 GITHUB_RELEASE_URL = "https://api.github.com/repos/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/releases/latest"
@@ -39,7 +40,10 @@ except Exception:
 
 def check_internet(timeout=3):
     try:
-        urllib.request.urlopen("https://www.google.com/generate_204", timeout=timeout)
+        urllib.request.urlopen(
+            "https://www.google.com/generate_204",
+            timeout=timeout
+        )
         return True
     except Exception:
         return False
@@ -63,13 +67,17 @@ def get_latest_release():
             "User-Agent": "Novel-Syosetu-Kakuyomu-Downloader-Translator"
         }
     )
+
     with urllib.request.urlopen(req, timeout=5) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
 def update_status(root, label, text):
-    if root.winfo_exists():
-        root.after(0, lambda: label.config(text=text))
+    try:
+        if root.winfo_exists():
+            root.after(0, lambda: label.config(text=text))
+    except Exception:
+        pass
 
 
 inter = 0
@@ -144,10 +152,29 @@ def rounded_window(window, width, height):
             x1, y1 + radius,
             x1, y1
         ]
-        return canvas.create_polygon(points, smooth=True, **kwargs)
+        return canvas.create_polygon(
+            points,
+            smooth=True,
+            **kwargs
+        )
 
-    create_rounded_rect(2, 2, width - 2, height - 2, r, fill=THEME_CONFIG["border_color"])
-    create_rounded_rect(3, 3, width - 3, height - 3, r, fill=THEME_CONFIG["bg_color"])
+    create_rounded_rect(
+        2,
+        2,
+        width - 2,
+        height - 2,
+        r,
+        fill=THEME_CONFIG["border_color"]
+    )
+
+    create_rounded_rect(
+        3,
+        3,
+        width - 3,
+        height - 3,
+        r,
+        fill=THEME_CONFIG["bg_color"]
+    )
 
     return canvas
 
@@ -158,7 +185,13 @@ def show_update_dialog(root, release):
     latest_version = release.get("tag_name", "")
     assets = release.get("assets", [])
 
-    exe_asset = next((a for a in assets if a.get("name", "").lower().endswith(".exe")), None)
+    exe_asset = next(
+        (
+            a for a in assets
+            if a.get("name", "").lower().endswith(".exe")
+        ),
+        None
+    )
 
     if exe_asset is None:
         return False, None
@@ -171,11 +204,24 @@ def show_update_dialog(root, release):
 
     canvas = rounded_window(dialog, width, height)
 
-    content = tk.Frame(canvas, bg=THEME_CONFIG["bg_color"])
-    canvas.create_window(width // 2, height // 2, window=content, width=width - 16, height=height - 16)
+    content = tk.Frame(
+        canvas,
+        bg=THEME_CONFIG["bg_color"]
+    )
 
-    # 상단 닫기 바
-    top_bar = tk.Frame(content, bg=THEME_CONFIG["bg_color"], height=28)
+    canvas.create_window(
+        width // 2,
+        height // 2,
+        window=content,
+        width=width - 16,
+        height=height - 16
+    )
+
+    top_bar = tk.Frame(
+        content,
+        bg=THEME_CONFIG["bg_color"],
+        height=28
+    )
     top_bar.pack(fill="x", side="top")
 
     close_btn = tk.Label(
@@ -191,15 +237,38 @@ def show_update_dialog(root, release):
 
     def cancel():
         result["download"] = False
-        dialog.destroy()
+        try:
+            dialog.destroy()
+        except Exception:
+            pass
 
     def download():
         result["download"] = True
-        dialog.destroy()
+        try:
+            dialog.destroy()
+        except Exception:
+            pass
 
-    close_btn.bind("<Enter>", lambda e: close_btn.config(bg="#EF4444", fg="#FFFFFF"))
-    close_btn.bind("<Leave>", lambda e: close_btn.config(bg=THEME_CONFIG["bg_color"], fg=THEME_CONFIG["text_secondary"]))
-    close_btn.bind("<Button-1>", lambda e: cancel())
+    close_btn.bind(
+        "<Enter>",
+        lambda e: close_btn.config(
+            bg="#EF4444",
+            fg="#FFFFFF"
+        )
+    )
+
+    close_btn.bind(
+        "<Leave>",
+        lambda e: close_btn.config(
+            bg=THEME_CONFIG["bg_color"],
+            fg=THEME_CONFIG["text_secondary"]
+        )
+    )
+
+    close_btn.bind(
+        "<Button-1>",
+        lambda e: cancel()
+    )
 
     title_label = tk.Label(
         content,
@@ -225,7 +294,11 @@ def show_update_dialog(root, release):
         highlightthickness=1,
         highlightbackground=THEME_CONFIG["border_color"]
     )
-    info_frame.pack(fill="x", padx=20, pady=(0, 18))
+    info_frame.pack(
+        fill="x",
+        padx=20,
+        pady=(0, 18)
+    )
 
     file_label = tk.Label(
         info_frame,
@@ -236,7 +309,11 @@ def show_update_dialog(root, release):
         anchor="w",
         justify="left"
     )
-    file_label.pack(fill="x", padx=12, pady=(10, 2))
+    file_label.pack(
+        fill="x",
+        padx=12,
+        pady=(10, 2)
+    )
 
     size_label = tk.Label(
         info_frame,
@@ -246,10 +323,20 @@ def show_update_dialog(root, release):
         bg=THEME_CONFIG["surface_color"],
         anchor="w"
     )
-    size_label.pack(fill="x", padx=12, pady=(0, 10))
+    size_label.pack(
+        fill="x",
+        padx=12,
+        pady=(0, 10)
+    )
 
-    button_frame = tk.Frame(content, bg=THEME_CONFIG["bg_color"])
-    button_frame.pack(fill="x", padx=20)
+    button_frame = tk.Frame(
+        content,
+        bg=THEME_CONFIG["bg_color"]
+    )
+    button_frame.pack(
+        fill="x",
+        padx=20
+    )
 
     download_btn = tk.Button(
         button_frame,
@@ -265,7 +352,12 @@ def show_update_dialog(root, release):
         height=2,
         cursor="hand2"
     )
-    download_btn.pack(side="right", fill="x", expand=True, padx=(4, 0))
+    download_btn.pack(
+        side="right",
+        fill="x",
+        expand=True,
+        padx=(4, 0)
+    )
 
     cancel_btn = tk.Button(
         button_frame,
@@ -281,13 +373,30 @@ def show_update_dialog(root, release):
         height=2,
         cursor="hand2"
     )
-    cancel_btn.pack(side="right", fill="x", expand=True, padx=(0, 4))
+    cancel_btn.pack(
+        side="right",
+        fill="x",
+        expand=True,
+        padx=(0, 4)
+    )
 
-    dialog.protocol("WM_DELETE_WINDOW", cancel)
+    dialog.protocol(
+        "WM_DELETE_WINDOW",
+        cancel
+    )
 
     enable_window_drag(
         dialog,
-        [canvas, content, top_bar, title_label, version_label, info_frame, file_label, size_label]
+        [
+            canvas,
+            content,
+            top_bar,
+            title_label,
+            version_label,
+            info_frame,
+            file_label,
+            size_label
+        ]
     )
 
     dialog.grab_set()
@@ -297,119 +406,337 @@ def show_update_dialog(root, release):
 
 
 def download_update(root, sub_label, asset):
+    temp_path = None
+
     try:
         download_url = asset.get("browser_download_url")
         file_name = asset.get("name")
 
+        expected_digest = asset.get("digest", "")
+
         if not download_url or not file_name:
+            update_status(
+                root,
+                sub_label,
+                "업데이트 파일 정보가 올바르지 않습니다."
+            )
+            time.sleep(1.5)
             return False
 
-        save_path = os.path.join(os.getcwd(), file_name)
+        if expected_digest.startswith("sha256:"):
+            expected_digest = expected_digest[7:]
+
+        expected_digest = expected_digest.strip().lower()
+
+        if not expected_digest:
+            print(
+                "[업데이트 검증 실패] "
+                "GitHub Release에 SHA-256 digest가 없습니다."
+            )
+
+            update_status(
+                root,
+                sub_label,
+                "업데이트 파일의 SHA-256 정보를 찾을 수 없습니다."
+            )
+
+            time.sleep(1.5)
+            return False
+
+        save_path = os.path.join(
+            os.getcwd(),
+            file_name
+        )
+
         temp_path = save_path + ".download"
 
-        update_status(root, sub_label, "새로운 버전 다운로드 준비 중...")
+        update_status(
+            root,
+            sub_label,
+            "새로운 버전 다운로드 준비 중..."
+        )
 
-        req = urllib.request.Request(download_url, headers={"User-Agent": "Mozilla/5.0"})
+        req = urllib.request.Request(
+            download_url,
+            headers={
+                "User-Agent": "Mozilla/5.0"
+            }
+        )
 
-        with urllib.request.urlopen(req, timeout=30) as response:
-            total_size = int(response.headers.get("Content-Length", 0))
+        sha256 = hashlib.sha256()
+
+        with urllib.request.urlopen(
+            req,
+            timeout=30
+        ) as response:
+
+            total_size = int(
+                response.headers.get(
+                    "Content-Length",
+                    0
+                )
+            )
+
             downloaded = 0
 
-            with open(temp_path, "wb") as file:
+            with open(
+                temp_path,
+                "wb"
+            ) as file:
+
                 while True:
-                    chunk = response.read(1024 * 1024)
+                    chunk = response.read(
+                        1024 * 1024
+                    )
+
                     if not chunk:
                         break
+
                     file.write(chunk)
+                    sha256.update(chunk)
+
                     downloaded += len(chunk)
 
                     if total_size:
-                        percent = int(downloaded / total_size * 100)
-                        update_status(root, sub_label, f"다운로드 중... {percent}%")
+                        percent = int(
+                            downloaded / total_size * 100
+                        )
 
-        if os.path.exists(save_path):
-            os.remove(save_path)
+                        update_status(
+                            root,
+                            sub_label,
+                            f"다운로드 중... {percent}%"
+                        )
+                    else:
+                        update_status(
+                            root,
+                            sub_label,
+                            f"다운로드 중... {format_file_size(downloaded)}"
+                        )
 
-        os.replace(temp_path, save_path)
-        update_status(root, sub_label, "다운로드 완료! 프로그램을 재시작합니다.")
-        time.sleep(1.5)
-        
-        if save_path.lower().endswith(".exe"):
-            subprocess.Popen([save_path])
+        actual_digest = sha256.hexdigest().lower()
 
-        root.after(0, root.destroy)
-        return True
+        print(
+            f"[업데이트 SHA-256] 예상: {expected_digest}"
+        )
 
-    except Exception as e:
-        print(f"[업데이트 다운로드 실패]: {e}")
-        if os.path.exists(temp_path):
+        print(
+            f"[업데이트 SHA-256] 실제: {actual_digest}"
+        )
+
+        if actual_digest != expected_digest:
+            print(
+                "[업데이트 검증 실패] SHA-256 불일치"
+            )
+
             try:
                 os.remove(temp_path)
             except Exception:
                 pass
-        update_status(root, sub_label, "업데이트 다운로드 실패")
+
+            update_status(
+                root,
+                sub_label,
+                "업데이트 파일 검증에 실패했습니다."
+            )
+
+            time.sleep(1.5)
+            return False
+
+        print(
+            "[업데이트 검증 성공] SHA-256 일치"
+        )
+
+        update_status(
+            root,
+            sub_label,
+            "업데이트 파일 검증 완료!"
+        )
+
+        if os.path.exists(save_path):
+            try:
+                os.remove(save_path)
+            except Exception as e:
+                print(
+                    f"[기존 파일 삭제 실패]: {e}"
+                )
+
+                update_status(
+                    root,
+                    sub_label,
+                    "기존 업데이트 파일을 교체할 수 없습니다."
+                )
+
+                return False
+
+        os.replace(
+            temp_path,
+            save_path
+        )
+
+        update_status(
+            root,
+            sub_label,
+            "다운로드 및 검증 완료! 프로그램을 재시작합니다."
+        )
+
         time.sleep(1.5)
+
+        if save_path.lower().endswith(".exe"):
+            subprocess.Popen(
+                [save_path]
+            )
+
+        os._exit(0)
+
+    except Exception as e:
+        print(
+            f"[업데이트 다운로드 실패]: {e}"
+        )
+
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except Exception:
+                pass
+
+        update_status(
+            root,
+            sub_label,
+            "업데이트 다운로드 실패"
+        )
+
+        time.sleep(1.5)
+
         return False
 
 
 def check_and_update(root, sub_label):
     global inter
 
-    update_status(root, sub_label, "인터넷 연결 확인 중...")
+    update_status(
+        root,
+        sub_label,
+        "인터넷 연결 확인 중..."
+    )
 
     if not check_internet():
         if inter >= 3:
-            update_status(root, sub_label, "인터넷 연결이 없습니다. 프로그램을 종료합니다.")
+            update_status(
+                root,
+                sub_label,
+                "인터넷 연결이 없습니다. 프로그램을 종료합니다."
+            )
+
             time.sleep(1.5)
-            root.after(0, root.destroy)
+
+            os._exit(0)
+
             return False
 
         for i in range(3, 0, -1):
-            update_status(root, sub_label, f"인터넷 연결 실패. {i}초 후 재시도...")
+            update_status(
+                root,
+                sub_label,
+                f"인터넷 연결 실패. {i}초 후 재시도..."
+            )
+
             time.sleep(1)
 
         inter += 1
-        return check_and_update(root, sub_label)
+
+        return check_and_update(
+            root,
+            sub_label
+        )
 
     if V is None:
         return True
 
-    update_status(root, sub_label, "최신 버전 확인 중...")
+    update_status(
+        root,
+        sub_label,
+        "최신 버전 확인 중..."
+    )
 
     try:
         release = get_latest_release()
-        latest_version = release.get("tag_name", "")
 
-        if not latest_version or latest_version == str(V):
+        latest_version = release.get(
+            "tag_name",
+            ""
+        )
+
+        if (
+            not latest_version
+            or latest_version == str(V)
+        ):
             return True
 
-        update_status(root, sub_label, f"새로운 버전 발견 ({latest_version})")
+        update_status(
+            root,
+            sub_label,
+            f"새로운 버전 발견 ({latest_version})"
+        )
 
-        result = {"download": False, "asset": None, "done": False}
+        result = {
+            "download": False,
+            "asset": None,
+            "done": False
+        }
 
         def open_update_dialog():
             try:
-                result["download"], result["asset"] = show_update_dialog(root, release)
+                (
+                    result["download"],
+                    result["asset"]
+                ) = show_update_dialog(
+                    root,
+                    release
+                )
+
             except Exception as e:
-                print(f"[업데이트 창 오류]: {e}")
+                print(
+                    f"[업데이트 창 오류]: {e}"
+                )
+
             finally:
                 result["done"] = True
 
-        root.after(0, open_update_dialog)
+        root.after(
+            0,
+            open_update_dialog
+        )
 
         while not result["done"]:
             time.sleep(0.1)
 
-        if result["download"] and result["asset"]:
-            if download_update(root, sub_label, result["asset"]):
+        if (
+            result["download"]
+            and result["asset"]
+        ):
+            if download_update(
+                root,
+                sub_label,
+                result["asset"]
+            ):
                 return False
 
-        update_status(root, sub_label, "업데이트를 건너뛰었습니다.")
+        update_status(
+            root,
+            sub_label,
+            "업데이트를 건너뛰었습니다."
+        )
+
         time.sleep(0.7)
+
         return True
 
     except Exception as e:
-        print(f"[업데이트 확인 실패]: {e}")
+        print(
+            f"[업데이트 확인 실패]: {e}"
+        )
+
         return True
 
 
@@ -418,51 +745,125 @@ def resource_path(relative_path):
         base_path = sys._MEIPASS
     except Exception:
         base_path = os.path.abspath(".")
-    return os.path.join(base_path, relative_path)
+
+    return os.path.join(
+        base_path,
+        relative_path
+    )
 
 
 def start_main_app(root, sub_label, pre_file):
-    if not check_and_update(root, sub_label):
+    if not check_and_update(
+        root,
+        sub_label
+    ):
         return
 
     if pre_file:
-        abs_file_path = os.path.abspath(pre_file)
+        abs_file_path = os.path.abspath(
+            pre_file
+        )
+
         if os.path.exists(abs_file_path):
-            ext = os.path.splitext(abs_file_path)[1].lower()
+            ext = os.path.splitext(
+                abs_file_path
+            )[1].lower()
+
             if ext in [".bat", ".cmd"]:
-                update_status(root, sub_label, "사전 작업 실행 중...")
-                file_dir = os.path.dirname(abs_file_path)
-                creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
-                subprocess.run(f'"{abs_file_path}"', shell=True, cwd=file_dir, creationflags=creationflags)
+                update_status(
+                    root,
+                    sub_label,
+                    "사전 작업 실행 중..."
+                )
+
+                file_dir = os.path.dirname(
+                    abs_file_path
+                )
+
+                creationflags = (
+                    subprocess.CREATE_NO_WINDOW
+                    if sys.platform == "win32"
+                    else 0
+                )
+
+                subprocess.run(
+                    f'"{abs_file_path}"',
+                    shell=True,
+                    cwd=file_dir,
+                    creationflags=creationflags
+                )
+
         else:
-            update_status(root, sub_label, "지정된 경로의 파일을 찾을 수 없습니다.")
+            update_status(
+                root,
+                sub_label,
+                "지정된 경로의 파일을 찾을 수 없습니다."
+            )
+
             time.sleep(1.5)
 
-    update_status(root, sub_label, "메인 프로그램을 불러오는 중...")
+    update_status(
+        root,
+        sub_label,
+        "메인 프로그램을 불러오는 중..."
+    )
 
     import main
+
     main.main(
-        lambda: root.after(0, root.withdraw),
-        lambda: root.after(0, root.destroy),
+        lambda: root.after(
+            0,
+            root.withdraw
+        ),
+        lambda: root.after(
+            0,
+            root.destroy
+        ),
     )
 
 
 def close_app(root):
-    root.destroy()
-    sys.exit(0)
+    try:
+        root.destroy()
+    except Exception:
+        pass
+
+    os._exit(0)
 
 
 def create_splash(pre_file=None):
     root = tk.Tk()
+
     width, height = THEME_CONFIG["window_size"]
 
-    canvas = rounded_window(root, width, height)
+    canvas = rounded_window(
+        root,
+        width,
+        height
+    )
 
-    main_frame = tk.Frame(canvas, bg=THEME_CONFIG["bg_color"])
-    canvas.create_window(width // 2, height // 2, window=main_frame, width=width - 16, height=height - 16)
+    main_frame = tk.Frame(
+        canvas,
+        bg=THEME_CONFIG["bg_color"]
+    )
 
-    top_bar = tk.Frame(main_frame, bg=THEME_CONFIG["bg_color"], height=24)
-    top_bar.pack(fill="x", side="top")
+    canvas.create_window(
+        width // 2,
+        height // 2,
+        window=main_frame,
+        width=width - 16,
+        height=height - 16
+    )
+
+    top_bar = tk.Frame(
+        main_frame,
+        bg=THEME_CONFIG["bg_color"],
+        height=24
+    )
+    top_bar.pack(
+        fill="x",
+        side="top"
+    )
 
     close_btn = tk.Label(
         top_bar,
@@ -473,26 +874,69 @@ def create_splash(pre_file=None):
         width=3,
         cursor="hand2"
     )
-    close_btn.pack(side="right", padx=2)
+    close_btn.pack(
+        side="right",
+        padx=2
+    )
 
-    close_btn.bind("<Enter>", lambda e: close_btn.config(bg="#EF4444", fg="#FFFFFF"))
-    close_btn.bind("<Leave>", lambda e: close_btn.config(bg=THEME_CONFIG["bg_color"], fg=THEME_CONFIG["text_secondary"]))
-    close_btn.bind("<Button-1>", lambda e: close_app(root))
+    close_btn.bind(
+        "<Enter>",
+        lambda e: close_btn.config(
+            bg="#EF4444",
+            fg="#FFFFFF"
+        )
+    )
 
-    icon_path = resource_path("main.ico")
+    close_btn.bind(
+        "<Leave>",
+        lambda e: close_btn.config(
+            bg=THEME_CONFIG["bg_color"],
+            fg=THEME_CONFIG["text_secondary"]
+        )
+    )
+
+    close_btn.bind(
+        "<Button-1>",
+        lambda e: close_app(root)
+    )
+
+    icon_path = resource_path(
+        "main.ico"
+    )
+
     icon_label = None
 
     if os.path.exists(icon_path):
         try:
-            icon_image = Image.open(icon_path).convert("RGBA")
-            icon_image.thumbnail((52, 52), Image.Resampling.LANCZOS)
-            icon_photo = ImageTk.PhotoImage(icon_image)
+            icon_image = Image.open(
+                icon_path
+            ).convert("RGBA")
 
-            icon_label = tk.Label(main_frame, image=icon_photo, bg=THEME_CONFIG["bg_color"])
+            icon_image.thumbnail(
+                (52, 52),
+                Image.Resampling.LANCZOS
+            )
+
+            icon_photo = ImageTk.PhotoImage(
+                icon_image
+            )
+
+            icon_label = tk.Label(
+                main_frame,
+                image=icon_photo,
+                bg=THEME_CONFIG["bg_color"]
+            )
+
             icon_label.image = icon_photo
-            icon_label.pack(pady=(4, 8))
+
+            icon_label.pack(
+                pady=(4, 8)
+            )
+
         except Exception as e:
-            print(f"[ICO] 로딩 실패: {e}")
+            print(
+                f"[ICO] 로딩 실패: {e}"
+            )
 
     title_label = tk.Label(
         main_frame,
@@ -501,7 +945,10 @@ def create_splash(pre_file=None):
         fg=THEME_CONFIG["text_primary"],
         bg=THEME_CONFIG["bg_color"]
     )
-    title_label.pack(pady=(0, 2))
+
+    title_label.pack(
+        pady=(0, 2)
+    )
 
     sub_label = tk.Label(
         main_frame,
@@ -510,13 +957,27 @@ def create_splash(pre_file=None):
         fg=THEME_CONFIG["text_secondary"],
         bg=THEME_CONFIG["bg_color"]
     )
-    sub_label.pack(pady=(0, 16))
 
-    progress_frame = tk.Frame(main_frame, bg=THEME_CONFIG["bg_color"])
-    progress_frame.pack(fill="x", padx=40)
+    sub_label.pack(
+        pady=(0, 16)
+    )
+
+    progress_frame = tk.Frame(
+        main_frame,
+        bg=THEME_CONFIG["bg_color"]
+    )
+
+    progress_frame.pack(
+        fill="x",
+        padx=40
+    )
 
     style = ttk.Style()
-    style.theme_use("clam")
+
+    style.theme_use(
+        "clam"
+    )
+
     style.configure(
         "Custom.Horizontal.TProgressbar",
         troughcolor=THEME_CONFIG["surface_color"],
@@ -532,10 +993,19 @@ def create_splash(pre_file=None):
         style="Custom.Horizontal.TProgressbar",
         mode="indeterminate"
     )
-    progress.pack(fill="x")
+
+    progress.pack(
+        fill="x"
+    )
+
     progress.start(10)
 
-    version_text = f"{V}" if V is not None else ""
+    version_text = (
+        f"{V}"
+        if V is not None
+        else ""
+    )
+
     version_label = tk.Label(
         main_frame,
         text=version_text,
@@ -543,16 +1013,35 @@ def create_splash(pre_file=None):
         fg=THEME_CONFIG["text_muted"],
         bg=THEME_CONFIG["bg_color"]
     )
-    version_label.pack(pady=(12, 0))
+
+    version_label.pack(
+        pady=(12, 0)
+    )
 
     drag_widgets = [
-        canvas, main_frame, top_bar, title_label, sub_label, progress_frame, progress, version_label, icon_label
+        canvas,
+        main_frame,
+        top_bar,
+        title_label,
+        sub_label,
+        progress_frame,
+        progress,
+        version_label,
+        icon_label
     ]
-    enable_window_drag(root, drag_widgets)
+
+    enable_window_drag(
+        root,
+        drag_widgets
+    )
 
     threading.Thread(
         target=start_main_app,
-        args=(root, sub_label, pre_file),
+        args=(
+            root,
+            sub_label,
+            pre_file
+        ),
         daemon=True
     ).start()
 
@@ -560,11 +1049,23 @@ def create_splash(pre_file=None):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Splash Screen Loader")
-    parser.add_argument("-f", "--file", type=str, help="실행할 절대경로 배치 파일", default=None)
+    parser = argparse.ArgumentParser(
+        description="Splash Screen Loader"
+    )
+
+    parser.add_argument(
+        "-f",
+        "--file",
+        type=str,
+        help="실행할 절대경로 배치 파일",
+        default=None
+    )
+
     args = parser.parse_args()
 
-    create_splash(pre_file=args.file)
+    create_splash(
+        pre_file=args.file
+    )
 
 
 if __name__ == "__main__":

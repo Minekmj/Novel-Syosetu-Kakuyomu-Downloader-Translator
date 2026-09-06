@@ -24,6 +24,7 @@ import thread_pyqt
 from thread_pyqt import *
 thread_pyqt.DOWN = down
 import trans_view
+import glossary_manager
 
 import v as vsc
 
@@ -767,6 +768,10 @@ class MainWindow(QMainWindow):
         
         app_title = QLabel("목록")
         app_title.setObjectName("app_title")
+        
+        self.gloss_bt = QPushButton("용어집 관리")
+        self.gloss_bt.setObjectName("secondaryBtn")
+        self.gloss_bt.clicked.connect(self.open_gloss)
 
         self.plus_bt_n = QPushButton("나로우 검색")
         self.plus_bt_n.setObjectName("secondaryBtn")
@@ -790,6 +795,7 @@ class MainWindow(QMainWindow):
 
         header_layout.addWidget(app_title)
         header_layout.addStretch()
+        header_layout.addWidget(self.gloss_bt)
         header_layout.addWidget(self.plus_bt_n)
         header_layout.addWidget(self.plus_bt)
         header_layout.addWidget(self.epub_btn)
@@ -1082,6 +1088,10 @@ class MainWindow(QMainWindow):
     def open_translate_dialog(self):
         dialog = trans_view.TranslateDialog(self)
         dialog.show()
+        
+    def open_gloss(self):
+        dialog=glossary_manager.GlossaryManagerDialog(self)
+        dialog.show()
 
     def convert_txt_to_epub(self):
         file_paths, _ = QFileDialog.getOpenFileNames(
@@ -1112,6 +1122,9 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "오류", f"EPUB 변환 도중 오류가 발생했습니다:\n{message}")
             
     def closeEvent(self, event):
+        if self.click_watcher.isRunning():
+            self.click_watcher.requestInterruption()
+            self.click_watcher.wait()
         if not close_event is None: close_event()
         super().closeEvent(event)
 
