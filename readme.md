@@ -11,8 +11,6 @@
     <img src="https://img.shields.io/github/v/release/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator?display_name=tag&style=for-the-badge" alt="Latest Release">
   </a>
 
-  <br/>
-
   <a href="https://github.com/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator">
     <img src="https://img.shields.io/github/license/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator" alt="License">
   </a>
