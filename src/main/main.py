@@ -19,6 +19,7 @@ from src.system.data import open_folder, save_data, load_data
 import src.system.data as data_iteam
 data_iteam.rest()
 import src.find.findsyou as findsyou
+from src.find.findsyou import Sites, SITES
 import src.main.thread_pyqt as thread_pyqt
 from src.main.thread_pyqt import *
 thread_pyqt.DOWN = down
@@ -771,14 +772,6 @@ class MainWindow(QMainWindow):
         self.gloss_bt = QPushButton("용어집 관리")
         self.gloss_bt.setObjectName("secondaryBtn")
         self.gloss_bt.clicked.connect(self.open_gloss)
-
-        self.plus_bt_n = QPushButton("나로우 검색")
-        self.plus_bt_n.setObjectName("secondaryBtn")
-        self.plus_bt_n.clicked.connect(self.open_na)
-                
-        self.plus_bt = QPushButton("카쿠요무 검색")
-        self.plus_bt.setObjectName("secondaryBtn")
-        self.plus_bt.clicked.connect(self.open_kaku)
         
         self.epub_btn = QPushButton("EPUB 변환")
         self.epub_btn.setObjectName("secondaryBtn")
@@ -795,8 +788,19 @@ class MainWindow(QMainWindow):
         header_layout.addWidget(app_title)
         header_layout.addStretch()
         header_layout.addWidget(self.gloss_bt)
-        header_layout.addWidget(self.plus_bt_n)
-        header_layout.addWidget(self.plus_bt)
+        
+        for i in Sites:
+            def open_window(checked=False, site_key=i):
+                dialog = findsyou.MainWindow_Find(site_key, self)
+                dialog.show()
+                
+            plus_bt = QPushButton(f"{SITES.get(i).get('name')} 검색")
+            plus_bt.setObjectName("secondaryBtn")
+            plus_bt.clicked.connect(open_window)
+            
+            header_layout.addWidget(plus_bt)
+        
+        
         header_layout.addWidget(self.epub_btn)
         header_layout.addWidget(self.translate_btn)
         header_layout.addWidget(self.manager_path_btn)
@@ -1075,13 +1079,12 @@ class MainWindow(QMainWindow):
                 app.setStyleSheet(data_iteam.MINIMAL_DARK_THEME)
             
     def open_kaku(self):
-        findsyou.IS_KAKU = True
-        dialog = findsyou.MainWindow_Find(self)
+        
+        dialog = findsyou.MainWindow_Find(Sites.KAKUYOMU, self)
         dialog.show()
             
     def open_na(self):
-        findsyou.IS_KAKU = False
-        dialog = findsyou.MainWindow_Find(self)
+        dialog = findsyou.MainWindow_Find(Sites.NAROU, self)
         dialog.show()
 
     def open_translate_dialog(self):

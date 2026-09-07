@@ -1,6 +1,5 @@
 import json
 import os
-import sys
 
 from src.system.config import DATA_FILE
 from src.find.get import *
@@ -51,10 +50,7 @@ def build_qss(template_qss: str, theme_dict: dict) -> str:
     lines = [line for line in rendered_qss.splitlines() if line.strip() != ""]
     return "\n".join(lines)
 
-def get_resource_path(relative_path):
-    if hasattr(sys, "_MEIPASS"):
-        return os.path.join(sys._MEIPASS, relative_path)
-    return os.path.join(os.path.abspath("src"), relative_path)
+from src.system.src import get_resource_path
 
 def rest():
     global THEME_NAME, MINIMAL_DARK_THEME  
