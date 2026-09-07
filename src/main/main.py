@@ -1,6 +1,5 @@
 import sys
 import os
-import json
 import webbrowser
 from datetime import datetime
 from PySide6.QtWidgets import (
@@ -15,20 +14,20 @@ from PySide6.QtGui import QIcon
 import ctypes
 import re
 
-import down
-from data import open_folder, save_data, load_data
-import data as data_iteam
+import src.down.down as down
+from src.system.data import open_folder, save_data, load_data
+import src.system.data as data_iteam
 data_iteam.rest()
-import findsyou
-import thread_pyqt
-from thread_pyqt import *
+import src.find.findsyou as findsyou
+import src.main.thread_pyqt as thread_pyqt
+from src.main.thread_pyqt import *
 thread_pyqt.DOWN = down
-import trans_view
-import glossary_manager
+import src.trans.trans_view as trans_view
+import src.glossary_fast_py.glossary_manager as glossary_manager
 
-import v as vsc
+import src.system.v as vsc
 
-trans_view.OUT = down.downin.OUTFOLDER
+trans_view.OUT = down.downin.base_data.OUTFOLDER
 
 class PathSettingsDialog(QDialog):
     def __init__(self, parent=None):
@@ -421,7 +420,7 @@ class DownloadDetailDialog(QDialog):
                     data["list"][self.title_text]["down_time"] = now_time_str
                     save_data(data)
 
-            target_folder = getattr(down.downin, 'OUTFOLDER', './out/')
+            target_folder = down.downin.base_data.OUTFOLDER
             self.row_widget.update_download_info(end, now_time_str)
             open_folder(target_folder if (target_folder[len(target_folder) - 1] == "\\" or target_folder[len(target_folder) - 1] == "/") else (target_folder + "/"))
             self.accept()
@@ -868,7 +867,7 @@ class MainWindow(QMainWindow):
         
         self.init_saved_data()
         
-        from v import V
+        from src.system.v import V
         data = load_data()
         vn = data.get("V", "")
         if vn == "" or vn != V:
@@ -882,10 +881,10 @@ class MainWindow(QMainWindow):
         data = load_data()
 
         trans_view.trans_ai.CUSTOM_AI_PROMPT = data.get("AI_PROMPT", "")
-        down.downin.EXPORT_TEXT = data.get("RAW_TEXT", False)
+        down.downin.base_data.EXPORT_TEXT = data.get("RAW_TEXT", False)
         
         if data.get("src"):
-            down.downin.OUTFOLDER = data["src"]
+            down.downin.base_data.OUTFOLDER = data["src"]
             trans_view.OUT = data["src"]
             
 
@@ -1044,8 +1043,8 @@ class MainWindow(QMainWindow):
 
         if data.get("src"):
             dialog.path_edit.setText(data["src"])
-        elif hasattr(down.downin, 'OUTFOLDER'):
-            dialog.path_edit.setText(down.downin.OUTFOLDER)
+        elif down.downin.base_data.OUTFOLDER:
+            dialog.path_edit.setText(down.downin.base_data.OUTFOLDER)
 
         dialog.raw_text_toggle.setChecked(data.get("RAW_TEXT", False))
         dialog.ai_prompt_edit.setPlainText(data.get("AI_PROMPT", ""))
@@ -1057,11 +1056,11 @@ class MainWindow(QMainWindow):
             ai_prompt = dialog.get_ai_prompt()
 
             if selected_path:
-                down.downin.OUTFOLDER = selected_path
+                down.downin.base_data.OUTFOLDER = selected_path
                 trans_view.OUT = selected_path
                 data["src"] = selected_path
 
-            down.downin.EXPORT_TEXT = raw_text
+            down.downin.base_data.EXPORT_TEXT = raw_text
             data["theme"] = selected_theme
             data["RAW_TEXT"] = raw_text
             data["AI_PROMPT"] = ai_prompt
@@ -1097,7 +1096,7 @@ class MainWindow(QMainWindow):
         file_paths, _ = QFileDialog.getOpenFileNames(
             self, 
             "EPUB으로 변환할 TXT 파일 선택", 
-            getattr(down.downin, 'OUTFOLDER', ''), 
+             down.downin.base_data.OUTFOLDER, 
             "Text Files (*.txt)"
         )
 

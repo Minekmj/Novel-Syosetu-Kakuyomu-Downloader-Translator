@@ -10,9 +10,9 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QCursor, QDesktopServices
 
-from trans import Translator
-from data import TAG_CATEGORIES, NaroSearch, KakuyomuSearch
-import data as data_iteam
+from src.trans.trans import Translator
+from src.system.data import TAG_CATEGORIES, NaroSearch, KakuyomuSearch
+import src.system.data as data_iteam
 
 click = False
 click_plus_url = ''

@@ -13,8 +13,8 @@ import json
 
 import re
 
-from data import open_folder, return_theme, load_data, save_data
-from thread_pyqt import TranslateThread, ModelLoadThread, trans_ai, GlossaryExtractThread
+from src.system.data import open_folder, return_theme, load_data, save_data
+from src.main.thread_pyqt import TranslateThread, ModelLoadThread, trans_ai, GlossaryExtractThread
 
 OUT = "./out/"
 

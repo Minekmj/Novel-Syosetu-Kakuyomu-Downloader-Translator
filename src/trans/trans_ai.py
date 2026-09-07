@@ -18,14 +18,14 @@ import re
 import time
 import unicodedata
 
-import glossary_text
+import src.glossary_fast_py.glossary_text as glossary_text
 extract_glossary = glossary_text.extract_glossary
 
 from google import genai
 from google.genai import types
 
-import down
-from config import DATA_FILE
+import src.down.down as down
+from src.system.config import DATA_FILE
 
 
 API = _E
@@ -786,11 +786,7 @@ async def _translate_light_novel_async(
     translated_parts = [None] * len(chunks)
     translated_parts_raw = [None] * len(chunks)
 
-    out = getattr(
-        down.downin,
-        _H,
-        "./out"
-    ) + "/"
+    out = down.downin.base_data.OUTFOLDER + "/"
 
     os.makedirs(
         f"{out}trs",
@@ -1237,11 +1233,7 @@ async def _TransAi_From_Json_async(
         )
     )
 
-    out = getattr(
-        down.downin,
-        _H,
-        "./out"
-    ) + "/"
+    out = down.downin.base_data.OUTFOLDER + "/"
 
     os.makedirs(
         f"{out}trs",

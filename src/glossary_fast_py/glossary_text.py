@@ -7,7 +7,7 @@ from google.genai import types
 client = None
 get_safety_settings = None
 
-from glossary_fast import extract_glossary_sample as _extract_glossary_sample
+from src.glossary_fast_py.glossary_fast import extract_glossary_sample as _extract_glossary_sample
 
 def _split_glossary_text(text, chunk):
     if not text:

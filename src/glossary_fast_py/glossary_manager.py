@@ -1,7 +1,7 @@
 import os
 from PySide6.QtWidgets import QDialog,QVBoxLayout,QHBoxLayout,QLabel,QComboBox,QScrollArea,QWidget,QLineEdit,QPushButton,QMessageBox
 from PySide6.QtCore import Qt
-from data import load_data,save_data
+from src.system.data import load_data,save_data
 
 
 class GlossaryManagerDialog(QDialog):

@@ -33,7 +33,7 @@ V = None
 
 try:
     base_path = sys._MEIPASS
-    from v import V
+    from src.system.v import V
 except Exception:
     pass
 
@@ -808,7 +808,7 @@ def start_main_app(root, sub_label, pre_file):
         "메인 프로그램을 불러오는 중..."
     )
 
-    import main
+    import src.main.main as main
 
     main.main(
         lambda: root.after(

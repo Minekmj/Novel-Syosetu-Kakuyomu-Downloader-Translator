@@ -1,6 +1,6 @@
-import trans_ai
+import src.trans.trans_ai as trans_ai
 from PySide6.QtCore import QThread, Signal
-import findsyou
+import src.find.findsyou as findsyou
 import time
 import os
 from google import genai
@@ -53,7 +53,7 @@ class EpubConvertThread(QThread):
                
                 DOWN.create_epub_from_merged_txt(path, )
             
-            output_dir = os.path.join(getattr(DOWN.downin, 'OUTFOLDER', './out/'), "epub")
+            output_dir = os.path.join(DOWN.downin.base_data.OUTFOLDER, "epub")
 
             self.finished_signal.emit(True, "EPUB 변환이 완료되었습니다.", output_dir)
         except Exception as e:
@@ -137,7 +137,7 @@ class TranslateThread(QThread):
                     dicts=self.dict
                 )
 
-            output_dir = os.path.join(getattr(DOWN.downin, "OUTFOLDER", "./out/"), "epub")
+            output_dir = os.path.join(DOWN.downin.base_data.OUTFOLDER, "epub")
 
             self.log_changed.emit("=" * 60)
             self.log_changed.emit("번역 완료")

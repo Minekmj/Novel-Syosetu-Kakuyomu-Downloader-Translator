@@ -2,12 +2,12 @@ import json
 import os
 import sys
 
-from config import DATA_FILE
-from get import *
+from src.system.config import DATA_FILE
+from src.find.get import *
 
 import re
 
-import theme
+import src.system.theme as theme
 
 THEME_DATA = {
     "다크": "DARK",
@@ -54,7 +54,7 @@ def build_qss(template_qss: str, theme_dict: dict) -> str:
 def get_resource_path(relative_path):
     if hasattr(sys, "_MEIPASS"):
         return os.path.join(sys._MEIPASS, relative_path)
-    return os.path.join(os.path.abspath("."), relative_path)
+    return os.path.join(os.path.abspath("src"), relative_path)
 
 def rest():
     global THEME_NAME, MINIMAL_DARK_THEME  

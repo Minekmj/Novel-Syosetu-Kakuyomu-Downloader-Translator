@@ -4,11 +4,11 @@ import re
 import time
 import zipfile
 import shutil
-import downin
-from make_image import create_cover_image
+import src.down.downin as downin
+from src.down.make_image import create_cover_image
 import threading
 
-from config import USE_LOCAL_AI
+from src.system.config import USE_LOCAL_AI
 
 IS_START = False
 
@@ -400,7 +400,7 @@ def create_epub_from_merged_txt(input_txt_path="", base_dir=".", txt_value="", R
         content = content.replace("\r\n", "\n")
         content = content.replace("\r", "\n")
 
-        delimiter = getattr(downin, "SPLIT_POINT", "+---+")
+        delimiter = downin.SPLIT_POINT
 
         if RAW:
             lines = content.splitlines()
@@ -1173,11 +1173,7 @@ strong, b { font-weight: bold; }
         ) as f:
             f.write(toc_ncx)
 
-        out_folder = getattr(
-            downin,
-            "OUTFOLDER",
-            "./out/"
-        )
+        out_folder = downin.base_data.OUTFOLDER
 
         os.makedirs(out_folder, exist_ok=True)
 
