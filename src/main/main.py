@@ -710,7 +710,7 @@ class UpdateView(QDialog):
         self.scroll_layout.setContentsMargins(0, 0, 0, 0)
 
         try:
-            with open(resource_path("update.md"), "r", encoding="UTF-8") as f:
+            with open(resource_path("MD/update.md"), "r", encoding="UTF-8") as f:
                 md_content = f.read()
             
             sections = self.parse_markdown(md_content)

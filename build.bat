@@ -1,1 +1,0 @@
-pyinstaller -w -F --exclude-module torch --exclude-module torchvision --exclude-module torchaudio --exclude-module transformers --exclude-module protobuf --add-data "src/css/main.css;css" --add-data "src/find/tag.json;find" --add-data "main.ico;." --add-data "update.md;." --add-binary "src/glossary_fast_py/glossary_fast/glossary_fast.dll;glossary_fast" --icon=main.ico run.py
