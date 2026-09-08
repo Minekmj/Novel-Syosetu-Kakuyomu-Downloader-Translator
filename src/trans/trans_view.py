@@ -439,6 +439,9 @@ class TranslateDialog(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        
+        self.is_trans = False
+        self.is_stop = False
 
         self.file_path = ""
         self.file_title = ""
@@ -556,14 +559,31 @@ class TranslateDialog(QDialog):
 
         self.chars_combo = QComboBox()
         self.chars_combo.addItems(
-            ["1000", "2000", "3000", "4000", "5000", "7000", "10000", "15000", "20000", "30000"]
+            ["500", "1000", "2000", "3000", "4000", "5000", "7000", "10000", "15000", "20000", "30000"]
         )
         self.chars_combo.setCurrentText("5000")
 
         option_layout_2.addWidget(self.chars_combo)
+        
+        option_layout_3 = QHBoxLayout()
+        
+        option_layout_3.addStretch(1)
+
+        lbl_chars = QLabel("분할로 시작")
+        lbl_chars.setFixedWidth(label_width)
+        option_layout_3.addWidget(lbl_chars)
+
+        self.br_start_combo = QComboBox()
+        self.br_start_combo.addItems(
+            ["0", "1", "2", "3", "4"]
+        )
+        self.br_start_combo.setCurrentText("0")
+
+        option_layout_3.addWidget(self.br_start_combo)
 
         layout.addLayout(option_layout_1)
         layout.addLayout(option_layout_2)
+        layout.addLayout(option_layout_3)
 
         api_layout = QHBoxLayout()
 
@@ -1145,6 +1165,12 @@ class TranslateDialog(QDialog):
             )
 
     def start_translate(self):
+        # 이미 번역 중인 경우 (버튼 텍스트가 '번역 중지'일 때 클릭) -> 중지 처리
+        if self.is_trans:
+            self.stop_trans()
+            return
+
+        # 1. 필수 입력값 및 파일 검증
         if not self.file_path:
             QMessageBox.warning(
                 self,
@@ -1172,23 +1198,13 @@ class TranslateDialog(QDialog):
             )
             return
 
+        # 2. 수치 파라미터 변환 검증
         try:
-            rpm = int(
-                self.rpm_combo.currentText()
-            )
-
-            temperature = float(
-                self.temp_combo.currentText()
-            )
-
-            max_concurrent = int(
-                self.concurrency_combo.currentText()
-            )
-
-            max_chars = int(
-                self.chars_combo.currentText()
-            )
-
+            rpm = int(self.rpm_combo.currentText())
+            temperature = float(self.temp_combo.currentText())
+            max_concurrent = int(self.concurrency_combo.currentText())
+            max_chars = int(self.chars_combo.currentText())
+            br_start = int(self.br_start_combo.currentText())
         except ValueError:
             QMessageBox.warning(
                 self,
@@ -1197,6 +1213,7 @@ class TranslateDialog(QDialog):
             )
             return
 
+        # 3. 설정 저장
         try:
             self.save_settings()
         except Exception as e:
@@ -1207,42 +1224,33 @@ class TranslateDialog(QDialog):
             )
             return
 
-        # 현재 작품의 용어집
-        dict_data = dict(
-            self.current_dictionary
-        )
+        # 4. 번역 상태 및 UI 초기화
+        dict_data = dict(self.current_dictionary)
 
-        self.start_btn.setEnabled(False)
-        self.start_btn.setText("번역 중...")
+        self.is_trans = True
+        self.is_stop = False
+
+        # 버튼 텍스트 변경 (클릭 시 stop_trans 실행 가능 상태)
+        self.start_btn.setEnabled(True)
+        self.start_btn.setText("번역 중지")
 
         self.progress_bar.setValue(0)
 
         self.add_log("")
         self.add_log("=" * 60)
         self.add_log("번역 시작")
-        self.add_log(
-            f"모델: {model_name}"
-        )
-        self.add_log(
-            f"작품명: {self.file_title}"
-        )
-        self.add_log(
-            f"청크 글자수: {max_chars}"
-        )
-        self.add_log(
-            f"RPM: {rpm}"
-        )
-        self.add_log(
-            f"Temperature: {temperature}"
-        )
-        self.add_log(
-            f"동시 작업수: {max_concurrent}"
-        )
-        self.add_log(
-            f"용어집: {len(dict_data)}개"
-        )
+        self.add_log(f"모델: {model_name}")
+        self.add_log(f"작품명: {self.file_title}")
+        self.add_log(f"청크 글자수: {max_chars}")
+        if br_start != 0:
+            self.add_log(f"분할 시작: {br_start}")
+        self.add_log(f"RPM: {rpm}")
+        self.add_log(f"Temperature: {temperature}")
+        self.add_log(f"동시 작업수: {max_concurrent}")
+        self.add_log(f"용어집: {len(dict_data)}개")
         self.add_log("=" * 60)
 
+        # 5. 스레드 생성 및 실행
         self.thread = TranslateThread(
             self.file_path,
             model_name,
@@ -1250,22 +1258,31 @@ class TranslateDialog(QDialog):
             temperature,
             max_concurrent,
             max_chars,
-            dicts=dict_data
+            dicts=dict_data,
+            check=self.get_out,
+            br_start=br_start
         )
 
-        self.thread.progress_changed.connect(
-            self.update_progress
-        )
-
-        self.thread.log_changed.connect(
-            self.add_log
-        )
-
-        self.thread.finished_signal.connect(
-            self.on_finished
-        )
+        self.thread.progress_changed.connect(self.update_progress)
+        self.thread.log_changed.connect(self.add_log)
+        self.thread.finished_signal.connect(self.on_finished)
 
         self.thread.start()
+
+
+    def stop_trans(self):
+        if not self.is_trans:
+            return
+
+        self.is_stop = True
+        self.add_log("중지: 번역 중지 요청 중... 작업 종료 후 중지")
+        
+        # 중지 진행 동안 버튼 중복 클릭 방지
+        self.start_btn.setEnabled(False)
+        self.start_btn.setText("중지 중...")
+        
+    def get_out(self):
+        return self.is_stop
 
     def update_progress(self, done, total, message):
         percent = int(
@@ -1327,6 +1344,7 @@ class TranslateDialog(QDialog):
             "시작" in text
             or "로드" in text
             or "감지" in text
+            or "중지" in text
         ):
             log_type = "INFO"
 
@@ -1451,6 +1469,9 @@ class TranslateDialog(QDialog):
     ):
         self.start_btn.setEnabled(True)
         self.start_btn.setText("번역 시작")
+        
+        self.is_trans = False
+        self.is_stop = False
 
         if success:
             self.progress_bar.setValue(100)
@@ -1485,3 +1506,15 @@ class TranslateDialog(QDialog):
                 "번역 오류",
                 message
             )
+            
+    def closeEvent(self, event):
+        if self.is_trans:
+            QMessageBox.critical(
+                self,
+                "종료 거부",
+                "현재 번역 작업 중 입니다.\n종료를 거부 합니다. 번역 중지 혹은 번역 완료 후 종료 해 주세요."
+            )
+            event.ignore()
+        else:
+            super().closeEvent(event)
+            

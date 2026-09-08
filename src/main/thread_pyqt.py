@@ -78,7 +78,7 @@ class TranslateThread(QThread):
     log_changed = Signal(str)
     finished_signal = Signal(bool, str, str)
 
-    def __init__(self, file_path, model_name, rpm, temperature, max_concurrent, max_chars, dicts={}):
+    def __init__(self, file_path, model_name, rpm, temperature, max_concurrent, max_chars, dicts={}, check=None, br_start=0):
         super().__init__()
 
         self.file_path = file_path
@@ -88,6 +88,8 @@ class TranslateThread(QThread):
         self.max_concurrent = max_concurrent
         self.max_chars = max_chars
         self.dict = dicts
+        self.check = check
+        self.br_start = br_start
 
     def run(self):
         try:
@@ -116,7 +118,9 @@ class TranslateThread(QThread):
                     max_concurrent=self.max_concurrent,
                     progress_callback=progress,
                     log_callback=self.log_changed.emit,
-                    dicts=self.dict
+                    dicts=self.dict,
+                    check=self.check,
+                    br_start=self.br_start
                 )
 
             else:
@@ -134,21 +138,30 @@ class TranslateThread(QThread):
                     max_concurrent=self.max_concurrent,
                     progress_callback=progress,
                     log_callback=self.log_changed.emit,
-                    dicts=self.dict
+                    dicts=self.dict,
+                    check=self.check,
+                    br_start=self.br_start
                 )
+            if not self.check():
+                output_dir = os.path.join(DOWN.downin.base_data.OUTFOLDER, "epub")
 
-            output_dir = os.path.join(DOWN.downin.base_data.OUTFOLDER, "epub")
+                self.log_changed.emit("=" * 60)
+                self.log_changed.emit("번역 완료")
+                self.log_changed.emit(f"출력 폴더: {output_dir}")
+                self.log_changed.emit("=" * 60)
 
-            self.log_changed.emit("=" * 60)
-            self.log_changed.emit("번역 완료")
-            self.log_changed.emit(f"출력 폴더: {output_dir}")
-            self.log_changed.emit("=" * 60)
-
-            self.finished_signal.emit(
-                True,
-                "번역이 완료되었습니다.",
-                output_dir
-            )
+                self.finished_signal.emit(
+                    True,
+                    "번역이 완료되었습니다.",
+                    output_dir
+                )
+            else:
+    
+                self.log_changed.emit("=" * 60)
+                self.log_changed.emit("번역 중지")
+                self.log_changed.emit("=" * 60)
+    
+                self.finished_signal.emit(False, "번역이 중지 되었습니다.", "")
 
         except Exception as e:
             import traceback
@@ -183,8 +196,8 @@ class ModelLoadThread(QThread):
                 if name.startswith("models/"):
                     name = name.replace("models/", "", 1)
                 
-               
-                if not name.lower().startswith("gemini"):
+                m = name.lower()
+                if not (m.startswith("gemini") or m.startswith("gemma")):
                     continue
                     
                

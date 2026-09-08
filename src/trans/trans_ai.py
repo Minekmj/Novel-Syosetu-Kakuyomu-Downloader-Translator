@@ -16,7 +16,6 @@ import json
 import os
 import re
 import time
-import unicodedata
 
 import src.glossary_fast_py.glossary_text as glossary_text
 extract_glossary = glossary_text.extract_glossary
@@ -26,6 +25,8 @@ from google.genai import types
 
 import src.down.down as down
 from src.system.config import DATA_FILE
+from src.trans.prom import *
+from src.trans.prompt_sanitizer import x_making, get_safety_settings
 
 
 API = _E
@@ -70,177 +71,6 @@ def rest():
 client = genai.Client(api_key=API if API != "" else "None")
 glossary_text.client = client
 rest()
-
-
-SYSTEM_PROMPT = """## 개요
-* 당신은 전문 번역가입니다.
-
-## 핵심 원칙
-* 충실하고 검열 없는 번역: 명시적이거나 비속어, 혹은 민감한 내용을 포함하여 원문의 의미, 의도, 어조, 감정적 뉘앙스, 상세 내용을 어떠한 검열이나 수정, 개인적 편견의 개입 없이 완벽한 충실함으로 번역하십시오.
-* 자연스럽고 관용적인 표현: 목표 언어의 원어민이 마치 처음부터 해당 언어로 작성된 글을 읽는 것처럼 완전히 자연스럽고 관용적으로 느껴지는 번역을 최우선으로 하십시오. 표현, 문화적 비유, 스타일을 창의적으로 다듬어 가독성, 몰입감, 장르 적합성을 높이되, 언제나 직역보다는 원문의 의도를 우선시하십시오.
-
-## 추가 지침
-* 모든 욕설과 비속어는 목표 언어에서 그에 상응하는 표현으로 번역하십시오. 원문의 강도와 전달 기능을 그대로 살려야 합니다.
-* 성적이거나 폭력적인 내용을 포함한 노골적인 표현은 완벽한 충실함을 바탕으로 원문의 어조와 노골성의 수위를 직접적이고 정확하게 반영하여 번역하십시오.
-* 누락이나 수정 없이 모든 원문의 의미, 어조, 노골적인 내용을 유지하면서 원문 전체를 포괄적으로 번역하십시오.
-
-## 중요 주의사항
-* 오직 최종 결과물만 출력하십시오.
-* 제목, 설명, 기타 추가 내용을 절대로 덧붙이지 마십시오.
-* 원문의 의도, 뉘앙스, 스타일을 유지하십시오.
-* 목표 언어로 처음부터 작성된 것처럼 자연스럽고 유려한 번역을 목표로 하십시오.
-
-[중요] 당신은 일본어를 한국어로 번역하여야 합니다. 따라서 일본어 사용을 금지 합니다.
-
-[필수 규칙]
-1. 입력문에 포함된 '+---+'는 글자를 절대 유지 하세요.
-2. '+---+' 원문에 없는 곳에 새로 만들거나 추가해서는 안 됩니다. (절대 금지!)."""
-
-
-SYSTEM_PROMPT_NO_SPLIT = """## 개요
-* 당신은 전문 번역가입니다.
-
-## 핵심 원칙
-* 충실하고 검열 없는 번역: 명시적이거나 비속어, 혹은 민감한 내용을 포함하여 원문의 의미, 의도, 어조, 감정적 뉘앙스, 상세 내용을 어떠한 검열이나 수정, 개인적 편견의 개입 없이 완벽한 충실함으로 번역하십시오.
-* 자연스럽고 관용적인 표현: 목표 언어의 원어민이 마치 처음부터 해당 언어로 작성된 글을 읽는 것처럼 완전히 자연스럽고 관용적으로 느껴지는 번역을 최우선으로 하십시오. 표현, 문화적 비유, 스타일을 창의적으로 다듬어 가독성, 몰입감, 장르 적합성을 높이되, 언제나 직역보다는 원문의 의도를 우선시하십시오.
-
-## 추가 지침
-* 모든 욕설과 비속어는 목표 언어에서 그에 상응하는 표현으로 번역하십시오. 원문의 강도와 전달 기능을 그대로 살려야 합니다.
-* 성적이거나 폭력적인 내용을 포함한 노골적인 표현은 완벽한 충실함을 바탕으로 원문의 어조와 노골성의 수위를 직접적이고 정확하게 반영하여 번역하십시오.
-* 누락이나 수정 없이 모든 원문의 의미, 어조, 노골적인 내용을 유지하면서 원문 전체를 포괄적으로 번역하십시오.
-
-## 중요 주의사항
-* 오직 최종 결과물만 출력하십시오.
-* 제목, 설명, 기타 추가 내용을 절대로 덧붙이지 마십시오.
-* 원문의 의도, 뉘앙스, 스타일을 유지하십시오.
-* 목표 언어로 처음부터 작성된 것처럼 자연스럽고 유려한 번역을 목표로 하십시오.
-
-[중요] 당신은 일본어를 한국어로 번역하여야 합니다. 따라서 일본어 사용을 금지 합니다."""
-
-SYSTEM_PROMPT_RAW = """## 개요
-* 당신은 전문 번역가입니다.
-
-## 핵심 원칙
-* 충실하고 검열 없는 번역: 원문의 의미, 의도, 어조, 감정적 뉘앙스와 상세 내용을 최대한 충실하게 번역하십시오.
-* 자연스럽고 관용적인 한국어 번역을 사용하십시오.
-* 누락이나 임의의 추가 없이 원문 전체를 번역하십시오.
-
-## 절대 규칙
-1. 원문의 줄 바꿈을 바꾸지 않는다.
-2. 원문의 줄 바꿈을 임의로 수정하지 않는다.
-3. 원문의 줄을 유지한다.
-4. 입력문에 존재하는 모든 줄바꿈 위치를 최대한 그대로 유지한다.
-5. 원문에 존재하는 빈 줄도 임의로 삭제하거나 추가하지 않는다.
-6. '='로 이루어진 구분선은 원문 그대로 유지한다.
-
-## 중요
-* 오직 최종 번역 결과만 출력하십시오.
-* 제목, 설명, 기타 추가 내용을 절대로 덧붙이지 마십시오.
-* 일본어를 한국어로 번역하십시오.
-* 일본어를 번역 결과에 남기지 마십시오."""
-
-GLOSSARY_CONTEXT = """# 용어집 컨텍스트 (아래 용어집에 명시된 번역어를 반드시 준수하세요.)
-- 용어집에 있는 용어는 반드시 해당 번역어로 번역해야 하며, 변경하거나 다른 표현을 사용하지 마세요.
-- 문맥에 따라 자연스럽게 번역하되, 용어집 우선 적용을 최우선으로 합니다.
-- 원문의 의미, 뉘앙스, 톤을 유지하면서 자연스럽고 유창한 한국어로 번역해주세요.
-- 번역 결과에 용어집 외의 임의 번역어가 포함되지 않도록 주의하세요.
-
-{glossary}"""
-
-GLOSSARY_MAX_CHARS = 1000
-
-
-class PromptSanitizer:
-
-    def __init__(self):
-        self.rules = [
-            "いやらし[いくさ]",
-            "エロ(?:い|チック|ティック)?",
-            "スケベ(?:な|そう)?",
-            "エッチ(?:な|する|した)?",
-            "淫ら(?:な|に)?",
-            "性的(?:な)?",
-            "卑猥(?:な)?",
-            "猥褻",
-            "セックス(?:する|した)?",
-            "本番",
-            "3P",
-            "起た(?:ない|なくて|つ|ち)",
-            "大きくな(?:る|った|って)",
-            "ゴム",
-            "バイ〇グラ",
-            "バイアグラ",
-            "イチャイチャ",
-            "一線越え(?:る|た)?",
-            "浮気",
-            "二股",
-            "NTR",
-            "押し倒(?:す|した|して|され)",
-            "抱きしめ(?:る|た|て|返した)",
-            "抱きつ(?:く|いた|いて|かれ)",
-            "体を重ね(?:る|た|て)",
-            "触(?:る|った|れて|れた)",
-            "撫で(?:る|た|て)",
-            "キス(?:した)?",
-            "股間",
-            "アレ",
-            "胸元",
-            "太もも",
-            "裸体",
-            "裸(?:の|で)?",
-            "下半身",
-            "ほっぺ",
-            "高校(?:の|生)?",
-            "理事長(?:室)?",
-            "生徒",
-            "制服",
-            "無理やり",
-            "強引(?:に|な)?",
-            "襲(?:う|った|われ)",
-            "奪(?:い返しても|った|い)",
-            "騙(?:してる|して|す)",
-            "告げ口",
-            "脅迫",
-            "自傷",
-            "自殺",
-            "リスカ",
-            "首吊(?:り|る)",
-            "殺(?:す|した|せ|そう)",
-            "死ね",
-        ]
-
-        self.compiled = [
-            re.compile(pattern, re.IGNORECASE)
-            for pattern in self.rules
-        ]
-
-    def normalize(self, text):
-        text = unicodedata.normalize("NFKC", text)
-        return re.sub(r"[\u200B-\u200D\uFEFF]", "", text)
-
-    def censor_match(self, match):
-        word = match.group()
-
-        if len(word) <= 2:
-            return "〇" * len(word)
-
-        return word[0] + "〇" * (len(word) - 1)
-
-    def sanitize(self, text):
-        text = self.normalize(text)
-
-        for pattern in self.compiled:
-            text = pattern.sub(self.censor_match, text)
-
-        return text
-
-
-_sanitizer = PromptSanitizer()
-
-
-def x_making(text):
-    return _sanitizer.sanitize(text)
-
 
 def split_text_by_lines(text, max_chars=5000):
     lines = text.splitlines(keepends=True)
@@ -316,32 +146,6 @@ def get_linebreak_preservation_ratio(original, translated):
         (1.0 - difference / original_breaks) * 100.0
     )
 
-
-def get_safety_settings():
-    return [
-        types.SafetySetting(
-            category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
-            threshold=types.HarmBlockThreshold.BLOCK_NONE
-        ),
-        types.SafetySetting(
-            category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-            threshold=types.HarmBlockThreshold.BLOCK_NONE
-        ),
-        types.SafetySetting(
-            category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-            threshold=types.HarmBlockThreshold.BLOCK_NONE
-        ),
-        types.SafetySetting(
-            category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-            threshold=types.HarmBlockThreshold.BLOCK_NONE
-        ),
-        types.SafetySetting(
-            category=types.HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
-            threshold=types.HarmBlockThreshold.BLOCK_NONE
-        ),
-    ]
-
-
 class AsyncRateLimiter:
 
     def __init__(self, rpm: int):
@@ -405,6 +209,11 @@ def build_dynamic_glossary(
 
     return "\n".join(selected)
 
+def _is_stopped(check):
+    try:
+        return bool(check and check())
+    except Exception:
+        return False
 
 async def translate_chunk_safe_async(
     chunk,
@@ -414,24 +223,35 @@ async def translate_chunk_safe_async(
     temperature=0.2,
     max_retries=3,
     depth=0,
-    log_callback=_D,
+    log_callback=None,
     chunk_idx=0,
     raw=False,
-    dicts={}
+    dicts=None,
+    check=None,
+    br_start=0
 ):
+    if dicts is None:
+        dicts = {}
+
     lines = chunk.splitlines(keepends=True)
 
     if not lines:
-        return "", 0
+        return "", 0, False
 
-    if get_japanese_ratio(chunk) < 0.03:
+    if _is_stopped(check):
+        if log_callback:
+            log_callback(f"[{chunk_idx} - ] [{depth}] 중지: 번역 시작 전 작업 중지")
+        return None, 0, True
+
+    force_split = br_start > 0
+
+    if not force_split and get_japanese_ratio(chunk) < 0.03:
         if log_callback:
             log_callback(
                 f"[{chunk_idx} - ] [{depth}] [시도 0] "
                 f"원문의 일본어 비율이 너무 낮아 번역 생략"
             )
-
-        return chunk, len(lines)
+        return chunk, len(lines), False
 
     current_chunk = chunk
     is_censored = False
@@ -445,7 +265,15 @@ async def translate_chunk_safe_async(
 
     attempt = 1
 
-    while attempt <= max_retries:
+    while not force_split and attempt <= max_retries:
+        if _is_stopped(check):
+            if log_callback:
+                log_callback(
+                    f"[{chunk_idx} - ] [{depth}] 중지: "
+                    f"다음 API 요청을 실행하지 않습니다."
+                )
+            return None, 0, True
+
         censored_label = "검열" if is_censored else ""
 
         prefix_log = (
@@ -453,13 +281,21 @@ async def translate_chunk_safe_async(
             f"[{depth}] [시도 {attempt}/{max_retries}]"
         )
 
+        await rate_limiter.wait()
+
+        if _is_stopped(check):
+            if log_callback:
+                log_callback(
+                    f"{prefix_log} 중지: "
+                    f"API 호출 직전 작업 중지"
+                )
+            return None, 0, True
+
         if log_callback:
             log_callback(
-                f"{prefix_log} 번역 시도: "
-                f"(라인 수: {len(lines)}, temperature: {temperature})"
+                f"{prefix_log} 번역 시작: "
+                f"(라인 수: {len(lines)})"
             )
-
-        await rate_limiter.wait()
 
         try:
             if raw:
@@ -470,27 +306,29 @@ async def translate_chunk_safe_async(
                     if _G in chunk
                     else SYSTEM_PROMPT_NO_SPLIT
                 )
-                
-            if CUSTOM_AI_PROMPT != "":
-                system_prompt += f"""\n\n[사용자 지정 추가 지침]
-{CUSTOM_AI_PROMPT}\n\n"""
 
-            if len(dicts) > 0:
-                glossary_text = build_dynamic_glossary(
+            if CUSTOM_AI_PROMPT != "":
+                system_prompt += (
+                    f"\n\n[사용자 지정 추가 지침]\n"
+                    f"{CUSTOM_AI_PROMPT}\n\n"
+                )
+
+            if dicts:
+                glossary_value = build_dynamic_glossary(
                     chunk,
                     dicts
                 )
 
-                if glossary_text != "":
+                if glossary_value:
                     system_prompt += (
                         "\n\n"
                         + GLOSSARY_CONTEXT.format(
-                            glossary=glossary_text
+                            glossary=glossary_value
                         )
                     )
 
                     glossary_log = ", ".join(
-                        glossary_text.splitlines()
+                        glossary_value.splitlines()
                     )
 
                     if len(glossary_log) > 40:
@@ -536,8 +374,8 @@ async def translate_chunk_safe_async(
                             )
 
                         current_chunk = chunk
-                        attempt += 1
                         is_censored = False
+                        attempt += 1
                         continue
 
                 if raw and "====" in chunk:
@@ -552,19 +390,19 @@ async def translate_chunk_safe_async(
                     if actual_delimiter_count != expected_delimiter_count:
                         if log_callback:
                             log_callback(
-                                f"{prefix_log} 경고: '====...' 라인 개수 불일치 "
+                                f"{prefix_log} 경고: "
+                                f"'====...' 라인 개수 불일치 "
                                 f"(기대: {expected_delimiter_count}, "
                                 f"결과: {actual_delimiter_count}) -> 재시도"
                             )
 
                         current_chunk = chunk
-                        attempt += 1
                         is_censored = False
+                        attempt += 1
                         continue
 
                 jp_ratio = get_japanese_ratio(res_text)
                 ko_ratio = get_korean_ratio(res_text)
-
                 text_len = len(chunk.strip())
 
                 if text_len < 100:
@@ -590,20 +428,35 @@ async def translate_chunk_safe_async(
                         res_text
                     )
 
-                    if (
+                    success = (
                         jp_ratio < max_jp_ratio
                         and ko_ratio >= min_ko_ratio
                         and line_ratio >= min_line_ratio
-                    ):
-                        if log_callback:
+                    )
+                else:
+                    line_ratio = 100.0
+
+                    success = (
+                        jp_ratio < max_jp_ratio
+                        and ko_ratio >= min_ko_ratio
+                    )
+
+                if success:
+                    if log_callback:
+                        if raw:
                             log_callback(
                                 f"{prefix_log} -> 성공: "
                                 f"(줄바꿈 보존율: {line_ratio:.2f}%)"
                             )
+                        else:
+                            log_callback(
+                                f"{prefix_log} -> 성공: 완료"
+                            )
 
-                        return res_text, len(lines)
+                    return res_text, len(lines), False
 
-                    if log_callback:
+                if log_callback:
+                    if raw:
                         log_callback(
                             f"{prefix_log} 경고: 번역 조건 미달 "
                             f"(한글: {ko_ratio:.2f}% "
@@ -613,19 +466,7 @@ async def translate_chunk_safe_async(
                             f"줄바꿈: {line_ratio:.2f}% "
                             f"[기준 {min_line_ratio}%]) -> 재시도"
                         )
-                else:
-                    if (
-                        jp_ratio < max_jp_ratio
-                        and ko_ratio >= min_ko_ratio
-                    ):
-                        if log_callback:
-                            log_callback(
-                                f"{prefix_log} -> 성공: 완료"
-                            )
-
-                        return res_text, len(lines)
-
-                    if log_callback:
+                    else:
                         log_callback(
                             f"{prefix_log} 경고: 번역 조건 미달 "
                             f"(한글: {ko_ratio:.2f}% "
@@ -645,25 +486,41 @@ async def translate_chunk_safe_async(
                         f"-> 검열 실행"
                     )
 
-                current_chunk = x_making(chunk)
-
                 if is_censored:
                     attempt += 1
                     break
 
+                current_chunk = x_making(chunk)
                 is_censored = True
                 attempt += 1
-                continue
 
         except Exception as e:
+            if _is_stopped(check):
+                if log_callback:
+                    log_callback(
+                        f"{prefix_log} 중지: "
+                        f"현재 API 요청 종료 후 중지"
+                    )
+                return None, 0, True
+
             if log_callback:
                 log_callback(
                     f"{prefix_log} 오류: API 호출 중 예외 발생: "
-                    f"{e} -> 재시도"
+                    f"{e} -> 재시도. 원래 대기 시간에 3배 대기"
                 )
+                await rate_limiter.wait()
+                await rate_limiter.wait()
 
             is_censored = False
             attempt += 1
+
+    if _is_stopped(check):
+        if log_callback:
+            log_callback(
+                f"[{chunk_idx} - ] [{depth}] 중지: "
+                f"분할 작업을 실행하지 않습니다."
+            )
+        return None, 0, True
 
     if len(lines) <= 2 or depth >= 4:
         if log_callback:
@@ -672,19 +529,18 @@ async def translate_chunk_safe_async(
                 f"[최대초과] 최대 재시도 초과 및 분할 한계 도달 "
                 f"-> 원문 유지"
             )
-
-        return chunk, len(lines)
+        return chunk, len(lines), False
 
     mid = len(lines) // 2
 
-    if log_callback:
+    if log_callback and not force_split:
         log_callback(
             f"[{chunk_idx} - ] [{depth}] 경고: [분할] "
             f"청크 분할 처리 "
             f"(전반부 {mid}줄, 후반부 {len(lines) - mid}줄)"
         )
 
-    part1_text, _ = await translate_chunk_safe_async(
+    part1_text, part1_len, part1_ignore = await translate_chunk_safe_async(
         "".join(lines[:mid]),
         model_name,
         safety_settings,
@@ -695,10 +551,21 @@ async def translate_chunk_safe_async(
         log_callback,
         chunk_idx,
         raw,
-        dicts
+        dicts,
+        check,
+        br_start=br_start-1
     )
 
-    part2_text, _ = await translate_chunk_safe_async(
+    if part1_ignore:
+        return part1_text, part1_len, True
+
+    if part1_text is None:
+        return None, 0, True
+
+    if _is_stopped(check):
+        return part1_text, len(lines[:mid]), True
+
+    part2_text, part2_len, part2_ignore = await translate_chunk_safe_async(
         "".join(lines[mid:]),
         model_name,
         safety_settings,
@@ -709,14 +576,23 @@ async def translate_chunk_safe_async(
         log_callback,
         chunk_idx,
         raw,
-        dicts
+        dicts,
+        check,
+        br_start=br_start-1
     )
+
+    if part2_ignore:
+        return part1_text, len(lines[:mid]), True
+
+    if part2_text is None:
+        return part1_text, len(lines[:mid]), True
 
     return (
         part1_text.rstrip(_B)
         + _B
         + part2_text.lstrip(_B),
-        len(lines)
+        len(lines),
+        False
     )
 
 
@@ -768,7 +644,9 @@ async def _translate_light_novel_async(
     progress_callback,
     log_callback,
     raw=False,
-    dicts={}
+    dicts={},
+    check=None,
+    br_start=0
 ):
     if API == _E:
         if log_callback:
@@ -845,25 +723,27 @@ async def _translate_light_novel_async(
     )
 
     completed_count = 0
+    ignored = False
     lock = asyncio.Lock()
 
     async def process_chunk(idx, chunk):
-        nonlocal completed_count
+        nonlocal completed_count, ignored
+
+        if _is_stopped(check):
+            if log_callback:
+                log_callback(
+                    f"[{idx}/{len(chunks)}] 중지: "
+                    f"대기 중인 청크 건너뜀"
+                )
+            return
 
         file_path = f"{ai_dir}/{idx}.txt"
 
         if os.path.exists(file_path):
-            with open(
-                file_path,
-                "r",
-                encoding=_A
-            ) as f:
+            with open(file_path, "r", encoding=_A) as f:
                 saved_text = f.read()
 
-            if (
-                saved_text
-                and not saved_text.startswith("[번역 실패")
-            ):
+            if saved_text and not saved_text.startswith("[번역 실패"):
                 skip_msg = (
                     f"[{idx}/{len(chunks)}] "
                     f"이미 저장된 파일 존재 → 건너뜀"
@@ -881,25 +761,22 @@ async def _translate_light_novel_async(
                         progress_callback(
                             completed_count,
                             len(chunks),
-                            f"{completed_count}/{len(chunks)} "
-                            f"청크 완료"
+                            f"{completed_count}/{len(chunks)} 청크 완료"
                         )
 
                 return
 
         async with semaphore:
-            start_msg = (
-                f"[{idx}/{len(chunks)}] "
-                f"청크 번역 시작: "
-                f"{len(chunk)}자 | "
-                f"{len(chunk.splitlines())}줄"
-            )
-
-            if log_callback:
-                log_callback(start_msg)
-
+            if _is_stopped(check):
+                if log_callback:
+                    log_callback(
+                        f"[{idx}/{len(chunks)}] 중지: "
+                        f"실행 대기 중 청크 건너뜀"
+                    )
+                return
+            result_ignore_back = False
             try:
-                result_text, _ = await translate_chunk_safe_async(
+                result_text, result_lines, result_ignore = await translate_chunk_safe_async(
                     chunk=chunk,
                     model_name=model_name,
                     safety_settings=safety_settings,
@@ -908,14 +785,18 @@ async def _translate_light_novel_async(
                     log_callback=log_callback,
                     chunk_idx=idx,
                     raw=raw,
-                    dicts=dicts
+                    dicts=dicts,
+                    check=check,
+                    br_start=br_start
                 )
 
-                with open(
-                    file_path,
-                    "w",
-                    encoding=_A
-                ) as f:
+                if result_ignore:
+                    result_ignore_back = result_ignore
+                    async with lock:
+                        ignored = True
+                    return
+
+                with open(file_path, "w", encoding=_A) as f:
                     f.write(result_text)
 
                 async with lock:
@@ -929,13 +810,11 @@ async def _translate_light_novel_async(
                     )
 
             except Exception as e:
-                err_msg = (
-                    f" └ [{idx}번 청크] "
-                    f"번역 최종 실패: {e}"
-                )
-
                 if log_callback:
-                    log_callback(err_msg)
+                    log_callback(
+                        f" └ [{idx}번 청크] "
+                        f"번역 최종 실패: {e}"
+                    )
 
                 err_text = (
                     f"\n+---+\n"
@@ -948,27 +827,22 @@ async def _translate_light_novel_async(
                     translated_parts[idx - 1] = err_text
                     translated_parts_raw[idx - 1] = chunk
 
-                error_path = (
-                    f"{ai_dir}/{idx}_error.txt"
-                )
+                error_path = f"{ai_dir}/{idx}_error.txt"
 
-                with open(
-                    error_path,
-                    "w",
-                    encoding=_A
-                ) as f:
+                with open(error_path, "w", encoding=_A) as f:
                     f.write(chunk)
 
-            async with lock:
-                completed_count += 1
+            finally:
+                async with lock:
+                    if not result_ignore_back:
+                        completed_count += 1
 
-                if progress_callback:
-                    progress_callback(
-                        completed_count,
-                        len(chunks),
-                        f"{completed_count}/{len(chunks)} "
-                        f"청크 완료"
-                    )
+                        if progress_callback:
+                            progress_callback(
+                                completed_count,
+                                len(chunks),
+                                f"{completed_count}/{len(chunks)} 청크 완료"
+                            )
 
     tasks = [
         process_chunk(idx, chunk)
@@ -977,18 +851,22 @@ async def _translate_light_novel_async(
 
     await asyncio.gather(*tasks)
 
+    if ignored:
+        return "ignore"
+
     json_path = (
         f"{out}trs\\"
         f"save_{safe} _ {max_chars}.json"
     )
-
-    save_translation_json(
-        translated_parts_raw,
-        max_chars,
-        title,
-        json_path,
-        raw=raw
-    )
+    if not check():
+        save_translation_json(
+            translated_parts_raw,
+            max_chars,
+            title,
+            json_path,
+            raw=raw,
+            br_start=br_start
+        )
 
     if raw:
         txt_path = (
@@ -1009,12 +887,12 @@ async def _translate_light_novel_async(
             f"{_K}"
             f"{book_title} | {author}\n\n"
         )
-
-        save_translation_txt(
-            translated_parts_raw,
-            r_title,
-            txt_path
-        )
+        if not check():
+            save_translation_txt(
+                translated_parts_raw,
+                r_title,
+                txt_path
+            )
 
     return "\n\n".join(
         p for p in translated_parts if p
@@ -1032,7 +910,9 @@ def translate_light_novel(
     progress_callback=_D,
     log_callback=_D,
     raw=False,
-    dicts={}
+    dicts={},
+    check=None,
+    br_start=0
 ):
     return asyncio.run(
         _translate_light_novel_async(
@@ -1046,7 +926,9 @@ def translate_light_novel(
             progress_callback,
             log_callback,
             raw,
-            dicts
+            dicts,
+            check,
+            br_start
         )
     )
 
@@ -1060,7 +942,9 @@ def TransAi_All(
     max_concurrent=4,
     progress_callback=_D,
     log_callback=_D,
-    dicts={}
+    dicts={},
+    check=None,
+    br_start=0
 ):
     raw = detect_raw_text(txt)
 
@@ -1102,8 +986,13 @@ def TransAi_All(
             progress_callback=progress_callback,
             log_callback=log_callback,
             raw=True,
-            dicts=dicts
+            dicts=dicts,
+            check=check,
+            br_start=br_start
         )
+
+        if translated_result == "ignore":
+            return "ignore"
 
         epub_text = (
             f"{book_title}\n"
@@ -1112,11 +1001,11 @@ def TransAi_All(
             f"{_K}"
             f"{translated_result}"
         )
-
-        down.create_epub_from_merged_txt(
-            txt_value=epub_text,
-            RAW=True,
-        )
+        if not check():
+            down.create_epub_from_merged_txt(
+                txt_value=epub_text,
+                RAW=True,
+            )
 
         return translated_result
 
@@ -1160,8 +1049,13 @@ def TransAi_All(
         progress_callback=progress_callback,
         log_callback=log_callback,
         raw=False,
-        dicts=dicts
+        dicts=dicts,
+        check=check,
+        br_start=br_start
     )
+
+    if translated_result == "ignore":
+        return "ignore"
 
     title_end = f.find(_B)
 
@@ -1179,11 +1073,11 @@ def TransAi_All(
             + _B
             + translated_result
         )
-
-    down.create_epub_from_merged_txt(
-        txt_value=epub_text,
-        RAW=False
-    )
+    if not check():
+        down.create_epub_from_merged_txt(
+            txt_value=epub_text,
+            RAW=False
+        )
 
     return translated_result
 
@@ -1196,17 +1090,23 @@ async def _TransAi_From_Json_async(
     max_concurrent,
     progress_callback,
     log_callback,
-    dicts
+    dicts,
+    check=None,
+    br_start=0
 ):
+
+    if _is_stopped(check):
+        if log_callback:
+            log_callback("JSON 복원 중지: 작업 시작 전 중지되었습니다.")
+        return "ignore"
+
     if not os.path.exists(json_path):
         msg = (
             f"에러: JSON 파일을 찾을 수 없습니다 | "
             f"{json_path}"
         )
-
         if log_callback:
             log_callback(msg)
-
         return "error"
 
     with open(
@@ -1297,6 +1197,7 @@ async def _TransAi_From_Json_async(
     )
 
     completed_count = 0
+    ignored = False
     lock = asyncio.Lock()
 
     async def process_json_chunk(
@@ -1304,45 +1205,67 @@ async def _TransAi_From_Json_async(
         key,
         dicts
     ):
-        nonlocal completed_count
+        nonlocal completed_count, ignored
 
-        idx = int(key) + 1
-        chunk_text = data[key]
+        result_ignore_back = False
 
-        if not isinstance(
-            chunk_text,
-            str
-        ):
-            chunk_text = str(chunk_text)
+        try:
+            if _is_stopped(check):
+                result_ignore_back = True
 
-        chunk_text = (
-            chunk_text
-            .replace("%'%", '"')
-            .replace("\\\n", _B)
-        )
+                async with lock:
+                    ignored = True
 
-        file_path = (
-            f"{ai_dir}/{idx}.txt"
-        )
+                if log_callback:
+                    log_callback(
+                        f"[{pos}/{len(chunk_keys)}] "
+                        f"JSON 복원 중지 → 청크 건너뜀"
+                    )
 
-        jp_ratio = get_japanese_ratio(
-            chunk_text
-        )
+                return
 
-        if jp_ratio >= 0.5:
-            re_msg = (
-                f"[{idx}/{len(chunk_keys)}] "
-                f"재번역 필요: "
-                f"일본어 비율 {jp_ratio:.4f}%"
+            idx = int(key) + 1
+
+            chunk_text = data[key]
+
+            if not isinstance(
+                chunk_text,
+                str
+            ):
+                chunk_text = str(chunk_text)
+
+            chunk_text = (
+                chunk_text
+                .replace("%'%", '"')
+                .replace("\\\n", _B)
             )
 
-            if log_callback:
-                log_callback(re_msg)
+            file_path = (
+                f"{ai_dir}/{idx}.txt"
+            )
 
-            async with semaphore:
-                try:
-                    result_text, _ = (
-                        await translate_chunk_safe_async(
+            jp_ratio = get_japanese_ratio(
+                chunk_text
+            )
+
+            if jp_ratio >= 0.5:
+
+                re_msg = (
+                    f"[{idx}/{len(chunk_keys)}] "
+                    f"재번역 필요: "
+                    f"일본어 비율 {jp_ratio:.4f}%"
+                )
+
+                if log_callback:
+                    log_callback(re_msg)
+
+                async with semaphore:
+                    try:
+                        (
+                            result_text,
+                            result_lines,
+                            result_ignore
+                        ) = await translate_chunk_safe_async(
                             chunk=chunk_text,
                             model_name=model_name,
                             safety_settings=safety_settings,
@@ -1351,48 +1274,137 @@ async def _TransAi_From_Json_async(
                             log_callback=log_callback,
                             chunk_idx=idx,
                             raw=raw,
-                            dicts=dicts
+                            dicts=dicts,
+                            check=check,
+                            br_start=br_start
                         )
+
+                        if result_ignore:
+                            result_ignore_back = True
+
+                            async with lock:
+                                ignored = True
+
+                            if log_callback:
+                                log_callback(
+                                    f" └ [{idx}번 청크] "
+                                    f"JSON 복원 무시 → "
+                                    f"청크 완료 처리하지 않습니다."
+                                )
+
+                            return
+
+                        if result_text is None:
+                            result_ignore_back = True
+
+                            async with lock:
+                                ignored = True
+
+                            if log_callback:
+                                log_callback(
+                                    f" └ [{idx}번 청크] "
+                                    f"번역 결과 없음 → "
+                                    f"청크 완료 처리하지 않습니다."
+                                )
+
+                            return
+
+                    except Exception as e:
+                        if _is_stopped(check):
+                            result_ignore_back = True
+
+                            async with lock:
+                                ignored = True
+
+                            if log_callback:
+                                log_callback(
+                                    f" └ [{idx}번 청크] "
+                                    f"JSON 복원 중지됨 → 저장하지 않습니다."
+                                )
+
+                            return
+
+                        if log_callback:
+                            log_callback(
+                                f" └ [{idx}번 청크] "
+                                f"재번역 실패: {e}"
+                            )
+
+                        result_text = chunk_text
+
+            else:
+
+                if log_callback:
+                    log_callback(
+                        f"[{idx}/{len(chunk_keys)}] "
+                        f"청크 통과: "
+                        f"일본어 비율 {jp_ratio:.4f}%"
                     )
 
-                except Exception as e:
-                    if log_callback:
-                        log_callback(
-                            f" └ [{idx}번 청크] "
-                            f"재번역 실패: {e}"
-                        )
+                result_text = chunk_text
 
-                    result_text = chunk_text
+            if _is_stopped(check):
+                result_ignore_back = True
 
-        else:
+                async with lock:
+                    ignored = True
+
+                if log_callback:
+                    log_callback(
+                        f" └ [{idx}번 청크] "
+                        f"저장 직전 중지됨 → 저장하지 않습니다."
+                    )
+
+                return
+
+            with open(
+                file_path,
+                "w",
+                encoding=_A
+            ) as f_out:
+                f_out.write(result_text)
+
+            async with lock:
+                translated_parts_raw[pos - 1] = result_text
+                translated_parts[pos - 1] = result_text
+
+        except Exception as e:
+
+            if _is_stopped(check):
+                result_ignore_back = True
+
+                async with lock:
+                    ignored = True
+
+                if log_callback:
+                    log_callback(
+                        f" └ [{pos}번 청크] "
+                        f"JSON 복원 중지됨 → 저장하지 않습니다."
+                    )
+
+                return
+
             if log_callback:
                 log_callback(
-                    f"[{idx}/{len(chunk_keys)}] "
-                    f"청크 통과: "
-                    f"일본어 비율 {jp_ratio:.4f}%"
+                    f" └ [{pos}번 청크] "
+                    f"JSON 복원 처리 실패: {e}"
                 )
 
-            result_text = chunk_text
+        finally:
 
-        with open(
-            file_path,
-            "w",
-            encoding=_A
-        ) as f_out:
-            f_out.write(result_text)
+            if result_ignore_back:
+                return
 
-        async with lock:
-            translated_parts_raw[pos - 1] = result_text
-            translated_parts[pos - 1] = result_text
-            completed_count += 1
+            async with lock:
+                completed_count += 1
 
-            if progress_callback:
-                progress_callback(
-                    completed_count,
-                    len(chunk_keys),
-                    f"{completed_count}/{len(chunk_keys)} "
-                    f"청크 완료"
-                )
+                if progress_callback:
+                    progress_callback(
+                        completed_count,
+                        len(chunk_keys),
+                        f"{completed_count}/{len(chunk_keys)} "
+                        f"청크 완료"
+                    )
 
     tasks = [
         process_json_chunk(
@@ -1406,10 +1418,22 @@ async def _TransAi_From_Json_async(
         )
     ]
 
-    await asyncio.gather(*tasks)
+    await asyncio.gather(
+        *tasks
+    )
+
+    if ignored or _is_stopped(check):
+        if log_callback:
+            log_callback(
+                "JSON 복원 중지됨 → "
+                "복원 JSON/TXT 저장 및 EPUB 변환을 실행하지 않습니다."
+            )
+        return "ignore"
 
     final_result = "\n\n".join(
-        p for p in translated_parts if p
+        p
+        for p in translated_parts
+        if p
     )
 
     os.makedirs(
@@ -1422,15 +1446,18 @@ async def _TransAi_From_Json_async(
         f"save_{safe}_{max_chars}_복원.json"
     )
 
-    save_translation_json(
-        translated_parts_raw,
-        max_chars,
-        f"{title}_복원",
-        save_path,
-        raw=raw,
-    )
+    if not _is_stopped(check):
+        save_translation_json(
+            translated_parts_raw,
+            max_chars,
+            f"{title}_복원",
+            save_path,
+            raw=raw,
+            br_start=br_start,
+        )
 
     if raw:
+
         os.makedirs(
             f"{out}epub",
             exist_ok=_C
@@ -1446,8 +1473,6 @@ async def _TransAi_From_Json_async(
             f"{safe}_복원.txt"
         )
 
-        # JSON의 title은 기본적으로 "작품명_작가명"
-        # 형태이므로 내부 표시용 제목을 생성한다.
         if "_" in title:
             book_title, author = title.rsplit(
                 "_",
@@ -1469,14 +1494,15 @@ async def _TransAi_From_Json_async(
             f"{restored_title} | {author}\n\n"
         )
 
-        save_translation_txt(
-            translated_parts_raw,
-            r_title,
-            txt_path
-        )
+        if not _is_stopped(check):
+            save_translation_txt(
+                translated_parts_raw,
+                r_title,
+                txt_path
+            )
 
     if raw:
-        # RAW 복원에서도 제목 구조를 명확하게 유지
+
         if "_" in title:
             book_title, author = title.rsplit(
                 "_",
@@ -1493,17 +1519,20 @@ async def _TransAi_From_Json_async(
             f"{_K}"
             f"{final_result}"
         )
+
     else:
+
         epub_text = (
             f"{title}_복원_번역\n"
             f"{_K}"
             f"{final_result}"
         )
 
-    down.create_epub_from_merged_txt(
-        txt_value=epub_text,
-        RAW=raw,
-    )
+    if not _is_stopped(check):
+        down.create_epub_from_merged_txt(
+            txt_value=epub_text,
+            RAW=raw,
+        )
 
     return final_result
 
@@ -1516,7 +1545,9 @@ def TransAi_From_Json(
     max_concurrent=4,
     progress_callback=_D,
     log_callback=_D,
-    dicts={}
+    dicts={},
+    check=None,
+    br_start=0
 ):
     return asyncio.run(
         _TransAi_From_Json_async(
@@ -1527,7 +1558,9 @@ def TransAi_From_Json(
             max_concurrent,
             progress_callback,
             log_callback,
-            dicts
+            dicts,
+            check,
+            br_start
         )
     )
 
@@ -1538,6 +1571,7 @@ def save_translation_json(
     title,
     file_path,
     raw=False,
+    br_start=0,
 ):
     data = {}
 
@@ -1551,6 +1585,8 @@ def save_translation_json(
 
     if raw:
         data["raw"] = True
+
+    data["br_start"] = br_start
 
     with open(
         file_path,
