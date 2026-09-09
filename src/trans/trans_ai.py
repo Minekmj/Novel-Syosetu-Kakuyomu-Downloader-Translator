@@ -411,15 +411,19 @@ async def translate_chunk_safe_async(
                     min_line_ratio = 30.0
                 elif text_len < 600:
                     min_ko_ratio = 70.0
-                    max_jp_ratio = 2.0
+                    max_jp_ratio = 3
                     min_line_ratio = 70.0
                 elif text_len < 1500:
                     min_ko_ratio = 75.0
-                    max_jp_ratio = 1.0
+                    max_jp_ratio = 1.5
                     min_line_ratio = 75.0
+                elif text_len < 9000:
+                    min_ko_ratio = 80.0
+                    max_jp_ratio = 1.2
+                    min_line_ratio = 90.0
                 else:
                     min_ko_ratio = 80.0
-                    max_jp_ratio = 0.5
+                    max_jp_ratio = 1.1
                     min_line_ratio = 90.0
 
                 if raw:
@@ -1248,7 +1252,7 @@ async def _TransAi_From_Json_async(
                 chunk_text
             )
 
-            if jp_ratio >= 0.5:
+            if jp_ratio >= 0.1:
 
                 re_msg = (
                     f"[{idx}/{len(chunk_keys)}] "
