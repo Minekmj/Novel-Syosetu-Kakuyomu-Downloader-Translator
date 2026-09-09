@@ -1,16 +1,3 @@
-_K = "+---+\n"
-_J = "gemini-3.5-flash-Lite"
-_I = r'[\\/:*?"<>|]'
-_H = "OUTFOLDER"
-_G = "+---+"
-_F = False
-_E = ""
-_D = None
-_C = True
-_B = "\n"
-_A = "utf-8"
-_Gi = '=' * 30
-
 import asyncio
 import json
 import os
@@ -28,60 +15,67 @@ from src.system.config import DATA_FILE
 from src.trans.prom import *
 from src.trans.prompt_sanitizer import x_making, get_safety_settings
 
+_K = '+---+\n'
+_J = 'gemini-3.5-flash-Lite'
+_I = '[\\\\/:*?"<>|]'
+_H = 'OUTFOLDER'
+_G = '+---+'
+_F = False
+_E = ''
+_D = None
+_C = True
+_B = '\n'
+_A = 'utf-8'
+_Gi = '=' * 30
 
 API = _E
-MODEL_NAME = "gemini-3.5-flash-lite"
-CUSTOM_AI_PROMPT = """"""
+MODEL_NAME = 'gemini-3.5-flash-lite'
+CUSTOM_AI_PROMPT = ''
+
 
 def set_api_key(api_key):
     global API, client
-
     API = api_key.strip() or _E
-    client = genai.Client(api_key=API if API != "" else "None")
+    client = genai.Client(api_key=API if API != '' else "None")
     glossary_text.client = client
-
     data = {}
-
     if os.path.exists(DATA_FILE):
         try:
-            with open(DATA_FILE, "r", encoding=_A) as f:
+            with open(DATA_FILE, 'r', encoding=_A) as f:
                 data = json.load(f)
         except Exception:
             data = {}
-
-    data["api"] = API
-
-    with open(DATA_FILE, "w", encoding=_A) as f:
+    data['api'] = API
+    with open(DATA_FILE, 'w', encoding=_A) as f:
         json.dump(data, f, ensure_ascii=_F, indent=4)
 
 
 def rest():
     global API, client
-
     if os.path.exists(DATA_FILE):
         try:
-            with open(DATA_FILE, "r", encoding=_A) as f:
-                API = json.load(f).get("api", _E)
-                client = genai.Client(api_key=API)
-                glossary_text.client = client
+            with open(DATA_FILE, 'r', encoding=_A) as f:
+                API = json.load(f).get('api', _E)
+            client = genai.Client(api_key=API)
+            glossary_text.client = client
         except Exception:
             pass
 
 
-client = genai.Client(api_key=API if API != "" else "None")
+client = genai.Client(api_key=API if API != '' else "None")
 glossary_text.client = client
 rest()
 
+
 def split_text_by_lines(text, max_chars=5000):
     lines = text.splitlines(keepends=True)
-
     chunks = []
     current_chunk = []
     current_length = 0
 
     for line in lines:
         if current_length + len(line) > max_chars and current_chunk:
-            chunks.append("".join(current_chunk))
+            chunks.append(''.join(current_chunk))
             current_chunk = [line]
             current_length = len(line)
         else:
@@ -89,7 +83,7 @@ def split_text_by_lines(text, max_chars=5000):
             current_length += len(line)
 
     if current_chunk:
-        chunks.append("".join(current_chunk))
+        chunks.append(''.join(current_chunk))
 
     return chunks
 
@@ -98,18 +92,11 @@ def get_japanese_ratio(text):
     if not text:
         return 0.0
 
-    clean_text = re.sub(r"[^\w]|[\d_]", "", text)
-
+    clean_text = re.sub(r'[^\w]|[\d_]', '', text)
     if not clean_text:
         return 0.0
 
-    jp_chars = len(
-        re.findall(
-            r"[\u3040-\u309f\u30a0-\u30ff]",
-            clean_text
-        )
-    )
-
+    jp_chars = len(re.findall(r'[\u3040-\u309f\u30a0-\u30ff]', clean_text))
     return jp_chars / len(clean_text) * 100
 
 
@@ -117,39 +104,186 @@ def get_korean_ratio(text):
     if not text:
         return 0.0
 
-    clean_text = re.sub(r"[^\w]|[\d_]", "", text)
-
+    clean_text = re.sub(r'[^\w]|[\d_]', '', text)
     if not clean_text:
         return 0.0
 
-    ko_chars = len(
-        re.findall(
-            r"[\uac00-\ud7a3\u3131-\u318e]",
-            clean_text
-        )
-    )
-
+    ko_chars = len(re.findall(r'[\uac00-\ud7a3\u3131-\u318e]', clean_text))
     return ko_chars / len(clean_text) * 100
 
 
 def get_linebreak_preservation_ratio(original, translated):
-    original_breaks = original.count("\n")
-    translated_breaks = translated.count("\n")
+    original_breaks = original.count('\n')
+    translated_breaks = translated.count('\n')
 
     if original_breaks == 0:
         return 100.0 if translated_breaks == 0 else 0.0
 
     difference = abs(original_breaks - translated_breaks)
+    return max(0.0, (1.0 - difference / original_breaks) * 100.0)
 
-    return max(
-        0.0,
-        (1.0 - difference / original_breaks) * 100.0
-    )
+
+# =====================================================================
+# [일본어 검사 & 수정 로직]
+# =====================================================================
+
+def inspect_json_japanese(json_path, ratio_threshold=10.0):
+    """
+    out/trs의 번역 JSON을 읽어서, 각 청크의 줄 단위로 일본어 비율이 ratio_threshold(기본 10%) 이상인
+    부분(연속 줄 및 사이 공백 포함)을 검출하여 반환합니다.
+    """
+    if not os.path.exists(json_path):
+        raise FileNotFoundError(f"JSON 파일을 찾을 수 없습니다: {json_path}")
+
+    with open(json_path, 'r', encoding=_A) as f:
+        data = json.load(f)
+
+    title = data.get('name', os.path.splitext(os.path.basename(json_path))[0])
+    chunk_size = data.get('chunk', 5000)
+    raw = bool(data.get('raw', False))
+
+    chunk_indices = sorted(list(set(
+        int(k) for k in data.keys() if k.isdigit()
+    )))
+
+    detected_items = []
+
+    for chunk_idx in chunk_indices:
+        chunk_key = str(chunk_idx)
+        text = data.get(chunk_key)
+        if not text or not isinstance(text, str):
+            continue
+
+        lines = text.splitlines(keepends=True)
+        total_lines = len(lines)
+        i = 0
+
+        while i < total_lines:
+            line_jp = get_japanese_ratio(lines[i])
+            if line_jp >= ratio_threshold:
+                start_line = i
+                last_jp_line = i
+                j = i + 1
+
+                while j < total_lines:
+                    curr_jp = get_japanese_ratio(lines[j])
+                    if curr_jp >= ratio_threshold:
+                        last_jp_line = j
+                        j += 1
+                    elif lines[j].strip() == '':
+                        # 사이 공백 줄인 경우, 뒤에 일본어 줄이 다시 나타나는지 체크
+                        k = j + 1
+                        while k < total_lines and lines[k].strip() == '':
+                            k += 1
+                        if k < total_lines and get_japanese_ratio(lines[k]) >= ratio_threshold:
+                            j += 1
+                        else:
+                            break
+                    else:
+                        break
+
+                end_line = last_jp_line + 1
+                block_text = ''.join(lines[start_line:end_line])
+
+                detected_items.append({
+                    'chunk_key': chunk_key,
+                    'chunk_display': chunk_idx + 1,
+                    'start_line': start_line,
+                    'end_line': end_line,
+                    'original_text': block_text
+                })
+
+                i = end_line
+            else:
+                i += 1
+
+    return {
+        'json_path': json_path,
+        'title': title,
+        'chunk_size': chunk_size,
+        'raw': raw,
+        'items': detected_items
+    }
+
+
+def apply_japanese_corrections(json_path, corrections):
+    """
+    검사 창에서 수정한 텍스트들을 원본 청크의 해당 라인에 반영하여
+    JSON 파일과 ai_down 청크 파일들을 모두 갱신합니다.
+    """
+    if not os.path.exists(json_path):
+        return False, 0, f"JSON 파일을 찾을 수 없습니다: {json_path}"
+
+    try:
+        with open(json_path, 'r', encoding=_A) as f:
+            data = json.load(f)
+
+        title = data.get('name', 'restored')
+        max_chars = data.get('chunk', 5000)
+        out = down.downin.base_data.OUTFOLDER + '/'
+        safe = re.sub(_I, '_', title).strip()
+        ai_dir = f'{out}trs\\ai_down_{safe}_{max_chars}'
+
+        # chunk_key 별로 묶어서 역순(뒤 라인부터)으로 치환
+        grouped = {}
+        for corr in corrections:
+            ck = corr['chunk_key']
+            if ck not in grouped:
+                grouped[ck] = []
+            grouped[ck].append(corr)
+
+        modified_count = 0
+
+        for chunk_key, corr_list in grouped.items():
+            if chunk_key not in data:
+                continue
+
+            text = data[chunk_key]
+            lines = text.splitlines(keepends=True)
+
+            # 뒷부분 인덱스부터 교체해야 앞선 라인 인덱스가 유지됨
+            corr_list.sort(key=lambda x: x['start_line'], reverse=True)
+
+            for item in corr_list:
+                start = item['start_line']
+                end = item['end_line']
+                new_text = item['new_text']
+
+                new_lines = new_text.splitlines(keepends=True)
+                lines[start:end] = new_lines
+                modified_count += 1
+
+            updated_chunk_text = ''.join(lines)
+            data[chunk_key] = updated_chunk_text
+
+            # 개별 청크 txt 파일(ai_down 폴더)도 함께 갱신
+            if os.path.exists(ai_dir):
+                try:
+                    display_idx = int(chunk_key) + 1
+                    chunk_file = f'{ai_dir}/{display_idx}.txt'
+                    with open(chunk_file, 'w', encoding=_A) as cf:
+                        cf.write(updated_chunk_text)
+                except Exception:
+                    pass
+
+        # 갱신된 JSON 저장
+        with open(json_path, 'w', encoding=_A) as f:
+            json.dump(data, f, ensure_ascii=_F, indent=4)
+
+        return True, modified_count, ""
+
+    except Exception as e:
+        return False, 0, str(e)
+
+
+# =====================================================================
+# [번역 워커 및 API 호출]
+# =====================================================================
 
 class AsyncRateLimiter:
-
-    def __init__(self, rpm: int):
-        self.interval = 60.0 / max(1, rpm) + 0.1
+    def __init__(self, rpm):
+        self.rpm = max(1, int(rpm))
+        self.interval = 60.0 / self.rpm + 0.1
         self.lock = asyncio.Lock()
         self.last_call = 0.0
 
@@ -164,16 +298,74 @@ class AsyncRateLimiter:
             self.last_call = time.time()
 
 
-def build_dynamic_glossary(
-    chunk,
-    dictionary,
-    max_chars=GLOSSARY_MAX_CHARS
-):
+class ModelWorker:
+    def __init__(self, model_name, rpm, max_concurrent, temperature, br_start=0):
+        self.model_name = str(model_name).strip()
+        self.rpm = max(1, int(rpm))
+        self.max_concurrent = max(1, int(max_concurrent))
+        self.temperature = float(temperature)
+        self.br_start = max(0, int(br_start))
+        self.rate_limiter = AsyncRateLimiter(self.rpm)
+
+    def __repr__(self):
+        return f"ModelWorker(model={self.model_name},rpm={self.rpm},concurrent={self.max_concurrent},temperature={self.temperature},br_start={self.br_start})"
+
+
+def _parse_models(model_name):
+    if isinstance(model_name, str):
+        models = [x.strip() for x in model_name.split(',') if x.strip()]
+    else:
+        models = [str(x).strip() for x in model_name if str(x).strip()]
+
+    if not models:
+        raise ValueError('사용할 모델이 없습니다.')
+
+    return models
+
+
+def _normalize_model_values(value, count, name):
+    if isinstance(value, (tuple, list)):
+        values = list(value)
+        if len(values) == 1 and count > 1:
+            values = values * count
+    elif isinstance(value, str) and ',' in value:
+        values = [x.strip() for x in value.split(',') if x.strip()]
+    else:
+        values = [value]
+
+    if len(values) == 1 and count > 1:
+        values = values * count
+
+    if len(values) != count:
+        raise ValueError(f'{name} 개수 불일치: 모델 {count}개 / {name} {len(values)}개')
+
+    return values
+
+
+def _create_model_workers(model_name, rpm, max_concurrent, temperature, br_start=0):
+    models = _parse_models(model_name)
+    rpms = _normalize_model_values(rpm, len(models), 'RPM')
+    concurrencies = _normalize_model_values(max_concurrent, len(models), '동시 작업수')
+    temperatures = _normalize_model_values(temperature, len(models), 'Temperature')
+    br_starts = _normalize_model_values(br_start, len(models), '분할 시작')
+    workers = []
+    for i, model in enumerate(models):
+        workers.append(ModelWorker(model, rpms[i], concurrencies[i], temperatures[i], br_starts[i]))
+    return workers
+
+
+def _is_stopped(check):
+    try:
+        return bool(check and check())
+    except Exception:
+        return False
+
+
+def build_dynamic_glossary(chunk, dictionary, max_chars=GLOSSARY_MAX_CHARS):
     if not dictionary:
-        return ""
+        return ''
 
     matched = []
-
     for source, target in dictionary.items():
         source = str(source).strip()
         target = str(target).strip()
@@ -182,12 +374,11 @@ def build_dynamic_glossary(
             continue
 
         count = chunk.count(source)
-
         if count >= 1:
             matched.append((count, source, target))
 
     if not matched:
-        return ""
+        return ''
 
     matched.sort(key=lambda x: x[0], reverse=True)
 
@@ -195,7 +386,7 @@ def build_dynamic_glossary(
     current_length = 0
 
     for count, source, target in matched:
-        line = f"{source} → {target}"
+        line = f'{source} → {target}'
         line_length = len(line) + (1 if selected else 0)
 
         if current_length + line_length > max_chars:
@@ -205,15 +396,10 @@ def build_dynamic_glossary(
         current_length += line_length
 
     if not selected:
-        return ""
+        return ''
 
-    return "\n".join(selected)
+    return '\n'.join(selected)
 
-def _is_stopped(check):
-    try:
-        return bool(check and check())
-    except Exception:
-        return False
 
 async def translate_chunk_safe_async(
     chunk,
@@ -234,32 +420,26 @@ async def translate_chunk_safe_async(
         dicts = {}
 
     lines = chunk.splitlines(keepends=True)
-
     if not lines:
-        return "", 0, False
+        return '', 0, False
 
     if _is_stopped(check):
         if log_callback:
-            log_callback(f"[{chunk_idx} - ] [{depth}] 중지: 번역 시작 전 작업 중지")
+            log_callback(f'[{chunk_idx} - {model_name}] [{depth}] 중지: 번역 시작 전 작업 중지')
         return None, 0, True
 
     force_split = br_start > 0
 
     if not force_split and get_japanese_ratio(chunk) < 0.03:
         if log_callback:
-            log_callback(
-                f"[{chunk_idx} - ] [{depth}] [시도 0] "
-                f"원문의 일본어 비율이 너무 낮아 번역 생략"
-            )
+            log_callback(f'[{chunk_idx} - {model_name}] [{depth}] [시도 0] 원문의 일본어 비율이 너무 낮아 번역 생략')
         return chunk, len(lines), False
 
     current_chunk = chunk
     is_censored = False
 
     if raw:
-        expected_delimiter_count = len(
-            re.findall(r'^={4,}$', chunk, re.MULTILINE)
-        )
+        expected_delimiter_count = len(re.findall(r'^={4,}$', chunk, re.MULTILINE))
     else:
         expected_delimiter_count = chunk.count(_G)
 
@@ -268,134 +448,82 @@ async def translate_chunk_safe_async(
     while not force_split and attempt <= max_retries:
         if _is_stopped(check):
             if log_callback:
-                log_callback(
-                    f"[{chunk_idx} - ] [{depth}] 중지: "
-                    f"다음 API 요청을 실행하지 않습니다."
-                )
+                log_callback(f'[{chunk_idx} - {model_name}] [{depth}] 중지: 다음 API 요청을 실행하지 않습니다.')
             return None, 0, True
 
-        censored_label = "검열" if is_censored else ""
-
-        prefix_log = (
-            f"[{chunk_idx} - {censored_label}] "
-            f"[{depth}] [시도 {attempt}/{max_retries}]"
-        )
+        censored_label = '검열' if is_censored else ''
+        prefix_log = f'[{chunk_idx} - {model_name} - {censored_label}] [{depth}] [시도 {attempt}/{max_retries}]'
 
         await rate_limiter.wait()
 
         if _is_stopped(check):
             if log_callback:
-                log_callback(
-                    f"{prefix_log} 중지: "
-                    f"API 호출 직전 작업 중지"
-                )
+                log_callback(f'{prefix_log} 중지: API 호출 직전 작업 중지')
             return None, 0, True
 
         if log_callback:
-            log_callback(
-                f"{prefix_log} 번역 시작: "
-                f"(라인 수: {len(lines)})"
-            )
+            log_callback(f'{prefix_log} 번역 시작: (라인 수: {len(lines)})')
 
         try:
             if raw:
                 system_prompt = SYSTEM_PROMPT_RAW
             else:
-                system_prompt = (
-                    SYSTEM_PROMPT
-                    if _G in chunk
-                    else SYSTEM_PROMPT_NO_SPLIT
-                )
+                system_prompt = SYSTEM_PROMPT if _G in chunk else SYSTEM_PROMPT_NO_SPLIT
 
-            if CUSTOM_AI_PROMPT != "":
-                system_prompt += (
-                    f"\n\n[사용자 지정 추가 지침]\n"
-                    f"{CUSTOM_AI_PROMPT}\n\n"
-                )
+            if CUSTOM_AI_PROMPT != '':
+                system_prompt += f"""
+
+[사용자 지정 추가 지침]
+{CUSTOM_AI_PROMPT}
+
+"""
 
             if dicts:
-                glossary_value = build_dynamic_glossary(
-                    chunk,
-                    dicts
-                )
-
+                glossary_value = build_dynamic_glossary(chunk, dicts)
                 if glossary_value:
-                    system_prompt += (
-                        "\n\n"
-                        + GLOSSARY_CONTEXT.format(
-                            glossary=glossary_value
-                        )
-                    )
-
-                    glossary_log = ", ".join(
-                        glossary_value.splitlines()
-                    )
-
+                    system_prompt += '\n\n' + GLOSSARY_CONTEXT.format(glossary=glossary_value)
+                    glossary_log = ', '.join(glossary_value.splitlines())
                     if len(glossary_log) > 40:
-                        glossary_log = glossary_log[:40] + "..."
-
+                        glossary_log = glossary_log[:40] + '...'
                     if log_callback:
-                        log_callback(
-                            f"{prefix_log} 용어집 사용: "
-                            f"{glossary_log}"
-                        )
+                        log_callback(f'{prefix_log} 용어집 사용: {glossary_log}')
 
             response = await client.aio.models.generate_content(
                 model=model_name,
-                contents=f"번역:\n{current_chunk}",
+                contents=f'번역:\n{current_chunk}',
                 config=types.GenerateContentConfig(
                     system_instruction=system_prompt,
                     temperature=temperature,
                     top_p=0.8,
-                    safety_settings=safety_settings,
-                ),
+                    safety_settings=safety_settings
+                )
             )
 
             if response and response.text:
                 res_text = response.text.strip()
-
-                res_text = (
-                    res_text
-                    .replace("「", "“")
-                    .replace("」", "”")
-                    .replace("｢", "“")
-                    .replace("｣", "”")
-                )
+                res_text = res_text.replace('「', '“').replace('」', '”').replace('｢', '“').replace('｣', '”')
 
                 if not raw and _G in chunk:
                     actual_delimiter_count = res_text.count(_G)
-
                     if actual_delimiter_count != expected_delimiter_count:
                         if log_callback:
                             log_callback(
                                 f"{prefix_log} 경고: '+---+' 개수 불일치 "
-                                f"(기대: {expected_delimiter_count}, "
-                                f"결과: {actual_delimiter_count}) -> 재시도"
+                                f'(기대: {expected_delimiter_count}, 결과: {actual_delimiter_count}) -> 재시도'
                             )
-
                         current_chunk = chunk
                         is_censored = False
                         attempt += 1
                         continue
 
-                if raw and "====" in chunk:
-                    actual_delimiter_count = len(
-                        re.findall(
-                            r'^={4,}$',
-                            res_text,
-                            re.MULTILINE
-                        )
-                    )
-
+                if raw and '====' in chunk:
+                    actual_delimiter_count = len(re.findall(r'^={4,}$', res_text, re.MULTILINE))
                     if actual_delimiter_count != expected_delimiter_count:
                         if log_callback:
                             log_callback(
-                                f"{prefix_log} 경고: "
-                                f"'====...' 라인 개수 불일치 "
-                                f"(기대: {expected_delimiter_count}, "
-                                f"결과: {actual_delimiter_count}) -> 재시도"
+                                f"{prefix_log} 경고: '====...' 라인 개수 불일치 "
+                                f'(기대: {expected_delimiter_count}, 결과: {actual_delimiter_count}) -> 재시도'
                             )
-
                         current_chunk = chunk
                         is_censored = False
                         attempt += 1
@@ -411,7 +539,7 @@ async def translate_chunk_safe_async(
                     min_line_ratio = 30.0
                 elif text_len < 600:
                     min_ko_ratio = 70.0
-                    max_jp_ratio = 3
+                    max_jp_ratio = 3.0
                     min_line_ratio = 70.0
                 elif text_len < 1500:
                     min_ko_ratio = 75.0
@@ -427,56 +555,33 @@ async def translate_chunk_safe_async(
                     min_line_ratio = 90.0
 
                 if raw:
-                    line_ratio = get_linebreak_preservation_ratio(
-                        chunk,
-                        res_text
-                    )
-
-                    success = (
-                        jp_ratio < max_jp_ratio
-                        and ko_ratio >= min_ko_ratio
-                        and line_ratio >= min_line_ratio
-                    )
+                    line_ratio = get_linebreak_preservation_ratio(chunk, res_text)
+                    success = jp_ratio < max_jp_ratio and ko_ratio >= min_ko_ratio and line_ratio >= min_line_ratio
                 else:
                     line_ratio = 100.0
-
-                    success = (
-                        jp_ratio < max_jp_ratio
-                        and ko_ratio >= min_ko_ratio
-                    )
+                    success = jp_ratio < max_jp_ratio and ko_ratio >= min_ko_ratio
 
                 if success:
                     if log_callback:
                         if raw:
-                            log_callback(
-                                f"{prefix_log} -> 성공: "
-                                f"(줄바꿈 보존율: {line_ratio:.2f}%)"
-                            )
+                            log_callback(f'{prefix_log} -> 성공: (줄바꿈 보존율: {line_ratio:.2f}%)')
                         else:
-                            log_callback(
-                                f"{prefix_log} -> 성공: 완료"
-                            )
-
+                            log_callback(f'{prefix_log} -> 성공: 완료')
                     return res_text, len(lines), False
 
                 if log_callback:
                     if raw:
                         log_callback(
-                            f"{prefix_log} 경고: 번역 조건 미달 "
-                            f"(한글: {ko_ratio:.2f}% "
-                            f"[기준 {min_ko_ratio}%], "
-                            f"일어: {jp_ratio:.2f}% "
-                            f"[기준 <{max_jp_ratio}%], "
-                            f"줄바꿈: {line_ratio:.2f}% "
-                            f"[기준 {min_line_ratio}%]) -> 재시도"
+                            f'{prefix_log} 경고: 번역 조건 미달 '
+                            f'(한글: {ko_ratio:.2f}% [기준 {min_ko_ratio}%], '
+                            f'일어: {jp_ratio:.2f}% [기준 <{max_jp_ratio}%], '
+                            f'줄바꿈: {line_ratio:.2f}% [기준 {min_line_ratio}%]) -> 재시도'
                         )
                     else:
                         log_callback(
-                            f"{prefix_log} 경고: 번역 조건 미달 "
-                            f"(한글: {ko_ratio:.2f}% "
-                            f"[기준 {min_ko_ratio}%], "
-                            f"일어: {jp_ratio:.2f}% "
-                            f"[기준 <{max_jp_ratio}%]) -> 재시도"
+                            f'{prefix_log} 경고: 번역 조건 미달 '
+                            f'(한글: {ko_ratio:.2f}% [기준 {min_ko_ratio}%], '
+                            f'일어: {jp_ratio:.2f}% [기준 <{max_jp_ratio}%]) -> 재시도'
                         )
 
                 current_chunk = chunk
@@ -485,10 +590,7 @@ async def translate_chunk_safe_async(
 
             else:
                 if log_callback:
-                    log_callback(
-                        f"{prefix_log} 경고: API 응답이 비어있음 "
-                        f"-> 검열 실행"
-                    )
+                    log_callback(f'{prefix_log} 경고: API 응답이 비어있음 -> 검열 실행')
 
                 if is_censored:
                     attempt += 1
@@ -501,63 +603,57 @@ async def translate_chunk_safe_async(
         except Exception as e:
             if _is_stopped(check):
                 if log_callback:
-                    log_callback(
-                        f"{prefix_log} 중지: "
-                        f"현재 API 요청 종료 후 중지"
-                    )
+                    log_callback(f'{prefix_log} 중지: 현재 API 요청 종료 후 중지')
                 return None, 0, True
 
             if log_callback:
                 log_callback(
-                    f"{prefix_log} 오류: API 호출 중 예외 발생: "
-                    f"{e} -> 재시도. 원래 대기 시간에 3배 대기"
+                    f'{prefix_log} 오류: API 호출 중 예외 발생: {e} -> 재시도. '
+                    '원래 대기 시간에 3배 대기'
                 )
-                await rate_limiter.wait()
-                await rate_limiter.wait()
+
+            await rate_limiter.wait()
+            await rate_limiter.wait()
 
             is_censored = False
             attempt += 1
 
     if _is_stopped(check):
         if log_callback:
-            log_callback(
-                f"[{chunk_idx} - ] [{depth}] 중지: "
-                f"분할 작업을 실행하지 않습니다."
-            )
+            log_callback(f'[{chunk_idx} - {model_name}] [{depth}] 중지: 분할 작업을 실행하지 않습니다.')
         return None, 0, True
 
     if len(lines) <= 2 or depth >= 4:
         if log_callback:
             log_callback(
-                f"[{chunk_idx} - ] [{depth}] 오류: "
-                f"[최대초과] 최대 재시도 초과 및 분할 한계 도달 "
-                f"-> 원문 유지"
+                f'[{chunk_idx} - {model_name}] [{depth}] 오류: '
+                '[최대초과] 최대 재시도 초과 및 분할 한계 도달 -> 원문 유지'
             )
         return chunk, len(lines), False
 
     mid = len(lines) // 2
 
-    if log_callback and not force_split:
+    if log_callback:
+        split_type = f"[강제분할: 남은단계 {br_start}]" if force_split else "[경고: 분할]"
         log_callback(
-            f"[{chunk_idx} - ] [{depth}] 경고: [분할] "
-            f"청크 분할 처리 "
-            f"(전반부 {mid}줄, 후반부 {len(lines) - mid}줄)"
+            f'[{chunk_idx} - {model_name}] [{depth}] {split_type} '
+            f'청크 분할 처리 (전반부 {mid}줄, 후반부 {len(lines)-mid}줄)'
         )
 
     part1_text, part1_len, part1_ignore = await translate_chunk_safe_async(
-        "".join(lines[:mid]),
-        model_name,
-        safety_settings,
-        rate_limiter,
-        temperature,
-        max_retries,
-        depth + 1,
-        log_callback,
-        chunk_idx,
-        raw,
-        dicts,
-        check,
-        br_start=br_start-1
+        chunk=''.join(lines[:mid]),
+        model_name=model_name,
+        safety_settings=safety_settings,
+        rate_limiter=rate_limiter,
+        temperature=temperature,
+        max_retries=max_retries,
+        depth=depth + 1,
+        log_callback=log_callback,
+        chunk_idx=chunk_idx,
+        raw=raw,
+        dicts=dicts,
+        check=check,
+        br_start=max(0, br_start - 1)
     )
 
     if part1_ignore:
@@ -570,19 +666,19 @@ async def translate_chunk_safe_async(
         return part1_text, len(lines[:mid]), True
 
     part2_text, part2_len, part2_ignore = await translate_chunk_safe_async(
-        "".join(lines[mid:]),
-        model_name,
-        safety_settings,
-        rate_limiter,
-        temperature,
-        max_retries,
-        depth + 1,
-        log_callback,
-        chunk_idx,
-        raw,
-        dicts,
-        check,
-        br_start=br_start-1
+        chunk=''.join(lines[mid:]),
+        model_name=model_name,
+        safety_settings=safety_settings,
+        rate_limiter=rate_limiter,
+        temperature=temperature,
+        max_retries=max_retries,
+        depth=depth + 1,
+        log_callback=log_callback,
+        chunk_idx=chunk_idx,
+        raw=raw,
+        dicts=dicts,
+        check=check,
+        br_start=max(0, br_start - 1)
     )
 
     if part2_ignore:
@@ -591,35 +687,23 @@ async def translate_chunk_safe_async(
     if part2_text is None:
         return part1_text, len(lines[:mid]), True
 
-    return (
-        part1_text.rstrip(_B)
-        + _B
-        + part2_text.lstrip(_B),
-        len(lines),
-        False
-    )
+    return part1_text.rstrip(_B) + _B + part2_text.lstrip(_B), len(lines), False
 
 
 def detect_raw_text(text):
     lines = text.splitlines()
-
-    return (
-        len(lines) >= 3
-        and lines[2].strip().lower() == "(raw)"
-    )
+    return len(lines) >= 3 and lines[2].strip().lower() == '(raw)'
 
 
 def prepare_raw_text(text):
     lines = text.splitlines(keepends=True)
 
-    if len(lines) < 3 or lines[2].strip().lower() != "(raw)":
-        return text, "제목 미정"
+    if len(lines) < 3 or lines[2].strip().lower() != '(raw)':
+        return text, '제목 미정'
 
     book_title = lines[0].strip()
     author = lines[1].strip()
-
-    title = book_title + "_" + author
-
+    title = book_title + '_' + author
     delimiter_index = None
 
     for i, line in enumerate(lines):
@@ -632,8 +716,7 @@ def prepare_raw_text(text):
     else:
         body_start = 5
 
-    raw_body = "".join(lines[body_start:])
-
+    raw_body = ''.join(lines[body_start:])
     return raw_body, title
 
 
@@ -654,253 +737,189 @@ async def _translate_light_novel_async(
 ):
     if API == _E:
         if log_callback:
-            log_callback(
-                "에러: API 키가 설정되지 않았습니다."
-            )
+            log_callback('에러: API 키가 설정되지 않았습니다.')
+        return 'error'
 
-        return "error"
+    try:
+        workers = _create_model_workers(model_name, rpm, max_concurrent, temperature, br_start)
+    except Exception as e:
+        if log_callback:
+            log_callback(f'에러: 모델 설정 오류: {e}')
+        return 'error'
 
-    chunks = split_text_by_lines(
-        text,
-        max_chars=max_chars
-    )
-
+    chunks = split_text_by_lines(text, max_chars=max_chars)
     translated_parts = [None] * len(chunks)
-    translated_parts_raw = [None] * len(chunks)
+    out = down.downin.base_data.OUTFOLDER + '/'
+    os.makedirs(f'{out}trs', exist_ok=_C)
+    os.makedirs(f'{out}epub', exist_ok=_C)
+    os.makedirs(f'{out}epub\\raw_txt', exist_ok=_C)
+    safe = re.sub(_I, '_', title).strip()
+    ai_dir = f'{out}trs\\ai_down_{safe}_{max_chars}'
+    os.makedirs(ai_dir, exist_ok=_C)
 
-    out = down.downin.base_data.OUTFOLDER + "/"
-
-    os.makedirs(
-        f"{out}trs",
-        exist_ok=_C
+    model_info = ', '.join(
+        f'{worker.model_name}(RPM={worker.rpm},동시={worker.max_concurrent},온도={worker.temperature},분할={worker.br_start})'
+        for worker in workers
     )
-
-    os.makedirs(
-        f"{out}epub",
-        exist_ok=_C
-    )
-
-    os.makedirs(
-        f"{out}epub\\raw_txt",
-        exist_ok=_C
-    )
-
-    safe = re.sub(
-        _I,
-        "_",
-        title
-    ).strip()
-
-    ai_dir = (
-        f"{out}trs\\"
-        f"ai_down_{safe}_{max_chars}"
-    )
-
-    os.makedirs(
-        ai_dir,
-        exist_ok=_C
-    )
-
-    msg = (
-        f"총 {len(chunks)}개 청크 분할 완료 "
-        f"(청크 크기: {max_chars}). "
-        f"사용 모델: {model_name}, "
-        f"동시 작업수: {max_concurrent}, "
-        f"RAW: {raw}"
-    )
-
+    msg = f'총 {len(chunks)}개 청크 분할 완료 (청크 크기: {max_chars}). 사용 모델: {model_info}, RAW: {raw}'
     print(msg)
-
     if log_callback:
         log_callback(msg)
 
     safety_settings = get_safety_settings()
-    rate_limiter = AsyncRateLimiter(rpm)
-
-    concurrency_limit = max(
-        1,
-        min(15, max_concurrent)
-    )
-
-    semaphore = asyncio.Semaphore(
-        concurrency_limit
-    )
+    queue = asyncio.Queue()
+    for idx, chunk in enumerate(chunks, 1):
+        await queue.put((idx, chunk))
 
     completed_count = 0
     ignored = False
     lock = asyncio.Lock()
 
-    async def process_chunk(idx, chunk):
+    async def process_chunk(idx, chunk, worker):
         nonlocal completed_count, ignored
-
         if _is_stopped(check):
             if log_callback:
-                log_callback(
-                    f"[{idx}/{len(chunks)}] 중지: "
-                    f"대기 중인 청크 건너뜀"
-                )
+                log_callback(f'[{idx}/{len(chunks)}] [{worker.model_name}] 중지: 대기 중인 청크 건너뜀')
             return
 
-        file_path = f"{ai_dir}/{idx}.txt"
+        file_path = f'{ai_dir}/{idx}.txt'
 
         if os.path.exists(file_path):
-            with open(file_path, "r", encoding=_A) as f:
-                saved_text = f.read()
+            try:
+                with open(file_path, 'r', encoding=_A) as f:
+                    saved_text = f.read()
+                if saved_text and not saved_text.startswith('[번역 실패'):
+                    skip_msg = f'[{idx}/{len(chunks)}] [{worker.model_name}] 이미 저장된 파일 존재 → 건너뜀'
+                    if log_callback:
+                        log_callback(skip_msg)
+                    async with lock:
+                        translated_parts[idx - 1] = saved_text
+                        completed_count += 1
+                        if progress_callback:
+                            progress_callback(completed_count, len(chunks), f'{completed_count}/{len(chunks)} 청크 완료')
+                    return
+            except Exception:
+                pass
 
-            if saved_text and not saved_text.startswith("[번역 실패"):
-                skip_msg = (
-                    f"[{idx}/{len(chunks)}] "
-                    f"이미 저장된 파일 존재 → 건너뜀"
-                )
-
-                if log_callback:
-                    log_callback(skip_msg)
-
-                async with lock:
-                    translated_parts[idx - 1] = saved_text
-                    translated_parts_raw[idx - 1] = saved_text
-                    completed_count += 1
-
-                    if progress_callback:
-                        progress_callback(
-                            completed_count,
-                            len(chunks),
-                            f"{completed_count}/{len(chunks)} 청크 완료"
-                        )
-
-                return
-
-        async with semaphore:
+        result_ignore_back = False
+        try:
             if _is_stopped(check):
                 if log_callback:
-                    log_callback(
-                        f"[{idx}/{len(chunks)}] 중지: "
-                        f"실행 대기 중 청크 건너뜀"
-                    )
+                    log_callback(f'[{idx}/{len(chunks)}] [{worker.model_name}] 실행 대기 중 청크 건너뜀')
                 return
-            result_ignore_back = False
-            try:
-                result_text, result_lines, result_ignore = await translate_chunk_safe_async(
-                    chunk=chunk,
-                    model_name=model_name,
-                    safety_settings=safety_settings,
-                    rate_limiter=rate_limiter,
-                    temperature=temperature,
-                    log_callback=log_callback,
-                    chunk_idx=idx,
-                    raw=raw,
-                    dicts=dicts,
-                    check=check,
-                    br_start=br_start
-                )
 
-                if result_ignore:
-                    result_ignore_back = result_ignore
-                    async with lock:
-                        ignored = True
-                    return
-
-                with open(file_path, "w", encoding=_A) as f:
-                    f.write(result_text)
-
-                async with lock:
-                    translated_parts[idx - 1] = result_text
-                    translated_parts_raw[idx - 1] = result_text
-
-                if log_callback:
-                    log_callback(
-                        f"[{idx}/{len(chunks)}] "
-                        f"청크 번역 완료: 성공"
-                    )
-
-            except Exception as e:
-                if log_callback:
-                    log_callback(
-                        f" └ [{idx}번 청크] "
-                        f"번역 최종 실패: {e}"
-                    )
-
-                err_text = (
-                    f"\n+---+\n"
-                    f"[번역 실패: {idx}번째 청크]\n"
-                    f"error+---+\n"
-                    f"error 청크 next\n"
-                )
-
-                async with lock:
-                    translated_parts[idx - 1] = err_text
-                    translated_parts_raw[idx - 1] = chunk
-
-                error_path = f"{ai_dir}/{idx}_error.txt"
-
-                with open(error_path, "w", encoding=_A) as f:
-                    f.write(chunk)
-
-            finally:
-                async with lock:
-                    if not result_ignore_back:
-                        completed_count += 1
-
-                        if progress_callback:
-                            progress_callback(
-                                completed_count,
-                                len(chunks),
-                                f"{completed_count}/{len(chunks)} 청크 완료"
-                            )
-
-    tasks = [
-        process_chunk(idx, chunk)
-        for idx, chunk in enumerate(chunks, 1)
-    ]
-
-    await asyncio.gather(*tasks)
-
-    if ignored:
-        return "ignore"
-
-    json_path = (
-        f"{out}trs\\"
-        f"save_{safe} _ {max_chars}.json"
-    )
-    if not check():
-        save_translation_json(
-            translated_parts_raw,
-            max_chars,
-            title,
-            json_path,
-            raw=raw,
-            br_start=br_start
-        )
-
-    if raw:
-        txt_path = (
-            f"{out}epub\\raw_txt\\"
-            f"{safe}.txt"
-        )
-
-        if "_" in title:
-            book_title, author = title.rsplit("_", 1)
-        else:
-            book_title = title
-            author = ""
-
-        r_title = (
-            f"{book_title}\n"
-            f"{author}\n"
-            f"(raw)\n"
-            f"{_K}"
-            f"{book_title} | {author}\n\n"
-        )
-        if not check():
-            save_translation_txt(
-                translated_parts_raw,
-                r_title,
-                txt_path
+            result_text, result_lines, result_ignore = await translate_chunk_safe_async(
+                chunk=chunk,
+                model_name=worker.model_name,
+                safety_settings=safety_settings,
+                rate_limiter=worker.rate_limiter,
+                temperature=worker.temperature,
+                log_callback=log_callback,
+                chunk_idx=idx,
+                raw=raw,
+                dicts=dicts,
+                check=check,
+                br_start=worker.br_start
             )
 
-    return "\n\n".join(
-        p for p in translated_parts if p
-    )
+            if result_text is not None and not result_ignore:
+                try:
+                    with open(file_path, 'w', encoding=_A) as f:
+                        f.write(result_text)
+                    async with lock:
+                        translated_parts[idx - 1] = result_text
+                except Exception as save_err:
+                    if log_callback:
+                        log_callback(f'[{idx}번 청크] 임시 파일 저장 실패: {save_err}')
+
+            if result_ignore or result_text is None or _is_stopped(check):
+                result_ignore_back = True
+                async with lock:
+                    ignored = True
+                return
+
+            if log_callback:
+                log_callback(f'[{idx}/{len(chunks)}] [{worker.model_name}] 청크 번역 완료: 성공')
+
+        except Exception as e:
+            if log_callback:
+                log_callback(f' └ [{idx}번 청크] [{worker.model_name}] 번역 최종 실패: {e}')
+
+            err_text = f'''
++---+
+
+[번역 실패: {idx}번째 청크]
+
+error+---+
+
+error 청크 next
+
+'''
+            async with lock:
+                translated_parts[idx - 1] = err_text
+
+            try:
+                error_path = f'{ai_dir}/{idx}_error.txt'
+                with open(error_path, 'w', encoding=_A) as f:
+                    f.write(chunk)
+            except Exception:
+                pass
+
+        finally:
+            if not result_ignore_back:
+                async with lock:
+                    completed_count += 1
+                    if progress_callback:
+                        progress_callback(completed_count, len(chunks), f'{completed_count}/{len(chunks)} 청크 완료')
+
+    async def model_worker(worker, worker_number):
+        while True:
+            if _is_stopped(check):
+                return
+            try:
+                idx, chunk = queue.get_nowait()
+            except asyncio.QueueEmpty:
+                return
+            try:
+                await process_chunk(idx, chunk, worker)
+            finally:
+                queue.task_done()
+
+    worker_tasks = []
+    for worker in workers:
+        for worker_number in range(worker.max_concurrent):
+            worker_tasks.append(asyncio.create_task(model_worker(worker, worker_number + 1)))
+
+    await asyncio.gather(*worker_tasks)
+
+    json_path = f'{out}trs\\save_{safe} _ {max_chars}.json'
+    try:
+        first_br = workers[0].br_start if workers else 0
+        save_translation_json(translated_parts, chunks, max_chars, title, json_path, raw=raw, br_start=first_br)
+    except Exception as e:
+        if log_callback:
+            log_callback(f'JSON 저장 실패: {e}')
+
+    if ignored or _is_stopped(check):
+        return 'ignore'
+
+    if raw:
+        txt_path = f'{out}epub\\raw_txt\\{safe}.txt'
+        if '_' in title:
+            book_title, author = title.rsplit('_', 1)
+        else:
+            book_title = title
+            author = ''
+        r_title = f'''{book_title}
+{author}
+(raw)
+{_K}{book_title} | {author}
+
+'''
+        if not _is_stopped(check):
+            save_translation_txt(translated_parts, r_title, txt_path)
+
+    return '\n\n'.join(p for p in translated_parts if p)
 
 
 def translate_light_novel(
@@ -910,7 +929,7 @@ def translate_light_novel(
     rpm=15,
     temperature=0.5,
     max_concurrent=4,
-    title="save",
+    title='save',
     progress_callback=_D,
     log_callback=_D,
     raw=False,
@@ -953,30 +972,16 @@ def TransAi_All(
     raw = detect_raw_text(txt)
 
     if raw:
-        # RAW 원본의 제목/작가를 원본에서 직접 가져온다.
-        # 이후 title을 "_" 기준으로 다시 분리하지 않는다.
         lines = txt.splitlines(keepends=True)
-
-        book_title = (
-            lines[0].strip()
-            if len(lines) > 0
-            else "제목 미정"
-        )
-
-        author = (
-            lines[1].strip()
-            if len(lines) > 1
-            else ""
-        )
+        book_title = lines[0].strip() if len(lines) > 0 else '제목 미정'
+        author = lines[1].strip() if len(lines) > 1 else ''
 
         raw_text, raw_title = prepare_raw_text(txt)
 
         if log_callback:
             log_callback(
-                f"RAW 번역 시작: 제목 '{book_title}', "
-                f"작가 '{author}', "
-                f"청크 크기: {max_chars}, "
-                f"동시 작업수: {max_concurrent}"
+                f"RAW 번역 시작: 제목 '{book_title}', 작가 '{author}', "
+                f'청크 크기: {max_chars}, 동시 작업수: {max_concurrent}'
             )
 
         translated_result = _K + translate_light_novel(
@@ -995,51 +1000,42 @@ def TransAi_All(
             br_start=br_start
         )
 
-        if translated_result == "ignore":
-            return "ignore"
+        if translated_result == 'ignore':
+            return 'ignore'
 
-        epub_text = (
-            f"{book_title}\n"
-            f"{author}\n"
-            f"(raw)\n"
-            f"{_K}"
-            f"{translated_result}"
-        )
-        if not check():
+        if translated_result == 'error':
+            return 'error'
+
+        epub_text = f'{book_title}\n{author}\n(raw)\n{_K}{translated_result}'
+
+        if not _is_stopped(check):
             down.create_epub_from_merged_txt(
                 txt_value=epub_text,
-                RAW=True,
+                RAW=True
             )
 
         return translated_result
 
-    A = "_번역\n"
+    A = '_번역\n'
 
     if _G in txt:
         split_pos = txt.find(_G)
-
         f = txt[:split_pos - 1]
         g = txt[split_pos + 6:]
     else:
-        f = "제목 미정"
+        f = '제목 미정'
         g = txt
 
     first_newline = f.find(_B)
-
     if first_newline == -1:
         t = f
     else:
-        t = (
-            f[:first_newline]
-            + "_"
-            + f[first_newline + 1:]
-        )
+        t = f[:first_newline] + '_' + f[first_newline + 1:]
 
     if log_callback:
         log_callback(
-            f"전체 번역 시작: 제목 '{t}', "
-            f"청크 크기: {max_chars}, "
-            f"동시 작업수: {max_concurrent}"
+            f"전체 번역 시작: 제목 '{t}', 청크 크기: {max_chars}, "
+            f'동시 작업수: {max_concurrent}'
         )
 
     translated_result = _K + translate_light_novel(
@@ -1058,26 +1054,19 @@ def TransAi_All(
         br_start=br_start
     )
 
-    if translated_result == "ignore":
-        return "ignore"
+    if translated_result == 'ignore':
+        return 'ignore'
+
+    if translated_result == 'error':
+        return 'error'
 
     title_end = f.find(_B)
-
     if title_end == -1:
-        epub_text = (
-            f
-            + A
-            + translated_result
-        )
+        epub_text = f + A + translated_result
     else:
-        epub_text = (
-            f[:title_end]
-            + A
-            + f[title_end + 1:]
-            + _B
-            + translated_result
-        )
-    if not check():
+        epub_text = f[:title_end] + A + f[title_end + 1:] + _B + translated_result
+
+    if not _is_stopped(check):
         down.create_epub_from_merged_txt(
             txt_value=epub_text,
             RAW=False
@@ -1098,445 +1087,226 @@ async def _TransAi_From_Json_async(
     check=None,
     br_start=0
 ):
-
     if _is_stopped(check):
         if log_callback:
-            log_callback("JSON 복원 중지: 작업 시작 전 중지되었습니다.")
-        return "ignore"
+            log_callback('JSON 복원 중지: 작업 시작 전 중지되었습니다.')
+        return 'ignore'
 
     if not os.path.exists(json_path):
-        msg = (
-            f"에러: JSON 파일을 찾을 수 없습니다 | "
-            f"{json_path}"
-        )
+        msg = f'에러: JSON 파일을 찾을 수 없습니다 | {json_path}'
         if log_callback:
             log_callback(msg)
-        return "error"
+        return 'error'
 
-    with open(
-        json_path,
-        "r",
-        encoding=_A
-    ) as f:
+    with open(json_path, 'r', encoding=_A) as f:
         data = json.load(f)
 
-    title = data.get(
-        "name",
-        "restored"
-    )
+    title = data.get('name', 'restored')
+    max_chars = data.get('chunk', 5000)
+    raw = bool(data.get('raw', False))
 
-    max_chars = data.get(
-        "chunk",
-        5000
-    )
+    try:
+        workers = _create_model_workers(model_name, rpm, max_concurrent, temperature, br_start)
+    except Exception as e:
+        if log_callback:
+            log_callback(f'에러: JSON 모델 설정 오류: {e}')
+        return 'error'
 
-    raw = bool(
-        data.get(
-            "raw",
-            False
-        )
-    )
-
-    out = down.downin.base_data.OUTFOLDER + "/"
-
-    os.makedirs(
-        f"{out}trs",
-        exist_ok=_C
-    )
-
-    safe = re.sub(
-        _I,
-        "_",
-        title
-    ).strip()
-
-    ai_dir = (
-        f"{out}trs\\"
-        f"ai_down_{safe}_{max_chars}"
-    )
-
-    os.makedirs(
-        ai_dir,
-        exist_ok=_C
-    )
+    out = down.downin.base_data.OUTFOLDER + '/'
+    os.makedirs(f'{out}trs', exist_ok=_C)
+    safe = re.sub(_I, '_', title).strip()
+    ai_dir = f'{out}trs\\ai_down_{safe}_{max_chars}'
+    os.makedirs(ai_dir, exist_ok=_C)
 
     safety_settings = get_safety_settings()
 
-    chunk_keys = sorted(
-        [
-            k for k in data.keys()
-            if k.isdigit()
-        ],
-        key=int
-    )
+    chunk_indices = sorted(list(set(
+        int(k[:-2]) if (k.endswith('-j') and k[:-2].isdigit()) else int(k)
+        for k in data.keys() if k.isdigit() or (k.endswith('-j') and k[:-2].isdigit())
+    )))
 
-    msg = (
-        f"[{title}] JSON 로드 완료 "
-        f"(청크 크기: {max_chars}, "
-        f"총 {len(chunk_keys)}개 청크 비동기 복원) "
-        f"/ 사용 모델: {model_name} "
-        f"/ RAW: {raw}"
+    model_info = ', '.join(
+        f'{worker.model_name}(RPM={worker.rpm},동시={worker.max_concurrent},온도={worker.temperature},분할={worker.br_start})'
+        for worker in workers
     )
-
+    msg = f'[{title}] JSON 로드 완료 (청크 크기: {max_chars}, 총 {len(chunk_indices)}개 청크 비동기 복원) / 사용 모델: {model_info} / RAW: {raw}'
     if log_callback:
         log_callback(msg)
 
-    translated_parts = [
-        None
-    ] * len(chunk_keys)
+    translated_parts = [None] * len(chunk_indices)
+    original_chunks = [None] * len(chunk_indices)
+    queue = asyncio.Queue()
 
-    translated_parts_raw = [
-        None
-    ] * len(chunk_keys)
-
-    rate_limiter = AsyncRateLimiter(rpm)
-
-    concurrency_limit = max(
-        1,
-        min(15, max_concurrent)
-    )
-
-    semaphore = asyncio.Semaphore(
-        concurrency_limit
-    )
+    for pos, chunk_idx in enumerate(chunk_indices, 1):
+        trans_text = data.get(str(chunk_idx))
+        orig_text = data.get(f"{chunk_idx}-j")
+        if orig_text is None and trans_text is not None:
+            orig_text = trans_text
+        await queue.put((pos, chunk_idx, trans_text, orig_text))
 
     completed_count = 0
     ignored = False
     lock = asyncio.Lock()
 
-    async def process_json_chunk(
-        pos,
-        key,
-        dicts
-    ):
+    async def process_json_chunk(pos, chunk_idx, trans_text, orig_text, worker):
         nonlocal completed_count, ignored
-
         result_ignore_back = False
-
         try:
             if _is_stopped(check):
                 result_ignore_back = True
-
                 async with lock:
                     ignored = True
-
                 if log_callback:
-                    log_callback(
-                        f"[{pos}/{len(chunk_keys)}] "
-                        f"JSON 복원 중지 → 청크 건너뜀"
-                    )
-
+                    log_callback(f'[{pos}/{len(chunk_indices)}] [{worker.model_name}] JSON 복원 중지 → 청크 건너뜀')
                 return
 
-            idx = int(key) + 1
+            display_idx = chunk_idx + 1
+            file_path = f'{ai_dir}/{display_idx}.txt'
 
-            chunk_text = data[key]
+            need_translate = False
+            source_to_use = orig_text if orig_text else trans_text
 
-            if not isinstance(
-                chunk_text,
-                str
-            ):
-                chunk_text = str(chunk_text)
+            if not trans_text or str(trans_text).startswith('[번역 실패'):
+                need_translate = True
+            else:
+                jp_ratio = get_japanese_ratio(str(trans_text))
+                if jp_ratio >= 0.1:
+                    need_translate = True
 
-            chunk_text = (
-                chunk_text
-                .replace("%'%", '"')
-                .replace("\\\n", _B)
-            )
+            if need_translate:
+                if not source_to_use:
+                    source_to_use = ''
+                clean_source = str(source_to_use).replace("%'%", '"').replace('\\\n', _B)
+                jp_ratio_orig = get_japanese_ratio(clean_source)
 
-            file_path = (
-                f"{ai_dir}/{idx}.txt"
-            )
-
-            jp_ratio = get_japanese_ratio(
-                chunk_text
-            )
-
-            if jp_ratio >= 0.1:
-
-                re_msg = (
-                    f"[{idx}/{len(chunk_keys)}] "
-                    f"재번역 필요: "
-                    f"일본어 비율 {jp_ratio:.4f}%"
-                )
-
+                re_msg = f'[{pos}/{len(chunk_indices)}] [{worker.model_name}] 원문 번역 실행 (인덱스 {chunk_idx}, 원문 일어 비율 {jp_ratio_orig:.2f}%)'
                 if log_callback:
                     log_callback(re_msg)
 
-                async with semaphore:
-                    try:
-                        (
-                            result_text,
-                            result_lines,
-                            result_ignore
-                        ) = await translate_chunk_safe_async(
-                            chunk=chunk_text,
-                            model_name=model_name,
-                            safety_settings=safety_settings,
-                            rate_limiter=rate_limiter,
-                            temperature=temperature,
-                            log_callback=log_callback,
-                            chunk_idx=idx,
-                            raw=raw,
-                            dicts=dicts,
-                            check=check,
-                            br_start=br_start
-                        )
-
-                        if result_ignore:
-                            result_ignore_back = True
-
-                            async with lock:
-                                ignored = True
-
-                            if log_callback:
-                                log_callback(
-                                    f" └ [{idx}번 청크] "
-                                    f"JSON 복원 무시 → "
-                                    f"청크 완료 처리하지 않습니다."
-                                )
-
-                            return
-
-                        if result_text is None:
-                            result_ignore_back = True
-
-                            async with lock:
-                                ignored = True
-
-                            if log_callback:
-                                log_callback(
-                                    f" └ [{idx}번 청크] "
-                                    f"번역 결과 없음 → "
-                                    f"청크 완료 처리하지 않습니다."
-                                )
-
-                            return
-
-                    except Exception as e:
-                        if _is_stopped(check):
-                            result_ignore_back = True
-
-                            async with lock:
-                                ignored = True
-
-                            if log_callback:
-                                log_callback(
-                                    f" └ [{idx}번 청크] "
-                                    f"JSON 복원 중지됨 → 저장하지 않습니다."
-                                )
-
-                            return
-
-                        if log_callback:
-                            log_callback(
-                                f" └ [{idx}번 청크] "
-                                f"재번역 실패: {e}"
-                            )
-
-                        result_text = chunk_text
-
-            else:
-
-                if log_callback:
-                    log_callback(
-                        f"[{idx}/{len(chunk_keys)}] "
-                        f"청크 통과: "
-                        f"일본어 비율 {jp_ratio:.4f}%"
+                try:
+                    result_text, result_lines, result_ignore = await translate_chunk_safe_async(
+                        chunk=clean_source,
+                        model_name=worker.model_name,
+                        safety_settings=safety_settings,
+                        rate_limiter=worker.rate_limiter,
+                        temperature=worker.temperature,
+                        log_callback=log_callback,
+                        chunk_idx=display_idx,
+                        raw=raw,
+                        dicts=dicts,
+                        check=check,
+                        br_start=worker.br_start
                     )
+                    if result_ignore or result_text is None:
+                        result_ignore_back = True
+                        async with lock:
+                            ignored = True
+                        if log_callback:
+                            log_callback(f' └ [{display_idx}번 청크] [{worker.model_name}] 번역 결과 없음/무시됨')
+                        return
+                except Exception as e:
+                    if log_callback:
+                        log_callback(f' └ [{display_idx}번 청크] [{worker.model_name}] 재번역 실패: {e}')
+                    result_text = clean_source
+            else:
+                if log_callback:
+                    log_callback(f'[{pos}/{len(chunk_indices)}] [{worker.model_name}] 기존 번역 청크 통과 (인덱스 {chunk_idx})')
+                result_text = str(trans_text).replace("%'%", '"').replace('\\\n', _B)
 
-                result_text = chunk_text
+            try:
+                with open(file_path, 'w', encoding=_A) as f_out:
+                    f_out.write(result_text)
+            except Exception as e:
+                if log_callback:
+                    log_callback(f' └ [{display_idx}번 청크] 파일 저장 오류: {e}')
+
+            async with lock:
+                translated_parts[pos - 1] = result_text
+                original_chunks[pos - 1] = orig_text if orig_text is not None else result_text
 
             if _is_stopped(check):
                 result_ignore_back = True
-
                 async with lock:
                     ignored = True
-
-                if log_callback:
-                    log_callback(
-                        f" └ [{idx}번 청크] "
-                        f"저장 직전 중지됨 → 저장하지 않습니다."
-                    )
-
                 return
-
-            with open(
-                file_path,
-                "w",
-                encoding=_A
-            ) as f_out:
-                f_out.write(result_text)
-
-            async with lock:
-                translated_parts_raw[pos - 1] = result_text
-                translated_parts[pos - 1] = result_text
 
         except Exception as e:
-
-            if _is_stopped(check):
-                result_ignore_back = True
-
-                async with lock:
-                    ignored = True
-
-                if log_callback:
-                    log_callback(
-                        f" └ [{pos}번 청크] "
-                        f"JSON 복원 중지됨 → 저장하지 않습니다."
-                    )
-
-                return
-
             if log_callback:
-                log_callback(
-                    f" └ [{pos}번 청크] "
-                    f"JSON 복원 처리 실패: {e}"
-                )
-
+                log_callback(f' └ [{pos}번 청크] [{worker.model_name}] JSON 복원 처리 실패: {e}')
         finally:
+            if not result_ignore_back:
+                async with lock:
+                    completed_count += 1
+                    if progress_callback:
+                        progress_callback(completed_count, len(chunk_indices), f'{completed_count}/{len(chunk_indices)} 청크 완료')
 
-            if result_ignore_back:
+    async def model_worker(worker, worker_number):
+        while True:
+            if _is_stopped(check):
                 return
+            try:
+                pos, chunk_idx, trans_text, orig_text = queue.get_nowait()
+            except asyncio.QueueEmpty:
+                return
+            try:
+                await process_json_chunk(pos, chunk_idx, trans_text, orig_text, worker)
+            finally:
+                queue.task_done()
 
-            async with lock:
-                completed_count += 1
+    worker_tasks = []
+    for worker in workers:
+        for worker_number in range(worker.max_concurrent):
+            worker_tasks.append(asyncio.create_task(model_worker(worker, worker_number + 1)))
 
-                if progress_callback:
-                    progress_callback(
-                        completed_count,
-                        len(chunk_keys),
-                        f"{completed_count}/{len(chunk_keys)} "
-                        f"청크 완료"
-                    )
+    await asyncio.gather(*worker_tasks)
 
-    tasks = [
-        process_json_chunk(
-            pos,
-            key,
-            dicts
-        )
-        for pos, key in enumerate(
-            chunk_keys,
-            1
-        )
-    ]
-
-    await asyncio.gather(
-        *tasks
-    )
+    os.makedirs(f'{out}trs', exist_ok=_C)
+    save_path = f'{out}trs\\save_{safe}_{max_chars}_복원.json'
+    try:
+        first_br = workers[0].br_start if workers else 0
+        save_translation_json(translated_parts, original_chunks, max_chars, f'{title}_복원', save_path, raw=raw, br_start=first_br)
+    except Exception as e:
+        if log_callback:
+            log_callback(f'복원 JSON 파일 저장 실패: {e}')
 
     if ignored or _is_stopped(check):
         if log_callback:
-            log_callback(
-                "JSON 복원 중지됨 → "
-                "복원 JSON/TXT 저장 및 EPUB 변환을 실행하지 않습니다."
-            )
-        return "ignore"
+            log_callback('JSON 복원 중지됨 → EPUB 변환은 생략합니다.')
+        return 'ignore'
 
-    final_result = "\n\n".join(
-        p
-        for p in translated_parts
-        if p
-    )
-
-    os.makedirs(
-        f"{out}trs",
-        exist_ok=_C
-    )
-
-    save_path = (
-        f"{out}trs\\"
-        f"save_{safe}_{max_chars}_복원.json"
-    )
-
-    if not _is_stopped(check):
-        save_translation_json(
-            translated_parts_raw,
-            max_chars,
-            f"{title}_복원",
-            save_path,
-            raw=raw,
-            br_start=br_start,
-        )
+    final_result = '\n\n'.join(p for p in translated_parts if p)
 
     if raw:
-
-        os.makedirs(
-            f"{out}epub",
-            exist_ok=_C
-        )
-
-        os.makedirs(
-            f"{out}epub\\raw_txt",
-            exist_ok=_C
-        )
-
-        txt_path = (
-            f"{out}epub\\raw_txt\\"
-            f"{safe}_복원.txt"
-        )
-
-        if "_" in title:
-            book_title, author = title.rsplit(
-                "_",
-                1
-            )
+        os.makedirs(f'{out}epub', exist_ok=_C)
+        os.makedirs(f'{out}epub\\raw_txt', exist_ok=_C)
+        txt_path = f'{out}epub\\raw_txt\\{safe}_복원.txt'
+        if '_' in title:
+            book_title, author = title.rsplit('_', 1)
         else:
             book_title = title
-            author = ""
+            author = ''
+        restored_title = f'{book_title}_복원'
+        r_title = f'''{restored_title}
+{author}
+(raw)
+{_K}{restored_title} | {author}
 
-        restored_title = (
-            f"{book_title}_복원"
-        )
-
-        r_title = (
-            f"{restored_title}\n"
-            f"{author}\n"
-            f"(raw)\n"
-            f"{_K}"
-            f"{restored_title} | {author}\n\n"
-        )
-
+'''
         if not _is_stopped(check):
-            save_translation_txt(
-                translated_parts_raw,
-                r_title,
-                txt_path
-            )
+            save_translation_txt(translated_parts, r_title, txt_path)
 
     if raw:
-
-        if "_" in title:
-            book_title, author = title.rsplit(
-                "_",
-                1
-            )
+        if '_' in title:
+            book_title, author = title.rsplit('_', 1)
         else:
             book_title = title
-            author = ""
-
-        epub_text = (
-            f"{book_title}_복원\n"
-            f"{author}\n"
-            f"(raw)\n"
-            f"{_K}"
-            f"{final_result}"
-        )
-
+            author = ''
+        epub_text = f'{book_title}_복원\n{author}\n(raw)\n{_K}{final_result}'
     else:
-
-        epub_text = (
-            f"{title}_복원_번역\n"
-            f"{_K}"
-            f"{final_result}"
-        )
+        epub_text = f'{title}_복원_번역\n{_K}{final_result}'
 
     if not _is_stopped(check):
-        down.create_epub_from_merged_txt(
-            txt_value=epub_text,
-            RAW=raw,
-        )
+        down.create_epub_from_merged_txt(txt_value=epub_text, RAW=raw)
 
     return final_result
 
@@ -1570,65 +1340,51 @@ def TransAi_From_Json(
 
 
 def save_translation_json(
-    translated_parts_raw,
+    translated_parts,
+    original_chunks,
     max_chars,
     title,
     file_path,
     raw=False,
-    br_start=0,
+    br_start=0
 ):
     data = {}
+    count = max(
+        len(translated_parts) if translated_parts else 0,
+        len(original_chunks) if original_chunks else 0
+    )
 
-    for i, text in enumerate(
-        translated_parts_raw
-    ):
-        data[str(i)] = text
+    for i in range(count):
+        trans = translated_parts[i] if translated_parts and i < len(translated_parts) else None
+        orig = original_chunks[i] if original_chunks and i < len(original_chunks) else None
 
-    data["chunk"] = max_chars
-    data["name"] = title
+        if trans is not None:
+            data[str(i)] = trans
+        if orig is not None:
+            data[f"{i}-j"] = orig
 
+    data['chunk'] = max_chars
+    data['name'] = title
     if raw:
-        data["raw"] = True
+        data['raw'] = True
+    data['br_start'] = br_start
 
-    data["br_start"] = br_start
-
-    with open(
-        file_path,
-        "w",
-        encoding=_A
-    ) as f:
-        json.dump(
-            data,
-            f,
-            ensure_ascii=_F,
-            indent=4
-        )
+    with open(file_path, 'w', encoding=_A) as f:
+        json.dump(data, f, ensure_ascii=_F, indent=4)
 
 
 def save_translation_txt(
-    translated_parts_raw,
+    translated_parts,
     title,
     file_path
 ):
     data = {}
-
-    for i, text in enumerate(
-        translated_parts_raw
-    ):
+    for i, text in enumerate(translated_parts):
         data[str(i)] = text
+    data['name'] = title
 
-    data["name"] = title
-
-    with open(
-        file_path,
-        "w",
-        encoding=_A
-    ) as f:
-        f.write(
-            title
-            + "\n"
-            + "".join(translated_parts_raw)
-        )
+    with open(file_path, 'w', encoding=_A) as f:
+        f.write(title + '\n' + ''.join(p for p in translated_parts if p))
 
 
 glossary_text.get_safety_settings = get_safety_settings

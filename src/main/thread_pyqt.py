@@ -78,7 +78,7 @@ class TranslateThread(QThread):
     log_changed = Signal(str)
     finished_signal = Signal(bool, str, str)
 
-    def __init__(self, file_path, model_name, rpm, temperature, max_concurrent, max_chars, dicts={}, check=None, br_start=0):
+    def __init__(self, file_path, model_name, rpm, temperature, max_concurrent, max_chars, dicts, check, br_start):
         super().__init__()
 
         self.file_path = file_path
