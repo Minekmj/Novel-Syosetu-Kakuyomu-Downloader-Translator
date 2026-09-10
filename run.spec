@@ -5,7 +5,7 @@ a = Analysis(
     ['run.py'],
     pathex=[],
     binaries=[],
-    datas=[('src/css/main.css', 'css'), ('src/find/tag.json', 'find'), ('main.ico', '.'), ('MD/update.md', 'MD')],
+    datas=[('src/css/main.css', 'css'), ('src/trans/txt/Offensive.txt', 'trans/txt'), ('src/trans/txt/Sexual.txt', 'trans/txt'), ('src/find/tag.json', 'find'), ('main.ico', '.'), ('MD/update.md', 'MD')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

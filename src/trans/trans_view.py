@@ -1,11 +1,10 @@
 from PySide6.QtWidgets import (
-    QFrame, QGridLayout, QGroupBox, QListWidget, QListWidgetItem, QSizePolicy, QTabWidget, QToolButton, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QLabel,
+    QFrame, QGridLayout, QListWidget, QListWidgetItem, QSizePolicy, QTabWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QLabel,
     QFileDialog, QDialog, QMessageBox, QTextEdit, QComboBox,
-    QProgressBar, QSpinBox, QScrollArea, QWidget
+    QProgressBar, QScrollArea, QWidget
 )
-from PySide6.QtGui import QKeyEvent, QKeySequence, QPalette
+from PySide6.QtGui import QKeyEvent, QKeySequence
 from PySide6.QtCore import Qt
-
 
 import html
 import os
@@ -13,7 +12,11 @@ import json
 import re
 
 from src.system.data import open_folder, return_theme, load_data, save_data
-from src.main.thread_pyqt import TranslateThread, ModelLoadThread, trans_ai, GlossaryExtractThread
+from src.main.thread_pyqt import TranslateThread, ModelLoadThread, trans_ai
+import src.trans.trans_check_jp as check_jp
+from src.trans.trans_glossary import *
+
+check_jp.trans_ai = trans_ai
 
 OUT = "./out/"
 
@@ -28,554 +31,6 @@ class PasteOnlyLineEdit(QLineEdit):
             super().keyPressEvent(event)
         else:
             event.ignore()
-
-
-class JapaneseCheckDialog(QDialog):
-    def __init__(self, inspection_data, parent=None):
-        super().__init__(parent)
-        self.inspection_data = inspection_data
-        self.json_path = inspection_data.get('json_path', '')
-        self.title = inspection_data.get('title', '작품')
-        self.items = inspection_data.get('items', [])
-        self.editors = []  # (item, text_edit)
-
-        self.setWindowTitle(f"일본어 검사 - {self.title}")
-        self.resize(780, 640)
-        self.setMinimumSize(600, 480)
-        self.init_ui()
-
-    def init_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(12)
-
-        header_layout = QHBoxLayout()
-        header_title = QLabel(f"일본어 검출 항목  |  {self.title}")
-        header_title.setObjectName("dictionaryTitle")
-        header_layout.addWidget(header_title, 1)
-
-        count_lbl = QLabel(f"검출: {len(self.items)}개 블록")
-        count_lbl.setObjectName("dictionaryCount")
-        count_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        header_layout.addWidget(count_lbl)
-        layout.addLayout(header_layout)
-
-        info_lbl = QLabel("일본어 비율이 10% 이상인 문장(연속 줄 포함)입니다. 오른쪽 입력창에서 수정 후 [바꾸기]를 누르세요.")
-        info_lbl.setObjectName("secondaryInfo")
-        info_lbl.setWordWrap(True)
-        layout.addWidget(info_lbl)
-
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-
-        container = QWidget()
-        container_layout = QVBoxLayout(container)
-        container_layout.setContentsMargins(4, 4, 4, 4)
-        container_layout.setSpacing(12)
-
-        last_chunk_key = None
-        for item in self.items:
-            chunk_display = item.get('chunk_display', 1)
-            chunk_key = item.get('chunk_key', '0')
-
-            # 청크가 바뀔 때마다 구분 헤더 표시: [작품 이름 - 청크 X]
-            if chunk_key != last_chunk_key:
-                last_chunk_key = chunk_key
-                chunk_sep_box = QFrame()
-                chunk_sep_box.setObjectName("chunkSepBox")
-                sep_layout = QVBoxLayout(chunk_sep_box)
-                sep_layout.setContentsMargins(8, 6, 8, 6)
-
-                chunk_lbl = QLabel(f"[{self.title} - 청크 {chunk_display}]")
-                chunk_lbl.setStyleSheet("font-weight: bold; font-size: 13px; color: #4da6ff;")
-                sep_layout.addWidget(chunk_lbl)
-                container_layout.addWidget(chunk_sep_box)
-
-            row_widget = QWidget()
-            row_layout = QHBoxLayout(row_widget)
-            row_layout.setContentsMargins(6, 4, 6, 4)
-            row_layout.setSpacing(8)
-
-            # 왼쪽: 일본어 원문 (읽기 전용)
-            orig_edit = QTextEdit()
-            orig_edit.setReadOnly(True)
-            orig_edit.setPlainText(item.get('original_text', '').rstrip('\n'))
-            orig_edit.setMinimumHeight(65)
-            orig_edit.setMaximumHeight(140)
-
-            arrow_lbl = QLabel("→")
-            arrow_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            arrow_lbl.setFixedWidth(24)
-            arrow_lbl.setStyleSheet("font-weight: bold; font-size: 14px;")
-
-            # 오른쪽: 바꾸기 텍스트 (초기값: 원본과 동일)
-            replace_edit = QTextEdit()
-            replace_edit.setPlainText(item.get('original_text', '').rstrip('\n'))
-            replace_edit.setMinimumHeight(65)
-            replace_edit.setMaximumHeight(140)
-
-            row_layout.addWidget(orig_edit, 1)
-            row_layout.addWidget(arrow_lbl)
-            row_layout.addWidget(replace_edit, 1)
-
-            container_layout.addWidget(row_widget)
-            self.editors.append((item, replace_edit))
-
-        container_layout.addStretch(1)
-        scroll.setWidget(container)
-        layout.addWidget(scroll, 1)
-
-        bottom_layout = QHBoxLayout()
-        bottom_layout.setSpacing(8)
-
-        cancel_btn = QPushButton("취소")
-        cancel_btn.setObjectName("secondaryBtn")
-        cancel_btn.setFixedHeight(40)
-        cancel_btn.clicked.connect(self.reject)
-
-        save_btn = QPushButton("바꾸기")
-        save_btn.setObjectName("primaryBtn")
-        save_btn.setFixedHeight(40)
-        save_btn.clicked.connect(self.apply_changes)
-
-        bottom_layout.addWidget(cancel_btn)
-        bottom_layout.addWidget(save_btn)
-        layout.addLayout(bottom_layout)
-
-    def apply_changes(self):
-        corrections = []
-        for item, edit in self.editors:
-            new_text = edit.toPlainText()
-            # 원본 끝에 줄바꿈이 있었던 경우 유지
-            if item.get('original_text', '').endswith('\n') and not new_text.endswith('\n'):
-                new_text += '\n'
-            corrections.append({
-                'chunk_key': item['chunk_key'],
-                'start_line': item['start_line'],
-                'end_line': item['end_line'],
-                'new_text': new_text
-            })
-
-        try:
-            success, count, err = trans_ai.apply_japanese_corrections(self.json_path, corrections)
-            if success:
-                QMessageBox.information(
-                    self,
-                    "일본어 검사 완료",
-                    f"총 {count}개의 검출 블록이 성공적으로 수정 및 저장되었습니다.\n\nJSON 파일과 청크 파일이 갱신되었습니다."
-                )
-                self.accept()
-            else:
-                QMessageBox.critical(self, "저장 오류", f"수정 사항 저장 중 오류가 발생했습니다: {err}")
-        except Exception as e:
-            QMessageBox.critical(self, "저장 실패", str(e))
-
-
-class GlossaryAiDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("AI 용어집 추가")
-        self.resize(420, 260)
-        self.setMinimumSize(380, 230)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(12)
-
-        title = QLabel("AI 용어집 자동 추출")
-        title.setObjectName("dictionaryTitle")
-        layout.addWidget(title)
-
-        info = QLabel("전체 원문을 분석하여 일본어 → 한국어 용어집을 자동으로 추출합니다.")
-        info.setWordWrap(True)
-        layout.addWidget(info)
-
-        percent_layout = QHBoxLayout()
-        percent_label = QLabel("분석 비율")
-        percent_label.setFixedWidth(100)
-
-        self.percent_combo = QComboBox()
-        for value in range(10, 101, 10):
-            self.percent_combo.addItem(f"{value}%", value)
-        self.percent_combo.setCurrentIndex(1)
-
-        percent_layout.addWidget(percent_label)
-        percent_layout.addWidget(self.percent_combo, 1)
-        layout.addLayout(percent_layout)
-
-        chunk_layout = QHBoxLayout()
-        chunk_label = QLabel("청크 글자수")
-        chunk_label.setFixedWidth(100)
-
-        self.chunk_combo = QComboBox()
-        for value in range(3000, 35001, 2000):
-            self.chunk_combo.addItem(f"{value:,}자", value)
-
-        if self.chunk_combo.itemData(self.chunk_combo.count() - 1) != 35000:
-            self.chunk_combo.addItem("35,000자", 35000)
-
-        self.chunk_combo.setCurrentIndex(1)
-
-        chunk_layout.addWidget(chunk_label)
-        chunk_layout.addWidget(self.chunk_combo, 1)
-        layout.addLayout(chunk_layout)
-
-        layout.addStretch()
-
-        button_layout = QHBoxLayout()
-        button_layout.setSpacing(8)
-
-        cancel_btn = QPushButton("취소")
-        cancel_btn.setObjectName("secondaryBtn")
-        cancel_btn.setFixedHeight(40)
-        cancel_btn.clicked.connect(self.reject)
-
-        start_btn = QPushButton("AI 용어집 추출")
-        start_btn.setObjectName("primaryBtn")
-        start_btn.setFixedHeight(40)
-        start_btn.clicked.connect(self.accept)
-
-        button_layout.addWidget(cancel_btn)
-        button_layout.addWidget(start_btn)
-        layout.addLayout(button_layout)
-
-    def get_values(self):
-        return (
-            self.percent_combo.currentData(),
-            self.chunk_combo.currentData()
-        )
-
-
-class DictionaryDialog(QDialog):
-    def __init__(self, parent=None, title='', dictionary=None, model='gemini-3.5-flash-lite', rpm=5):
-        super().__init__(parent)
-        self.title = title
-        self.dictionary = dictionary if isinstance(dictionary, dict) else {}
-        self.rows = []
-        self.model = model
-        self.rpm = rpm
-        self.setWindowTitle('용어집 설정')
-        self.resize(620, 560)
-        self.setMinimumSize(500, 450)
-        self.setObjectName('dictionaryDialog')
-        self.init_ui()
-        self.load_dictionary()
-
-    def init_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(10)
-
-        header_layout = QHBoxLayout()
-        header_layout.setSpacing(8)
-
-        title_label = QLabel(f"용어집  |  {self.title}")
-        title_label.setObjectName('dictionaryTitle')
-        title_label.setWordWrap(True)
-        header_layout.addWidget(title_label, 1)
-
-        self.count_label = QLabel('0개')
-        self.count_label.setObjectName('dictionaryCount')
-        self.count_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        header_layout.addWidget(self.count_label)
-
-        layout.addLayout(header_layout)
-
-        self.scroll = QScrollArea()
-        self.scroll.setObjectName('dictionaryScroll')
-        self.scroll.setWidgetResizable(True)
-        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-
-        self.container = QWidget()
-        self.container.setObjectName('dictionaryContainer')
-        self.container_layout = QVBoxLayout(self.container)
-        self.container_layout.setContentsMargins(2, 4, 2, 4)
-        self.container_layout.setSpacing(7)
-        self.container_layout.addStretch()
-
-        self.scroll.setWidget(self.container)
-        layout.addWidget(self.scroll, 1)
-
-        action_layout = QHBoxLayout()
-        action_layout.setSpacing(7)
-
-        add_btn = QPushButton('+ 용어 추가')
-        add_btn.setObjectName('dictionaryAdd')
-        add_btn.setMinimumHeight(36)
-        add_btn.clicked.connect(lambda: self.add_row('', ''))
-
-        ai_add_btn = QPushButton('AI 용어집 추가')
-        ai_add_btn.setObjectName('dictionaryAdd')
-        ai_add_btn.setMinimumHeight(36)
-        ai_add_btn.clicked.connect(self.open_ai_glossary_dialog)
-
-        clear_btn = QPushButton('전체 삭제')
-        clear_btn.setObjectName('dictionaryAdd')
-        clear_btn.setMinimumHeight(36)
-        clear_btn.clicked.connect(self.clear_all_rows)
-
-        action_layout.addWidget(add_btn, 1)
-        action_layout.addWidget(ai_add_btn, 1)
-        action_layout.addWidget(clear_btn, 1)
-        layout.addLayout(action_layout)
-
-        bottom_layout = QHBoxLayout()
-        bottom_layout.setSpacing(8)
-
-        cancel_btn = QPushButton('취소')
-        cancel_btn.setObjectName('secondaryBtn')
-        cancel_btn.setFixedHeight(40)
-        cancel_btn.clicked.connect(self.reject)
-
-        save_btn = QPushButton('저장')
-        save_btn.setObjectName('primaryBtn')
-        save_btn.setFixedHeight(40)
-        save_btn.clicked.connect(self.save_dictionary)
-
-        bottom_layout.addWidget(cancel_btn)
-        bottom_layout.addWidget(save_btn)
-        layout.addLayout(bottom_layout)
-
-        self.update_count()
-
-    def load_dictionary(self):
-        for src, dst in self.dictionary.items():
-            self.add_row(src, dst)
-
-    def add_row(self, src='', dst=''):
-        row_widget = QWidget()
-        row_widget.setObjectName('dictionaryItem')
-
-        row_layout = QHBoxLayout(row_widget)
-        row_layout.setContentsMargins(10, 4, 6, 4)
-        row_layout.setSpacing(4)
-
-        source_edit = QLineEdit()
-        source_edit.setObjectName('dictionarySource')
-        source_edit.setPlaceholderText('일본어')
-        source_edit.setText(str(src))
-
-        arrow = QLabel('→')
-        arrow.setObjectName('dictionaryArrow')
-        arrow.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        target_edit = QLineEdit()
-        target_edit.setObjectName('dictionaryTarget')
-        target_edit.setPlaceholderText('한국어')
-        target_edit.setText(str(dst))
-
-        remove_btn = QPushButton('×')
-        remove_btn.setObjectName('dictionaryRemove')
-        remove_btn.setFixedSize(30, 30)
-        remove_btn.clicked.connect(lambda checked=False, widget=row_widget: self.remove_row(widget))
-
-        row_layout.addWidget(source_edit, 1)
-        row_layout.addWidget(arrow)
-        row_layout.addWidget(target_edit, 1)
-        row_layout.addWidget(remove_btn)
-
-        self.container_layout.insertWidget(self.container_layout.count() - 1, row_widget)
-        self.rows.append((row_widget, source_edit, target_edit))
-
-        self.update_count()
-
-        if not src and not dst:
-            source_edit.setFocus()
-
-    def remove_row(self, widget):
-        for index, row in enumerate(self.rows):
-            if row[0] is widget:
-                self.rows.pop(index)
-                widget.deleteLater()
-                self.update_count()
-                return
-
-    def clear_all_rows(self):
-        if not self.rows:
-            return
-
-        result = QMessageBox.question(
-            self,
-            '전체 삭제',
-            f'현재 등록된 용어 {len(self.rows)}개를 모두 삭제하시겠습니까?\n\n이 작업은 저장하기 전까지 실제로 저장되지 않습니다.',
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
-        )
-
-        if result != QMessageBox.StandardButton.Yes:
-            return
-
-        for widget, source_edit, target_edit in self.rows:
-            widget.deleteLater()
-
-        self.rows.clear()
-        self.update_count()
-
-    def update_count(self):
-        count = len(self.rows)
-        self.count_label.setText(f'{count}개')
-
-    def read_source_text(self):
-        parent = self.parent()
-        if parent is None:
-            return ''
-
-        path = getattr(parent, 'file_path', '')
-        if not path or not os.path.exists(path):
-            return ''
-
-        try:
-            if path.lower().endswith('.txt'):
-                with open(path, 'r', encoding='utf-8-sig') as f:
-                    return f.read()
-
-            if path.lower().endswith('.json'):
-                with open(path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                return self.extract_json_source_text(data)
-
-        except Exception as e:
-            if hasattr(parent, 'add_log'):
-                parent.add_log(f"AI 용어집 원문 읽기 실패: {e}")
-
-        return ''
-
-    def extract_json_source_text(self, data):
-        texts = []
-        source_keys = {'original', 'source', 'japanese', 'jp', 'raw', 'raw_text', 'source_text', 'original_text', 'text'}
-
-        def walk(value, key_name=''):
-            if isinstance(value, dict):
-                for key, child in value.items():
-                    key_lower = str(key).lower()
-
-                    if key_lower in source_keys and isinstance(child, str):
-                        if child.strip():
-                            texts.append(child)
-
-                    elif isinstance(child, (dict, list)):
-                        walk(child, key_lower)
-
-            elif isinstance(value, list):
-                for child in value:
-                    if isinstance(child, (dict, list)):
-                        walk(child)
-
-        walk(data)
-
-        if texts:
-            return '\n'.join(texts)
-
-        return ''
-
-    def save_dictionary(self):
-        result = {}
-
-        for widget, source_edit, target_edit in self.rows:
-            source = source_edit.text().strip()
-            target = target_edit.text().strip()
-
-            if not source and not target:
-                continue
-
-            if source and not target:
-                QMessageBox.warning(self, '알림', f"'{source}'의 한국어 번역을 입력하세요.")
-                source_edit.setFocus()
-                return
-
-            if not source:
-                QMessageBox.warning(self, '알림', '일본어 용어를 입력하세요.')
-                source_edit.setFocus()
-                return
-
-            result[source] = target
-
-        self.dictionary = result
-        self.accept()
-
-    def open_ai_glossary_dialog(self):
-        all_text = self.read_source_text()
-
-        if not all_text.strip():
-            QMessageBox.warning(self, '알림', '분석할 원문을 찾을 수 없습니다.')
-            return
-
-        dialog = GlossaryAiDialog(self)
-
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-
-        percent, chunk = dialog.get_values()
-
-        self.ai_glossary_thread = GlossaryExtractThread(
-            all_text,
-            percent,
-            chunk,
-            self.model,
-            self.rpm,
-            self
-        )
-
-        self.ai_glossary_thread.log_signal.connect(self.on_ai_glossary_log)
-        self.ai_glossary_thread.finished_signal.connect(self.on_ai_glossary_finished)
-        self.ai_glossary_thread.start()
-
-    def on_ai_glossary_log(self, text):
-        parent = self.parent()
-
-        if parent is not None and hasattr(parent, 'add_log'):
-            parent.add_log(f"[AI 용어집] {text}")
-
-    def on_ai_glossary_finished(self, glossary, error):
-        if error:
-            parent = self.parent()
-
-            if parent is not None and hasattr(parent, 'add_log'):
-                parent.add_log(f"[AI 용어집] 추출 실패: {error}")
-
-            QMessageBox.critical(self, 'AI 용어집 오류', error)
-            return
-
-        if not glossary:
-            parent = self.parent()
-
-            if parent is not None and hasattr(parent, 'add_log'):
-                parent.add_log('[AI 용어집] 추출된 용어가 없습니다.')
-
-            QMessageBox.information(self, 'AI 용어집', '추출된 용어가 없습니다.')
-            return
-
-        added = 0
-        skipped = 0
-
-        for source, target in glossary.items():
-            source = str(source).strip()
-            target = str(target).strip()
-
-            if not source or not target:
-                continue
-
-            if source in self.dictionary:
-                skipped += 1
-                continue
-
-            self.dictionary[source] = target
-            self.add_row(source, target)
-            added += 1
-
-        parent = self.parent()
-
-        if parent is not None and hasattr(parent, 'add_log'):
-            parent.add_log(f"[AI 용어집] 추출 완료: {len(glossary)}개 / 추가: {added}개 / 기존 용어: {skipped}개")
-
-        QMessageBox.information(
-            self,
-            'AI 용어집 완료',
-            f"AI 용어집 추출이 완료되었습니다.\n\n추출: {len(glossary)}개\n새로 추가: {added}개\n기존 용어: {skipped}개"
-        )
 
 
 class PresetLoadDialog(QDialog):
@@ -813,8 +268,8 @@ class TranslateDialog(QDialog):
         self.log_history = []
 
         self.setWindowTitle('AI 번역')
-        self.resize(920, 680)
-        self.setMinimumSize(820, 560)
+        self.resize(920, 710)
+        self.setMinimumSize(920, 710)
         self.setAcceptDrops(True)
         self.init_ui()
         self.load_settings()
@@ -917,7 +372,8 @@ class TranslateDialog(QDialog):
 
         self.settings_tab = QTabWidget()
         self.settings_tab.setObjectName('no_back-settingsTab')
-
+        self.settings_tab.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.settings_tab.setAutoFillBackground(False)
         tab_params = QWidget()
         tab_params.setObjectName('no_back-tabParams')
         tab_params_layout = QVBoxLayout(tab_params)
@@ -951,8 +407,9 @@ class TranslateDialog(QDialog):
         lbl_conc = QLabel('동시 작업')
         lbl_chars = QLabel('청크 글자수')
         lbl_br = QLabel('분할 시작')
+        lbl_censor = QLabel('검열하기')
 
-        for label in [lbl_rpm, lbl_temp, lbl_conc, lbl_chars, lbl_br]:
+        for label in [lbl_rpm, lbl_temp, lbl_conc, lbl_chars, lbl_br, lbl_censor]:
             label.setObjectName('optionLabel')
 
         self.rpm_combo = QComboBox()
@@ -980,21 +437,32 @@ class TranslateDialog(QDialog):
         self.br_start_combo.setCurrentText('0')
         self.br_start_combo.setMinimumHeight(35)
 
+        self.censor_combo = QComboBox()
+        self.censor_combo.addItems(['사용', '사용 안함'])
+        self.censor_combo.setCurrentText('사용')
+        self.censor_combo.setMinimumHeight(35)
+        self.censor_combo.setToolTip('사용: 검열 시도 후 분할 / 사용 안함: 검열 건너뛰고 바로 분할(isno_x)')
+
         option_grid.addWidget(lbl_rpm, 0, 0)
         option_grid.addWidget(self.rpm_combo, 0, 1)
         option_grid.addWidget(lbl_temp, 0, 2)
         option_grid.addWidget(self.temp_combo, 0, 3)
+
         option_grid.addWidget(lbl_conc, 1, 0)
         option_grid.addWidget(self.concurrency_combo, 1, 1)
         option_grid.addWidget(lbl_chars, 1, 2)
         option_grid.addWidget(self.chars_combo, 1, 3)
+
         option_grid.addWidget(lbl_br, 2, 0)
         option_grid.addWidget(self.br_start_combo, 2, 1)
+        option_grid.addWidget(lbl_censor, 2, 2)
+        option_grid.addWidget(self.censor_combo, 2, 3)
 
         self.rpm_combo.currentTextChanged.connect(self.update_active_model)
         self.temp_combo.currentTextChanged.connect(self.update_active_model)
         self.concurrency_combo.currentTextChanged.connect(self.update_active_model)
         self.br_start_combo.currentTextChanged.connect(self.update_active_model)
+        self.censor_combo.currentTextChanged.connect(self.update_active_model)
 
         tab_params_layout.addLayout(option_grid)
         tab_params_layout.addStretch(1)
@@ -1112,40 +580,90 @@ class TranslateDialog(QDialog):
         tab_api_layout.addStretch(1)
         self.settings_tab.addTab(tab_api, 'API 설정')
 
-        # [새로운 탭: 검사]
+        # [검사 탭 개편]
         tab_inspect = QWidget()
         tab_inspect.setObjectName('no_back-tabInspect')
         tab_inspect_layout = QVBoxLayout(tab_inspect)
         tab_inspect_layout.setContentsMargins(8, 10, 8, 8)
         tab_inspect_layout.setSpacing(10)
 
-        inspect_info_title = QLabel('일본어 잔존 검사')
-        inspect_info_title.setObjectName('subLabel')
-        tab_inspect_layout.addWidget(inspect_info_title)
+        # 1. [일본어 잔존 검사]
+        inspect_title = QLabel('일본어 잔존 검사')
+        inspect_title.setObjectName('subLabel')
+        tab_inspect_layout.addWidget(inspect_title)
 
-        inspect_info = QLabel(
-            "out/trs 폴더 내의 번역 JSON 파일을 분석하여, 각 줄에서 일본어 비율이 10% 이상 남은 "
-            "문장(연속 줄 포함)을 찾아내고 직접 수정하여 재저장합니다."
-        )
-        inspect_info.setObjectName('secondaryInfo')
-        inspect_info.setWordWrap(True)
-        tab_inspect_layout.addWidget(inspect_info)
+        # 2. [모드]
+        mode_layout = QHBoxLayout()
+        mode_layout.setContentsMargins(0, 0, 0, 0)
+        mode_layout.setSpacing(8)
 
-        inspect_action_layout = QHBoxLayout()
-        inspect_action_layout.setContentsMargins(0, 4, 0, 0)
-        inspect_action_layout.setSpacing(8)
+        mode_lbl = QLabel('모드')
+        mode_lbl.setObjectName('optionLabel')
+        mode_lbl.setFixedWidth(50)
 
+        self.inspect_mode_combo = QComboBox()
+        self.inspect_mode_combo.addItems(['비율 모드', '글자 수 모드'])
+        self.inspect_mode_combo.setMinimumHeight(35)
+        self.inspect_mode_combo.currentTextChanged.connect(self.on_inspect_mode_changed)
+
+        mode_layout.addWidget(mode_lbl)
+        mode_layout.addWidget(self.inspect_mode_combo, 1)
+        tab_inspect_layout.addLayout(mode_layout)
+
+        # 3. [(비율 모드 시) % 이상] - 콤보 박스
+        self.inspect_ratio_widget = QWidget()
+        inspect_ratio_layout = QHBoxLayout(self.inspect_ratio_widget)
+        inspect_ratio_layout.setContentsMargins(0, 0, 0, 0)
+        inspect_ratio_layout.setSpacing(8)
+
+        self.inspect_ratio_combo = QComboBox()
+        ratio_options = [1, 2, 3, 5, 7, 10, 15, 20, 30, 40, 50]
+        for val in ratio_options:
+            self.inspect_ratio_combo.addItem(f"{val}% 이상", float(val))
+        self.inspect_ratio_combo.setCurrentIndex(ratio_options.index(10))  # 기본 10%
+        self.inspect_ratio_combo.setMinimumHeight(35)
+
+        inspect_ratio_layout.addWidget(self.inspect_ratio_combo, 1)
+        tab_inspect_layout.addWidget(self.inspect_ratio_widget)
+
+        # 4. [(글자 수 모드 시) 자 이상] - 콤보 박스
+        self.inspect_count_widget = QWidget()
+        inspect_count_layout = QHBoxLayout(self.inspect_count_widget)
+        inspect_count_layout.setContentsMargins(0, 0, 0, 0)
+        inspect_count_layout.setSpacing(8)
+
+
+        self.inspect_count_combo = QComboBox()
+        count_options = [1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 100]
+        for val in count_options:
+            self.inspect_count_combo.addItem(f"{val}자 이상", int(val))
+        self.inspect_count_combo.setCurrentIndex(count_options.index(5))  # 기본 5자
+        self.inspect_count_combo.setMinimumHeight(35)
+
+        inspect_count_layout.addWidget(self.inspect_count_combo, 1)
+        tab_inspect_layout.addWidget(self.inspect_count_widget)
+        self.inspect_count_widget.setVisible(False)
+
+        # 5. [검사하기]
         self.inspect_btn = QPushButton('검사하기')
         self.inspect_btn.setObjectName('primaryBtn')
         self.inspect_btn.setFixedHeight(36)
         self.inspect_btn.clicked.connect(self.run_japanese_inspection)
-        inspect_action_layout.addWidget(self.inspect_btn)
-
-        tab_inspect_layout.addLayout(inspect_action_layout)
+        tab_inspect_layout.addWidget(self.inspect_btn)
 
         self.inspect_status_lbl = QLabel('선택된 검사 파일 없음')
         self.inspect_status_lbl.setObjectName('secondaryInfo')
+        self.inspect_status_lbl.setVisible(False)
         tab_inspect_layout.addWidget(self.inspect_status_lbl)
+
+        # 6. [검사 설명]
+        self.inspect_info = QLabel(
+            "trs 폴더 내의 번역 JSON 파일을 분석하여, 각 줄에서 설정한 일본어 비율 또는 "
+            "글자 수 이상 남은 문장(연속 줄 포함)을 찾아내고 직접 수정한 뒤 재저장합니다."
+        )
+        self.inspect_info.setObjectName('secondaryInfo')
+        self.inspect_info.setWordWrap(True)
+        tab_inspect_layout.addWidget(self.inspect_info)
 
         tab_inspect_layout.addStretch(1)
         self.settings_tab.addTab(tab_inspect, '검사')
@@ -1233,6 +751,11 @@ class TranslateDialog(QDialog):
         self.apply_ui_style()
         self.update_glossary_button()
 
+    def on_inspect_mode_changed(self, mode_text):
+        is_ratio = (mode_text == '비율 모드')
+        self.inspect_ratio_widget.setVisible(is_ratio)
+        self.inspect_count_widget.setVisible(not is_ratio)
+
     def run_japanese_inspection(self):
         trs_dir = os.path.abspath(os.path.join(globals().get('OUT', './out/'), 'trs'))
         if not os.path.exists(trs_dir):
@@ -1251,22 +774,36 @@ class TranslateDialog(QDialog):
         self.inspect_status_lbl.setText(f"선택: {os.path.basename(json_path)}")
         self.add_log(f"일본어 검사 시작: {json_path}")
 
+        mode = self.inspect_mode_combo.currentText()
+        if mode == '비율 모드':
+            ratio_val = float(self.inspect_ratio_combo.currentData() or 10.0)
+            count_val = 0
+            criteria_desc = f"비율 {ratio_val}% 이상"
+        else:
+            ratio_val = 0.0
+            count_val = int(self.inspect_count_combo.currentData() or 5)
+            criteria_desc = f"글자 수 {count_val}자 이상"
+
         try:
-            result = trans_ai.inspect_json_japanese(json_path, ratio_threshold=10.0)
+            result = trans_ai.inspect_json_japanese(
+                json_path,
+                ratio_threshold=ratio_val,
+                char_count_threshold=count_val
+            )
             items = result.get('items', [])
             title = result.get('title', '작품')
 
             if not items:
-                self.add_log(f"일본어 검사 결과: 남은 일본어가 검출되지 않았습니다 ({title})")
+                self.add_log(f"일본어 검사 결과: [{criteria_desc}] 만족하는 남은 일본어가 검출되지 않았습니다 ({title})")
                 QMessageBox.information(
                     self,
                     '일본어 검사 완료',
-                    f"'{title}'\n\n일본어 비율 10% 이상인 문장이 없습니다.\n번역이 양호합니다."
+                    f"'{title}'\n\n검출 기준({criteria_desc})에 해당하는 문장이 없습니다.\n번역이 양호합니다."
                 )
                 return
 
-            self.add_log(f"일본어 검사: {len(items)}개 블록 검출 완료. 검사 창을 엽니다.")
-            dialog = JapaneseCheckDialog(result, self)
+            self.add_log(f"일본어 검사: {len(items)}개 블록 검출 완료 ({criteria_desc}). 검사 창을 엽니다.")
+            dialog = check_jp.JapaneseCheckDialog(result, self)
             dialog.exec()
 
         except Exception as e:
@@ -1321,7 +858,9 @@ class TranslateDialog(QDialog):
             }
 
             QLineEdit,
-            QComboBox {
+            QComboBox,
+            QSpinBox,
+            QDoubleSpinBox {
                 min-height: 34px;
                 padding: 0px 8px;
                 border-radius: 5px;
@@ -1538,7 +1077,14 @@ class TranslateDialog(QDialog):
             QMessageBox.warning(self, '알림', '이미 추가된 모델입니다.')
             return
 
-        self.selected_models.append({'model': model, 'rpm': 15, 'temperature': 0.1, 'concurrency': 4, 'br_start': 0})
+        self.selected_models.append({
+            'model': model,
+            'rpm': 15,
+            'temperature': 0.1,
+            'concurrency': 4,
+            'br_start': 0,
+            'isno_x': False
+        })
         new_index = len(self.selected_models) - 1
         self.active_model_index = new_index
         self.rebuild_model_list()
@@ -1693,6 +1239,12 @@ class TranslateDialog(QDialog):
         self.br_start_combo.setCurrentText(br_val)
         self.br_start_combo.blockSignals(False)
 
+        isno_x_val = bool(model.get('isno_x', False))
+        censor_text = '사용 안함' if isno_x_val else '사용'
+        self.censor_combo.blockSignals(True)
+        self.censor_combo.setCurrentText(censor_text)
+        self.censor_combo.blockSignals(False)
+
         self.rebuild_model_list()
 
     def update_active_model(self, *args):
@@ -1704,6 +1256,7 @@ class TranslateDialog(QDialog):
             self.selected_models[self.active_model_index]['temperature'] = float(self.temp_combo.currentText())
             self.selected_models[self.active_model_index]['concurrency'] = int(self.concurrency_combo.currentText())
             self.selected_models[self.active_model_index]['br_start'] = int(self.br_start_combo.currentText())
+            self.selected_models[self.active_model_index]['isno_x'] = (self.censor_combo.currentText() == '사용 안함')
         except (ValueError, TypeError):
             pass
 
@@ -1737,7 +1290,8 @@ class TranslateDialog(QDialog):
                 'rpm': int(x.get('rpm', 15)),
                 'temperature': float(x.get('temperature', 0.1)),
                 'concurrency': int(x.get('concurrency', 4)),
-                'br_start': int(x.get('br_start', 0))
+                'br_start': int(x.get('br_start', 0)),
+                'isno_x': bool(x.get('isno_x', False))
             }
             for x in self.selected_models if str(x.get('model', '')).strip()
         ]
@@ -1763,6 +1317,7 @@ class TranslateDialog(QDialog):
         self.api_edit.textChanged.connect(set_api)
 
         default_br = int(data.get('translate_br_start', 0))
+        default_isno_x = bool(data.get('translate_isno_x', False))
         models = data.get('translate_models')
         self.selected_models = []
 
@@ -1782,7 +1337,8 @@ class TranslateDialog(QDialog):
                         'rpm': int(data.get('translate_rpm', 15)),
                         'temperature': float(data.get('translate_temperature', 0.1)),
                         'concurrency': int(data.get('translate_concurrency', 4)),
-                        'br_start': default_br
+                        'br_start': default_br,
+                        'isno_x': default_isno_x
                     })
                 elif isinstance(item, dict):
                     model = str(item.get('model', '')).strip()
@@ -1797,7 +1353,8 @@ class TranslateDialog(QDialog):
                         'rpm': int(item.get('rpm', data.get('translate_rpm', 15))),
                         'temperature': float(item.get('temperature', data.get('translate_temperature', 0.1))),
                         'concurrency': int(item.get('concurrency', data.get('translate_concurrency', 4))),
-                        'br_start': int(item.get('br_start', default_br))
+                        'br_start': int(item.get('br_start', default_br)),
+                        'isno_x': bool(item.get('isno_x', default_isno_x))
                     })
 
         if not self.selected_models:
@@ -1808,7 +1365,8 @@ class TranslateDialog(QDialog):
                     'rpm': int(data.get('translate_rpm', 15)),
                     'temperature': float(data.get('translate_temperature', 0.1)),
                     'concurrency': int(data.get('translate_concurrency', 4)),
-                    'br_start': default_br
+                    'br_start': default_br,
+                    'isno_x': default_isno_x
                 })
 
         max_chars = str(data.get('translate_max_chars', 5000))
@@ -1864,6 +1422,7 @@ class TranslateDialog(QDialog):
                 'translate_temperature': first['temperature'],
                 'translate_concurrency': first['concurrency'],
                 'translate_br_start': first['br_start'],
+                'translate_isno_x': bool(first.get('isno_x', False)),
                 'translate_max_chars': int(self.chars_combo.currentText()),
                 'translate_glossary_enabled': bool(self.glossary_enabled)
             })
@@ -1949,6 +1508,7 @@ class TranslateDialog(QDialog):
                 return
 
             default_br = int(preset.get('br_start', 0))
+            default_isno_x = bool(preset.get('isno_x', False))
 
             new_models = []
             used_names = set()
@@ -1966,7 +1526,8 @@ class TranslateDialog(QDialog):
                         'rpm': 15,
                         'temperature': 0.1,
                         'concurrency': 4,
-                        'br_start': default_br
+                        'br_start': default_br,
+                        'isno_x': default_isno_x
                     })
                 elif isinstance(item, dict):
                     model = str(item.get('model', '')).strip()
@@ -1981,7 +1542,8 @@ class TranslateDialog(QDialog):
                         'rpm': int(item.get('rpm', 15)),
                         'temperature': float(item.get('temperature', 0.1)),
                         'concurrency': int(item.get('concurrency', 4)),
-                        'br_start': int(item.get('br_start', default_br))
+                        'br_start': int(item.get('br_start', default_br)),
+                        'isno_x': bool(item.get('isno_x', default_isno_x))
                     })
 
             if not new_models:
@@ -2072,7 +1634,7 @@ class TranslateDialog(QDialog):
         return ''
 
     def load_dictionary_for_title(self):
-        data = globals().get('load_data', lambda: {})()
+        data = load_data()
         dictionary = data.get('dictionary', {}) if isinstance(data, dict) else {}
         if not isinstance(dictionary, dict):
             dictionary = {}
@@ -2106,11 +1668,11 @@ class TranslateDialog(QDialog):
                 return
 
             self.current_dictionary = dict(dialog.dictionary)
-            data = globals().get('load_data', lambda: {})()
+            data = load_data()
             if not isinstance(data.get('dictionary'), dict):
                 data['dictionary'] = {}
             data['dictionary'][self.file_title] = self.current_dictionary
-            globals().get('save_data', lambda *d: None)(data)
+            save_data(data)
             self.dictionary_status.setText(f"{self.file_title} ({len(self.current_dictionary)}개)")
             self.add_log(f"용어집 저장 완료: {self.file_title} ({len(self.current_dictionary)}개)")
         except NameError:
@@ -2181,6 +1743,7 @@ class TranslateDialog(QDialog):
         temperatures = tuple(x['temperature'] for x in model_configs)
         concurrencies = tuple(x['concurrency'] for x in model_configs)
         br_starts = tuple(x['br_start'] for x in model_configs)
+        isno_xs = tuple(x['isno_x'] for x in model_configs)
         dict_data = dict(self.current_dictionary) if self.glossary_enabled else {}
 
         self.is_trans = True
@@ -2193,9 +1756,10 @@ class TranslateDialog(QDialog):
         self.add_log('=' * 55)
         self.add_log('번역 시작')
         for i, config in enumerate(model_configs, 1):
+            censor_state = "건너뜀(isno_x)" if config['isno_x'] else "적용"
             self.add_log(
                 f"모델 {i}: {config['model']} / RPM {config['rpm']} / Temp {config['temperature']} / "
-                f"동시 {config['concurrency']} / 분할시작 {config['br_start']}"
+                f"동시 {config['concurrency']} / 분할시작 {config['br_start']} / 검열: {censor_state}"
             )
         self.add_log(f"작품명: {self.file_title}")
         self.add_log(f"청크 글자수: {max_chars}")
@@ -2203,17 +1767,32 @@ class TranslateDialog(QDialog):
         self.add_log('=' * 55)
 
         try:
-            self.thread = TranslateThread(
-                self.file_path,
-                model_names,
-                rpms,
-                temperatures,
-                concurrencies,
-                max_chars,
-                dicts=dict_data,
-                check=self.get_out,
-                br_start=br_starts
-            )
+            try:
+                self.thread = TranslateThread(
+                    self.file_path,
+                    model_names,
+                    rpms,
+                    temperatures,
+                    concurrencies,
+                    max_chars,
+                    dicts=dict_data,
+                    check=self.get_out,
+                    br_start=br_starts,
+                    isno_x=isno_xs
+                )
+            except TypeError:
+                self.thread = TranslateThread(
+                    self.file_path,
+                    model_names,
+                    rpms,
+                    temperatures,
+                    concurrencies,
+                    max_chars,
+                    dicts=dict_data,
+                    check=self.get_out,
+                    br_start=br_starts,
+                    isno_x=isno_xs
+                )
             self.thread.progress_changed.connect(self.update_progress)
             self.thread.log_changed.connect(self.add_log)
             self.thread.finished_signal.connect(self.on_finished)
@@ -2266,7 +1845,7 @@ class TranslateDialog(QDialog):
         elif '시작' in text or '로드' in text or '감지' in text or '중지' in text or '강제분할' in text or '검사' in text:
             log_type = 'INFO'
 
-        bg_color = globals().get('return_theme', lambda: '#1e1e1e')()
+        bg_color = return_theme()
         is_dark = self.get_brightness(bg_color) < 128
 
         color_map = {
@@ -2319,7 +1898,7 @@ class TranslateDialog(QDialog):
             QMessageBox.information(self, '번역 완료', message)
             if output_dir:
                 try:
-                    globals().get('open_folder', lambda *p: None)(output_dir)
+                    open_folder(output_dir)
                 except Exception:
                     pass
         else:

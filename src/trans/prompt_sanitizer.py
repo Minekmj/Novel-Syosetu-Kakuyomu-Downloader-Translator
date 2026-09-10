@@ -1,117 +1,120 @@
+import os
 import re
 import unicodedata
+from ahocorasick_rs import AhoCorasick, MatchKind
 from google.genai import types
 
-class PromptSanitizer:
-    def __init__(self):
-        self.rules = [
-            "いやらし[いくさ]",
-            "エロ(?:い|チック|ティック)?",
-            "スケベ(?:な|そう)?",
-            "エッチ(?:な|する|した)?",
-            "淫ら(?:な|に)?",
-            "性的(?:な)?",
-            "卑猥(?:な)?",
-            "猥褻",
-            "セックス(?:する|した)?",
-            "本番",
-            "3P",
-            "起た(?:ない|なくて|つ|ち)",
-            "大きくな(?:る|った|って)",
-            "ゴム",
-            "バイ〇グラ",
-            "バイアグラ",
-            "イチャイチャ",
-            "一線越え(?:る|た)?",
-            "浮気",
-            "二股",
-            "NTR",
-            "押し倒(?:す|した|して|され)",
-            "抱きしめ(?:る|た|て|返した)",
-            "抱きつ(?:く|いた|いて|かれ)",
-            "体を重ね(?:る|た|て)",
-            "触(?:る|った|れて|れた)",
-            "撫で(?:る|た|て)",
-            "キス(?:した)?",
-            "股間",
-            "アレ",
-            "胸元",
-            "太もも",
-            "裸体",
-            "裸(?:の|で)?",
-            "下半身",
-            "ほっぺ",
-            "高校(?:の|生)?",
-            "理事長(?:室)?",
-            "生徒",
-            "制服",
-            "無理やり",
-            "強引(?:に|な)?",
-            "襲(?:う|った|われ)",
-            "奪(?:い返しても|った|い)",
-            "騙(?:してる|して|す)",
-            "告げ口",
-            "脅迫",
-            "自傷",
-            "自殺",
-            "リスカ",
-            "首吊(?:り|る)",
-            "殺(?:す|した|せ|そう)",
-            "死ね",
-        ]
+# 프로젝트 환경에 따라 get_resource_path import
+try:
+    from src.system.src import get_resource_path
+except ImportError:
+    def get_resource_path(p): return p
 
-        self.compiled = [
-            re.compile(pattern, re.IGNORECASE)
-            for pattern in self.rules
-        ]
 
-    def normalize(self, text):
+class FastPromptSanitizer:
+    def __init__(self, dict_files=["Sexual.txt", "Offensive.txt"], custom_banned=None, whitelist=None):
+        words = set()
+
+        for fname in dict_files:
+            path = get_resource_path(f"trans/txt/{fname}")
+            with open(path, "r", encoding="utf-8") as f:
+                for line in f:
+                    w = unicodedata.normalize("NFKC", line.strip())
+                    if w and not w.startswith("#"):
+                        words.add(w)
+
+        default_danger_words = [
+            "自傷", "自殺", "リスカ", "リストカット", "首吊り", "首吊る",
+            "ロリコン", "おねショタ", "ショタおね", "レイプ", "強姦", "輪姦",
+            "逆レイプ", "睡姦", "性奴隷", "屍姦", "獣姦", "食糞", "飲尿",
+            "援助交際", "援交", "円光", "催眠", "エッチないたずら", "舐め回す"
+        ]
+        words.update([unicodedata.normalize("NFKC", w) for w in default_danger_words])
+
+        if custom_banned:
+            words.update([unicodedata.normalize("NFKC", w) for w in custom_banned])
+
+        self.whitelist = set(whitelist) if whitelist else {
+            "触る", "制服", "生徒", "ほっぺ", "太もも", "胸元", "ゴム"
+        }
+        filtered_words = [w for w in words if w and w not in self.whitelist]
+
+        if not filtered_words:
+            filtered_words = ["__DUMMY_KEYWORD__"]
+
+        self.ac = AhoCorasick(filtered_words, matchkind=MatchKind.LeftmostLongest)
+
+    def normalize(self, text: str) -> str:
         text = unicodedata.normalize("NFKC", text)
-        return re.sub(r"[\u200B-\u200D\uFEFF]", "", text)
+        return "".join(c for c in text if c not in ["\u200b", "\u200c", "\u200d", "\ufeff"])
 
-    def censor_match(self, match):
-        word = match.group()
+    def censor_word(self, word: str) -> str:
+        return "〇" * len(word)
 
-        if len(word) <= 2:
-            return "〇" * len(word)
-
-        return word[0] + "〇" * (len(word) - 1)
-
-    def sanitize(self, text):
+    def sanitize(self, text: str) -> str:
         text = self.normalize(text)
+        matches = self.ac.find_matches_as_indexes(text)
+        if not matches:
+            return text
 
-        for pattern in self.compiled:
-            text = pattern.sub(self.censor_match, text)
+        result = []
+        last_idx = 0
+        for _, start, end in matches:
+            result.append(text[last_idx:start])
+            bad_word = text[start:end]
+            result.append(self.censor_word(bad_word))
+            last_idx = end
 
-        return text
+        result.append(text[last_idx:])
+        return "".join(result)
+
+    def mask_with_placeholders(self, text: str):
+        text = self.normalize(text)
+        matches = self.ac.find_matches_as_indexes(text)
+        if not matches:
+            return text, {}
+
+        result = []
+        last_idx = 0
+        mapping = {}
+        for i, (_, start, end) in enumerate(matches):
+            token = f"[T_{i}]"
+            bad_word = text[start:end]
+            mapping[token] = bad_word
+
+            result.append(text[last_idx:start])
+            result.append(token)
+            last_idx = end
+
+        result.append(text[last_idx:])
+        return "".join(result), mapping
 
 
-_sanitizer = PromptSanitizer()
+sanitizer = FastPromptSanitizer()
 
-
-def x_making(text):
-    return _sanitizer.sanitize(text)
+def x_making(text: str) -> str:
+    return sanitizer.sanitize(text)
 
 def get_safety_settings():
     return [
         types.SafetySetting(
-            category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
-            threshold=types.HarmBlockThreshold.BLOCK_NONE
+            category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+            threshold=types.HarmBlockThreshold.BLOCK_NONE,
         ),
         types.SafetySetting(
             category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-            threshold=types.HarmBlockThreshold.BLOCK_NONE
+            threshold=types.HarmBlockThreshold.BLOCK_NONE,
         ),
         types.SafetySetting(
-            category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-            threshold=types.HarmBlockThreshold.BLOCK_NONE
+            category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+            threshold=types.HarmBlockThreshold.BLOCK_NONE,
         ),
         types.SafetySetting(
             category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-            threshold=types.HarmBlockThreshold.BLOCK_NONE
+            threshold=types.HarmBlockThreshold.BLOCK_NONE,
         ),
         types.SafetySetting(
             category=types.HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
-            threshold=types.HarmBlockThreshold.BLOCK_NONE
+            threshold=types.HarmBlockThreshold.BLOCK_NONE,
         ),
     ]

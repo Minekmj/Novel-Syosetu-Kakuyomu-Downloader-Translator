@@ -78,7 +78,7 @@ class TranslateThread(QThread):
     log_changed = Signal(str)
     finished_signal = Signal(bool, str, str)
 
-    def __init__(self, file_path, model_name, rpm, temperature, max_concurrent, max_chars, dicts, check, br_start):
+    def __init__(self, file_path, model_name, rpm, temperature, max_concurrent, max_chars, dicts, check, br_start, isno_x):
         super().__init__()
 
         self.file_path = file_path
@@ -90,6 +90,7 @@ class TranslateThread(QThread):
         self.dict = dicts
         self.check = check
         self.br_start = br_start
+        self.isno_x = isno_x
 
     def run(self):
         try:
@@ -120,7 +121,8 @@ class TranslateThread(QThread):
                     log_callback=self.log_changed.emit,
                     dicts=self.dict,
                     check=self.check,
-                    br_start=self.br_start
+                    br_start=self.br_start,
+                    isno_x=self.isno_x
                 )
 
             else:
@@ -140,7 +142,8 @@ class TranslateThread(QThread):
                     log_callback=self.log_changed.emit,
                     dicts=self.dict,
                     check=self.check,
-                    br_start=self.br_start
+                    br_start=self.br_start,
+                    isno_x=self.isno_x
                 )
             if not self.check():
                 output_dir = os.path.join(DOWN.downin.base_data.OUTFOLDER, "epub")

@@ -73,12 +73,7 @@ def rest():
         
 def return_theme():
     th = "#000000"
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, "r", encoding="utf-8") as f:
-                th = getattr(theme, f"COLORS_{json.load(f).get('theme', 'CYAN')}", "#000000")
-        except Exception:
-            pass
+    th = getattr(theme, f"COLORS_{THEME_NAME}", "#000000")
     return th
 
 import platform

@@ -784,3 +784,9 @@ QLabel#setting_title_txt{
     padding: 2px 0px;
     font-size: 9pt;
 }
+
+QTabWidget QStackedWidget {
+    background: transparent;
+    border: none;
+    border-top: 1px solid |text_original||;
+}

@@ -87,6 +87,9 @@ def split_text_by_lines(text, max_chars=5000):
 
     return chunks
 
+JP_PATTERN = re.compile(
+    r'[\u3040-\u309f\u30a0-\u30ff\u31f0-\u31ff\uff65-\uff9f\u4e00-\u9fff\uf900-\ufaff\u3005\u3006\u3007]'
+)
 
 def get_japanese_ratio(text):
     if not text:
@@ -96,9 +99,8 @@ def get_japanese_ratio(text):
     if not clean_text:
         return 0.0
 
-    jp_chars = len(re.findall(r'[\u3040-\u309f\u30a0-\u30ff]', clean_text))
+    jp_chars = len(JP_PATTERN.findall(clean_text))
     return jp_chars / len(clean_text) * 100
-
 
 def get_korean_ratio(text):
     if not text:
@@ -123,30 +125,43 @@ def get_linebreak_preservation_ratio(original, translated):
     return max(0.0, (1.0 - difference / original_breaks) * 100.0)
 
 
-# =====================================================================
-# [일본어 검사 & 수정 로직]
-# =====================================================================
+def get_japanese_info(text):
+    if not text:
+        return 0.0, 0
 
-def inspect_json_japanese(json_path, ratio_threshold=10.0):
-    """
-    out/trs의 번역 JSON을 읽어서, 각 청크의 줄 단위로 일본어 비율이 ratio_threshold(기본 10%) 이상인
-    부분(연속 줄 및 사이 공백 포함)을 검출하여 반환합니다.
-    """
+    clean_text = re.sub(r"[^\w]|[\d_]", "", text)
+    if not clean_text:
+        return 0.0, 0
+
+    jp_chars = len(JP_PATTERN.findall(clean_text))
+    ratio = (jp_chars / len(clean_text)) * 100
+    return ratio, jp_chars
+
+
+def inspect_json_japanese(
+    json_path, ratio_threshold=10.0, char_count_threshold=0, encoding="utf-8"
+):
     if not os.path.exists(json_path):
         raise FileNotFoundError(f"JSON 파일을 찾을 수 없습니다: {json_path}")
 
-    with open(json_path, 'r', encoding=_A) as f:
+    with open(json_path, "r", encoding=encoding) as f:
         data = json.load(f)
 
-    title = data.get('name', os.path.splitext(os.path.basename(json_path))[0])
-    chunk_size = data.get('chunk', 5000)
-    raw = bool(data.get('raw', False))
+    title = data.get("name", os.path.splitext(os.path.basename(json_path))[0])
+    chunk_size = data.get("chunk", 5000)
+    raw = bool(data.get("raw", False))
 
-    chunk_indices = sorted(list(set(
-        int(k) for k in data.keys() if k.isdigit()
-    )))
+    chunk_indices = sorted(
+        list(set(int(k) for k in data.keys() if k.isdigit()))
+    )
 
     detected_items = []
+
+    def is_jp_line(line_text):
+        jp_ratio, jp_count = get_japanese_info(line_text)
+        if char_count_threshold > 0:
+            return jp_count >= char_count_threshold
+        return jp_ratio >= ratio_threshold
 
     for chunk_idx in chunk_indices:
         chunk_key = str(chunk_idx)
@@ -159,23 +174,20 @@ def inspect_json_japanese(json_path, ratio_threshold=10.0):
         i = 0
 
         while i < total_lines:
-            line_jp = get_japanese_ratio(lines[i])
-            if line_jp >= ratio_threshold:
+            if is_jp_line(lines[i]):
                 start_line = i
                 last_jp_line = i
                 j = i + 1
 
                 while j < total_lines:
-                    curr_jp = get_japanese_ratio(lines[j])
-                    if curr_jp >= ratio_threshold:
+                    if is_jp_line(lines[j]):
                         last_jp_line = j
                         j += 1
-                    elif lines[j].strip() == '':
-                        # 사이 공백 줄인 경우, 뒤에 일본어 줄이 다시 나타나는지 체크
+                    elif lines[j].strip() == "":
                         k = j + 1
-                        while k < total_lines and lines[k].strip() == '':
+                        while k < total_lines and lines[k].strip() == "":
                             k += 1
-                        if k < total_lines and get_japanese_ratio(lines[k]) >= ratio_threshold:
+                        if k < total_lines and is_jp_line(lines[k]):
                             j += 1
                         else:
                             break
@@ -183,34 +195,32 @@ def inspect_json_japanese(json_path, ratio_threshold=10.0):
                         break
 
                 end_line = last_jp_line + 1
-                block_text = ''.join(lines[start_line:end_line])
+                block_text = "".join(lines[start_line:end_line])
 
-                detected_items.append({
-                    'chunk_key': chunk_key,
-                    'chunk_display': chunk_idx + 1,
-                    'start_line': start_line,
-                    'end_line': end_line,
-                    'original_text': block_text
-                })
+                detected_items.append(
+                    {
+                        "chunk_key": chunk_key,
+                        "chunk_display": chunk_idx + 1,
+                        "start_line": start_line,
+                        "end_line": end_line,
+                        "original_text": block_text,
+                    }
+                )
 
                 i = end_line
             else:
                 i += 1
 
     return {
-        'json_path': json_path,
-        'title': title,
-        'chunk_size': chunk_size,
-        'raw': raw,
-        'items': detected_items
+        "json_path": json_path,
+        "title": title,
+        "chunk_size": chunk_size,
+        "raw": raw,
+        "items": detected_items,
     }
 
 
 def apply_japanese_corrections(json_path, corrections):
-    """
-    검사 창에서 수정한 텍스트들을 원본 청크의 해당 라인에 반영하여
-    JSON 파일과 ai_down 청크 파일들을 모두 갱신합니다.
-    """
     if not os.path.exists(json_path):
         return False, 0, f"JSON 파일을 찾을 수 없습니다: {json_path}"
 
@@ -224,7 +234,6 @@ def apply_japanese_corrections(json_path, corrections):
         safe = re.sub(_I, '_', title).strip()
         ai_dir = f'{out}trs\\ai_down_{safe}_{max_chars}'
 
-        # chunk_key 별로 묶어서 역순(뒤 라인부터)으로 치환
         grouped = {}
         for corr in corrections:
             ck = corr['chunk_key']
@@ -241,7 +250,6 @@ def apply_japanese_corrections(json_path, corrections):
             text = data[chunk_key]
             lines = text.splitlines(keepends=True)
 
-            # 뒷부분 인덱스부터 교체해야 앞선 라인 인덱스가 유지됨
             corr_list.sort(key=lambda x: x['start_line'], reverse=True)
 
             for item in corr_list:
@@ -256,7 +264,6 @@ def apply_japanese_corrections(json_path, corrections):
             updated_chunk_text = ''.join(lines)
             data[chunk_key] = updated_chunk_text
 
-            # 개별 청크 txt 파일(ai_down 폴더)도 함께 갱신
             if os.path.exists(ai_dir):
                 try:
                     display_idx = int(chunk_key) + 1
@@ -266,7 +273,6 @@ def apply_japanese_corrections(json_path, corrections):
                 except Exception:
                     pass
 
-        # 갱신된 JSON 저장
         with open(json_path, 'w', encoding=_A) as f:
             json.dump(data, f, ensure_ascii=_F, indent=4)
 
@@ -275,10 +281,6 @@ def apply_japanese_corrections(json_path, corrections):
     except Exception as e:
         return False, 0, str(e)
 
-
-# =====================================================================
-# [번역 워커 및 API 호출]
-# =====================================================================
 
 class AsyncRateLimiter:
     def __init__(self, rpm):
@@ -299,16 +301,17 @@ class AsyncRateLimiter:
 
 
 class ModelWorker:
-    def __init__(self, model_name, rpm, max_concurrent, temperature, br_start=0):
+    def __init__(self, model_name, rpm, max_concurrent, temperature, br_start=0, isno_x=False):
         self.model_name = str(model_name).strip()
         self.rpm = max(1, int(rpm))
         self.max_concurrent = max(1, int(max_concurrent))
         self.temperature = float(temperature)
         self.br_start = max(0, int(br_start))
+        self.isno_x = bool(isno_x)
         self.rate_limiter = AsyncRateLimiter(self.rpm)
 
     def __repr__(self):
-        return f"ModelWorker(model={self.model_name},rpm={self.rpm},concurrent={self.max_concurrent},temperature={self.temperature},br_start={self.br_start})"
+        return f"ModelWorker(model={self.model_name},rpm={self.rpm},concurrent={self.max_concurrent},temperature={self.temperature},br_start={self.br_start},isno_x={self.isno_x})"
 
 
 def _parse_models(model_name):
@@ -342,15 +345,16 @@ def _normalize_model_values(value, count, name):
     return values
 
 
-def _create_model_workers(model_name, rpm, max_concurrent, temperature, br_start=0):
+def _create_model_workers(model_name, rpm, max_concurrent, temperature, br_start=0, isno_x=False):
     models = _parse_models(model_name)
     rpms = _normalize_model_values(rpm, len(models), 'RPM')
     concurrencies = _normalize_model_values(max_concurrent, len(models), '동시 작업수')
     temperatures = _normalize_model_values(temperature, len(models), 'Temperature')
     br_starts = _normalize_model_values(br_start, len(models), '분할 시작')
+    isno_xs = _normalize_model_values(isno_x, len(models), '검열 건너뛰기')
     workers = []
     for i, model in enumerate(models):
-        workers.append(ModelWorker(model, rpms[i], concurrencies[i], temperatures[i], br_starts[i]))
+        workers.append(ModelWorker(model, rpms[i], concurrencies[i], temperatures[i], br_starts[i], isno_xs[i]))
     return workers
 
 
@@ -414,7 +418,8 @@ async def translate_chunk_safe_async(
     raw=False,
     dicts=None,
     check=None,
-    br_start=0
+    br_start=0,
+    isno_x=False
 ):
     if dicts is None:
         dicts = {}
@@ -471,11 +476,9 @@ async def translate_chunk_safe_async(
                 system_prompt = SYSTEM_PROMPT if _G in chunk else SYSTEM_PROMPT_NO_SPLIT
 
             if CUSTOM_AI_PROMPT != '':
-                system_prompt += f"""
-
-[사용자 지정 추가 지침]
+                system_prompt += f"""[사용자 지정 추가 지침]
 {CUSTOM_AI_PROMPT}
-
+[end]
 """
 
             if dicts:
@@ -589,6 +592,11 @@ async def translate_chunk_safe_async(
                 attempt += 1
 
             else:
+                if isno_x:
+                    if log_callback:
+                        log_callback(f'{prefix_log} 경고: API 응답이 비어있음 -> 검열 우회 설정으로 즉시 분할 실행')
+                    break
+
                 if log_callback:
                     log_callback(f'{prefix_log} 경고: API 응답이 비어있음 -> 검열 실행')
 
@@ -653,7 +661,8 @@ async def translate_chunk_safe_async(
         raw=raw,
         dicts=dicts,
         check=check,
-        br_start=max(0, br_start - 1)
+        br_start=max(0, br_start - 1),
+        isno_x=isno_x
     )
 
     if part1_ignore:
@@ -678,7 +687,8 @@ async def translate_chunk_safe_async(
         raw=raw,
         dicts=dicts,
         check=check,
-        br_start=max(0, br_start - 1)
+        br_start=max(0, br_start - 1),
+        isno_x=isno_x
     )
 
     if part2_ignore:
@@ -733,7 +743,8 @@ async def _translate_light_novel_async(
     raw=False,
     dicts={},
     check=None,
-    br_start=0
+    br_start=0,
+    isno_x=False
 ):
     if API == _E:
         if log_callback:
@@ -741,7 +752,7 @@ async def _translate_light_novel_async(
         return 'error'
 
     try:
-        workers = _create_model_workers(model_name, rpm, max_concurrent, temperature, br_start)
+        workers = _create_model_workers(model_name, rpm, max_concurrent, temperature, br_start, isno_x)
     except Exception as e:
         if log_callback:
             log_callback(f'에러: 모델 설정 오류: {e}')
@@ -758,7 +769,7 @@ async def _translate_light_novel_async(
     os.makedirs(ai_dir, exist_ok=_C)
 
     model_info = ', '.join(
-        f'{worker.model_name}(RPM={worker.rpm},동시={worker.max_concurrent},온도={worker.temperature},분할={worker.br_start})'
+        f'{worker.model_name}(RPM={worker.rpm},동시={worker.max_concurrent},온도={worker.temperature},분할={worker.br_start},검열건너뜀={worker.isno_x})'
         for worker in workers
     )
     msg = f'총 {len(chunks)}개 청크 분할 완료 (청크 크기: {max_chars}). 사용 모델: {model_info}, RAW: {raw}'
@@ -819,7 +830,8 @@ async def _translate_light_novel_async(
                 raw=raw,
                 dicts=dicts,
                 check=check,
-                br_start=worker.br_start
+                br_start=worker.br_start,
+                isno_x=worker.isno_x
             )
 
             if result_text is not None and not result_ignore:
@@ -935,7 +947,8 @@ def translate_light_novel(
     raw=False,
     dicts={},
     check=None,
-    br_start=0
+    br_start=0,
+    isno_x=False
 ):
     return asyncio.run(
         _translate_light_novel_async(
@@ -951,7 +964,8 @@ def translate_light_novel(
             raw,
             dicts,
             check,
-            br_start
+            br_start,
+            isno_x
         )
     )
 
@@ -967,7 +981,8 @@ def TransAi_All(
     log_callback=_D,
     dicts={},
     check=None,
-    br_start=0
+    br_start=0,
+    isno_x=False
 ):
     raw = detect_raw_text(txt)
 
@@ -997,7 +1012,8 @@ def TransAi_All(
             raw=True,
             dicts=dicts,
             check=check,
-            br_start=br_start
+            br_start=br_start,
+            isno_x=isno_x
         )
 
         if translated_result == 'ignore':
@@ -1051,7 +1067,8 @@ def TransAi_All(
         raw=False,
         dicts=dicts,
         check=check,
-        br_start=br_start
+        br_start=br_start,
+        isno_x=isno_x
     )
 
     if translated_result == 'ignore':
@@ -1085,7 +1102,8 @@ async def _TransAi_From_Json_async(
     log_callback,
     dicts,
     check=None,
-    br_start=0
+    br_start=0,
+    isno_x=False
 ):
     if _is_stopped(check):
         if log_callback:
@@ -1106,7 +1124,7 @@ async def _TransAi_From_Json_async(
     raw = bool(data.get('raw', False))
 
     try:
-        workers = _create_model_workers(model_name, rpm, max_concurrent, temperature, br_start)
+        workers = _create_model_workers(model_name, rpm, max_concurrent, temperature, br_start, isno_x)
     except Exception as e:
         if log_callback:
             log_callback(f'에러: JSON 모델 설정 오류: {e}')
@@ -1126,7 +1144,7 @@ async def _TransAi_From_Json_async(
     )))
 
     model_info = ', '.join(
-        f'{worker.model_name}(RPM={worker.rpm},동시={worker.max_concurrent},온도={worker.temperature},분할={worker.br_start})'
+        f'{worker.model_name}(RPM={worker.rpm},동시={worker.max_concurrent},온도={worker.temperature},분할={worker.br_start},검열건너뜀={worker.isno_x})'
         for worker in workers
     )
     msg = f'[{title}] JSON 로드 완료 (청크 크기: {max_chars}, 총 {len(chunk_indices)}개 청크 비동기 복원) / 사용 모델: {model_info} / RAW: {raw}'
@@ -1195,7 +1213,8 @@ async def _TransAi_From_Json_async(
                         raw=raw,
                         dicts=dicts,
                         check=check,
-                        br_start=worker.br_start
+                        br_start=worker.br_start,
+                        isno_x=worker.isno_x
                     )
                     if result_ignore or result_text is None:
                         result_ignore_back = True
@@ -1321,7 +1340,8 @@ def TransAi_From_Json(
     log_callback=_D,
     dicts={},
     check=None,
-    br_start=0
+    br_start=0,
+    isno_x=False
 ):
     return asyncio.run(
         _TransAi_From_Json_async(
@@ -1334,7 +1354,8 @@ def TransAi_From_Json(
             log_callback,
             dicts,
             check,
-            br_start
+            br_start,
+            isno_x
         )
     )
 
