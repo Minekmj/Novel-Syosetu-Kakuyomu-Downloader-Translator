@@ -101,98 +101,152 @@ async def fetch_syosetu_episode(
     label_callback,
     total_count,
     progress_state,
-    printcall
+    printcall,
+    max_retries=3,
 ):
     async with sem:
-        try:
-            episode_url = f"{url}{ep_num}/"
+        delay = base_data.DELAY
 
-            async with session.get(episode_url, timeout=aiohttp.ClientTimeout(total=30), ssl=False) as res:
-                if res.status != 200:
-                    episode_url = f"{url}"
-                    async with session.get(episode_url, timeout=aiohttp.ClientTimeout(total=30), ssl=False) as res_fallback:
-                        if res_fallback.status != 200:
-                            return None
-                        html = await res_fallback.text()
+        for attempt in range(max_retries):
+            try:
+                episode_url = f"{url}{ep_num}/"
+
+                async with session.get(
+                    episode_url,
+                    timeout=aiohttp.ClientTimeout(total=30),
+                    ssl=False,
+                ) as res:
+                    if res.status != 200:
+                        episode_url = f"{url}"
+                        async with session.get(
+                            episode_url,
+                            timeout=aiohttp.ClientTimeout(total=30),
+                            ssl=False,
+                        ) as res_fallback:
+                            if res_fallback.status != 200:
+                                raise Exception(
+                                    f"HTTP {res_fallback.status} 에러"
+                                )
+                            html = await res_fallback.text()
+                            soup = BeautifulSoup(html, "html.parser")
+                            title_tag = soup.find(
+                                "h1", class_="p-novel__title"
+                            )
+                            body_tag = soup.find(
+                                "div", class_="js-novel-text p-novel__text"
+                            )
+                    else:
+                        html = await res.text()
                         soup = BeautifulSoup(html, "html.parser")
-                        title_tag = soup.find("h1", class_="p-novel__title")
-                        body_tag = soup.find("div", class_="js-novel-text p-novel__text")
+                        title_tag = soup.find(
+                            "h1", class_="p-novel__title p-novel__title--rensai"
+                        )
+                        body_tag = soup.find(
+                            "div", class_="js-novel-text p-novel__text"
+                        )
+
+                if not title_tag or not body_tag:
+                    raise Exception("파싱 실패 (title_tag 또는 body_tag 없음)")
+
+                title = title_tag.get_text(strip=True)
+
+                # 이미지 다운로드 처리
+                img_tags = body_tag.find_all("img")
+                has_downloaded_img = False
+
+                if img_tags:
+                    img_dir = os.path.join(base_data.OUTFOLDER, "img")
+                    os.makedirs(img_dir, exist_ok=True)
+
+                    for img in img_tags:
+                        src = img.get("src")
+                        if not src:
+                            img.decompose()
+                            continue
+
+                        full_img_url = urljoin(episode_url, src)
+                        ext = os.path.splitext(full_img_url.split("?")[0])[1]
+                        if not ext or len(ext) > 5:
+                            ext = ".jpg"
+
+                        filename, file_save_path = generate_random_filename(
+                            img_dir, ext
+                        )
+
+                        try:
+                            async with session.get(
+                                full_img_url,
+                                timeout=aiohttp.ClientTimeout(total=30),
+                                ssl=False,
+                            ) as img_res:
+                                if img_res.status == 200:
+                                    img_bytes = await img_res.read()
+                                    with open(file_save_path, "wb") as f_img:
+                                        f_img.write(img_bytes)
+                                    img.replace_with(f"-img-:{filename}")
+                                    has_downloaded_img = True
+                                else:
+                                    img.decompose()
+                        except Exception as err:
+                            printcall(
+                                f"Syosetu {ep_num}화 이미지 다운로드 실패 ({full_img_url}): {err}"
+                            )
+                            img.decompose()
+
+                # 루비 및 태그 정리
+                for tag in body_tag.find_all(["rp", "rt"]):
+                    tag.decompose()
+
+                for ruby in body_tag.find_all("ruby"):
+                    ruby.replace_with(ruby.get_text(strip=True))
+
+                if base_data.EXPORT_TEXT:
+                    for br in body_tag.find_all(["br", "br/"]):
+                        br.replace_with("\n")
+
+                body = "\n".join(
+                    [
+                        p.get_text(" ", strip=True)
+                        for p in body_tag.find_all("p")
+                        if p.get_text(strip=True)
+                        or (
+                            base_data.EXPORT_TEXT
+                            and not p.get_text(strip=True)
+                        )
+                    ]
+                )
+
+                safe_title = re.sub(r'[\\/:*?"<>|]', "_", title)
+                file_path = os.path.join(trs_path, f"{ep_num}번_{safe_title}.txt")
+
+                with open(file_path, "w", encoding="utf-8") as f:
+                    f.write(title + "\n\n" + body + "\n\n")
+
+                progress_state["done"] += 1
+                progress_percent = round(
+                    (100 / total_count) * progress_state["done"], 1
+                )
+                label_callback(f"{progress_percent}%")
+
+                # 대기 시간 계산: 이미지를 다운로드했으면 5배, 아니면 기본 딜레이
+                wait_time = delay * 5 if has_downloaded_img else delay
+                await asyncio.sleep(wait_time)
+
+                return True
+
+            except Exception as e:
+                printcall(
+                    f"Syosetu {ep_num}화 다운로드 오류 (시도 {attempt + 1}/{max_retries}): {e}"
+                )
+
+                if attempt < max_retries - 1:
+                    # 에러 시 원래 딜레이의 10배 대기 후 재시도
+                    await asyncio.sleep(delay * 10)
                 else:
-                    html = await res.text()
-                    soup = BeautifulSoup(html, "html.parser")
-                    title_tag = soup.find("h1", class_="p-novel__title p-novel__title--rensai")
-                    body_tag = soup.find("div", class_="js-novel-text p-novel__text")
-
-            if not title_tag or not body_tag:
-                return None
-
-            title = title_tag.get_text(strip=True)
-
-            img_tags = body_tag.find_all("img")
-            if img_tags:
-                img_dir = os.path.join("out", "img")
-                os.makedirs(img_dir, exist_ok=True)
-
-                for img in img_tags:
-                    src = img.get("src")
-                    if not src:
-                        img.decompose()
-                        continue
-
-                    full_img_url = urljoin(episode_url, src)
-
-                    ext = os.path.splitext(full_img_url.split("?")[0])[1]
-                    if not ext or len(ext) > 5:
-                        ext = ".jpg"
-
-                    filename, file_save_path = generate_random_filename(img_dir, ext)
-
-                    try:
-                        async with session.get(full_img_url, timeout=aiohttp.ClientTimeout(total=30), ssl=False) as img_res:
-                            if img_res.status == 200:
-                                img_bytes = await img_res.read()
-                                with open(file_save_path, "wb") as f_img:
-                                    f_img.write(img_bytes)
-                                img.replace_with(f"-img-:{filename}")
-                            else:
-                                img.decompose()
-                    except Exception as err:
-                        printcall(f"Syosetu {ep_num}화 이미지 다운로드 실패 ({full_img_url}): {err}")
-                        img.decompose()
-
-            for tag in body_tag.find_all(["rp", "rt"]):
-                tag.decompose()
-
-            for ruby in body_tag.find_all("ruby"):
-                ruby.replace_with(ruby.get_text(strip=True))
-
-            if base_data.EXPORT_TEXT:
-                for br in body_tag.find_all(["br", "br/"]):
-                    br.replace_with("\n")
-
-            body = "\n".join(
-                [
-                    p.get_text(" ", strip=True)
-                    for p in body_tag.find_all("p")
-                    if p.get_text(strip=True) or (base_data.EXPORT_TEXT and not p.get_text(strip=True))
-                ]
-            )
-
-            safe_title = re.sub(r'[\\/:*?"<>|]', '_', title)
-            file_path = os.path.join(trs_path, f"{ep_num}번_{safe_title}.txt")
-
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(title + "\n\n" + body + "\n\n")
-
-            progress_state["done"] += 1
-            progress_percent = round((100 / total_count) * progress_state["done"], 1)
-            label_callback(f"{progress_percent}%")
-
-            return True
-
-        except Exception as e:
-            printcall(f"Syosetu {ep_num}화 다운로드 오류: {e}")
-            return None
+                    printcall(
+                        f"Syosetu {ep_num}화 최대 재시도 횟수 초과로 실패"
+                    )
+                    return None
 
 
 async def download_syosetu_async(novel_code, start, end, trs_path, label):

@@ -32,6 +32,7 @@ THEME_CONFIG = {
 V = None
 
 try:
+    base_path = sys._MEIPASS
     from src.system.v import V
 except Exception:
     pass

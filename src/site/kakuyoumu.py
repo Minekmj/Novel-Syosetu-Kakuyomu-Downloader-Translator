@@ -41,61 +41,98 @@ async def fetch_kakuyomu_episode(
     trs_path,
     label_callback,
     total_count,
-    progress_state
+    progress_state,
+    max_retries=3,
 ):
     async with sem:
-        try:
-            async with session.get(ep["url"], timeout=aiohttp.ClientTimeout(total=30)) as res:
-                if res.status != 200:
-                    return
-                html = await res.text()
+        delay = getattr(base_data, "DELAY", 1.0)  # 기본 딜레이 (기본값 1초)
 
-            ep_soup = BeautifulSoup(html, "html.parser")
+        for attempt in range(max_retries):
+            try:
+                async with session.get(
+                    ep["url"], timeout=aiohttp.ClientTimeout(total=30)
+                ) as res:
+                    if res.status != 200:
+                        raise Exception(f"HTTP status {res.status}")
+                    html = await res.text()
 
-            subtitle_tag = ep_soup.select_one(".widget-episodeTitle") or ep_soup.find("h1")
-            subtitle = subtitle_tag.get_text(strip=True) if subtitle_tag else ep["subtitle"]
+                ep_soup = BeautifulSoup(html, "html.parser")
 
-            content_element = ep_soup.select_one(".widget-episodeBody")
-            if not content_element:
-                return
+                subtitle_tag = ep_soup.select_one(
+                    ".widget-episodeTitle"
+                ) or ep_soup.find("h1")
+                subtitle = (
+                    subtitle_tag.get_text(strip=True)
+                    if subtitle_tag
+                    else ep["subtitle"]
+                )
 
-            for tag in content_element.find_all(["rt", "rp"]):
-                tag.decompose()
+                content_element = ep_soup.select_one(".widget-episodeBody")
+                if not content_element:
+                    raise Exception("본문 태그(.widget-episodeBody) 없음")
 
-            for ruby in content_element.find_all("ruby"):
-                ruby.replace_with(ruby.get_text(strip=True))
+                for tag in content_element.find_all(["rt", "rp"]):
+                    tag.decompose()
 
-            body_paragraphs = []
+                for ruby in content_element.find_all("ruby"):
+                    ruby.replace_with(ruby.get_text(strip=True))
 
-            for p in content_element.find_all("p"):
-                if base_data.EXPORT_TEXT:
-                    for br in p.find_all(["br", "br/"]):
-                        br.replace_with("\n")
+                body_paragraphs = []
 
-                p_text = p.decode_contents()
-                p_text = p_text.replace("<span>", "").replace("</span>", "")
-                p_text = re.sub(r'<em class="emphasisDots">(.*?)</em>', r'**\1**', p_text)
-                p_text = re.sub(r'<[^>]+>', '', p_text)
-                p_text = p_text.lstrip(" \t").rstrip()
+                for p in content_element.find_all("p"):
+                    if base_data.EXPORT_TEXT:
+                        for br in p.find_all(["br", "br/"]):
+                            br.replace_with("\n")
 
-                if p_text or (base_data.EXPORT_TEXT and not p_text):
-                    p_text = re.sub(r'《《(.+?)》》', r'\1', p_text)
-                    body_paragraphs.append(p_text)
+                    p_text = p.decode_contents()
+                    p_text = p_text.replace("<span>", "").replace(
+                        "</span>", ""
+                    )
+                    p_text = re.sub(
+                        r'<em class="emphasisDots">(.*?)</em>',
+                        r"**\1**",
+                        p_text,
+                    )
+                    p_text = re.sub(r"<[^>]+>", "", p_text)
+                    p_text = p_text.lstrip(" \t").rstrip()
 
-            body = "\n".join(body_paragraphs)
+                    if p_text or (base_data.EXPORT_TEXT and not p_text):
+                        p_text = re.sub(r"《《(.+?)》》", r"\1", p_text)
+                        body_paragraphs.append(p_text)
 
-            safe_title = re.sub(r'[\\/:*?"<>|]', '_', subtitle)
-            file_path = os.path.join(trs_path, f"{current_idx}번_{safe_title}.txt")
+                body = "\n".join(body_paragraphs)
 
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(subtitle + "\n\n" + body + "\n\n")
+                safe_title = re.sub(r'[\\/:*?"<>|]', "_", subtitle)
+                file_path = os.path.join(
+                    trs_path, f"{current_idx}번_{safe_title}.txt"
+                )
 
-            progress_state["done"] += 1
-            progress_percent = round((100 / total_count) * progress_state["done"], 1)
-            label_callback(f"{progress_percent}%")
+                with open(file_path, "w", encoding="utf-8") as f:
+                    f.write(subtitle + "\n\n" + body + "\n\n")
 
-        except Exception as e:
-            print(f"카쿠요무 에피소드 다운로드 오류 ({ep['id']}): {e}")
+                progress_state["done"] += 1
+                progress_percent = round(
+                    (100 / total_count) * progress_state["done"], 1
+                )
+                label_callback(f"{progress_percent}%")
+
+                # 성공 시 기본 딜레이 대기
+                await asyncio.sleep(delay)
+                return True
+
+            except Exception as e:
+                print(
+                    f"카쿠요무 에피소드 다운로드 오류 ({ep['id']}) [시도 {attempt + 1}/{max_retries}]: {e}"
+                )
+
+                if attempt < max_retries - 1:
+                    # 에러 시 10배 딜레이 대기 후 재시도
+                    await asyncio.sleep(delay * 10)
+                else:
+                    print(
+                        f"카쿠요무 에피소드 ({ep['id']}) 최대 재시도 횟수 초과"
+                    )
+                    return None
 
 
 async def download_kakuyomu_async(novel_code, start, end, trs_path, label):
