@@ -1,3 +1,4 @@
+import re
 import threading
 
 import src.trans.trans_ai as trans_ai
@@ -149,6 +150,23 @@ class TranslateThread(QThread):
 
                 with open(self.file_path, "r", encoding="utf-8") as f:
                     text = f.read()
+                    
+                first_line = text.splitlines()[0].strip()
+                if first_line and set(first_line) == {"="}:
+                    filepath = self.file_path
+                    
+                    ff = os.path.basename(os.path.dirname(filepath))
+
+                    filename = os.path.splitext(os.path.basename(filepath))[0]
+
+                    if filename.startswith("["):
+                        s = re.sub(r"^\[.*?[\]\"'\)]\s*", "", filename)
+                    else:
+                        s = filename
+
+                    result = f"{ff}\n{s}\n(raw)\n+---+\n"
+
+                    text = result + text
 
                 trans_ai.TransAi_All(
                     text,
@@ -211,7 +229,7 @@ class ModelLoadThread(QThread):
             model_names = []
             
             for model in models:
-                name = getattr(model, "name", "")
+                name = model.name
                 if not name:
                     continue
                 

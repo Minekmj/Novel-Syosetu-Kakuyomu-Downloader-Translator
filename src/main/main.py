@@ -37,8 +37,7 @@ class PathSettingsDialog(QDialog):
         
         self.widths = 600
         self.min_height = 220
-        
-        self.max_height = 550
+        self.max_height = 580
         
         self.setBaseSize(self.widths, self.min_height)
         self.setFixedSize(self.widths, self.min_height)
@@ -145,6 +144,24 @@ class PathSettingsDialog(QDialog):
         raw_description.setObjectName("lbl_original_title")
         advanced_layout.addWidget(raw_description)
 
+        origin_name_layout = QHBoxLayout()
+        origin_name_layout.setSpacing(8)
+        origin_name_layout.setContentsMargins(0, 6, 0, 0)
+
+        origin_name_label = QLabel("원문 제목으로 파일 저장", self)
+        self.origin_name_toggle = QCheckBox(self)
+        self.origin_name_toggle.setChecked(False)
+
+        origin_name_label.setCursor(Qt.PointingHandCursor)
+        origin_name_label.mousePressEvent = lambda *event: self.origin_name_toggle.setChecked(
+            not self.origin_name_toggle.isChecked()
+        )
+
+        origin_name_layout.addWidget(origin_name_label)
+        origin_name_layout.addWidget(self.origin_name_toggle)
+        origin_name_layout.addStretch()
+        advanced_layout.addLayout(origin_name_layout)
+
         advanced_layout.addSpacing(10)
         
         prompt_label = QLabel("사용자 지정 AI 번역 프롬프트", self)
@@ -244,11 +261,15 @@ class PathSettingsDialog(QDialog):
         directory = QFileDialog.getExistingDirectory(self, "폴더 선택")
         if directory:
             self.path_edit.setText(directory)
+
     def get_theme_display_name(self):
         return self.theme_combo.currentText()
 
     def get_raw_text(self):
         return self.raw_text_toggle.isChecked()
+
+    def get_origin_name(self):
+        return self.origin_name_toggle.isChecked()
 
     def get_ai_prompt(self):
         return self.ai_prompt_edit.toPlainText().strip()
@@ -760,7 +781,6 @@ class MainWindow(QMainWindow):
         self.main_layout.setContentsMargins(24, 24, 24, 24)
         self.main_layout.setSpacing(16)
 
-       
         header_layout = QHBoxLayout()
         header_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         header_layout.setSpacing(8)
@@ -799,13 +819,11 @@ class MainWindow(QMainWindow):
             
             header_layout.addWidget(plus_bt)
         
-        
         header_layout.addWidget(self.epub_btn)
         header_layout.addWidget(self.translate_btn)
         header_layout.addWidget(self.manager_path_btn)
         self.main_layout.addLayout(header_layout)
 
-       
         input_layout = QHBoxLayout()
         input_layout.setSpacing(8)
 
@@ -823,7 +841,6 @@ class MainWindow(QMainWindow):
         input_layout.addWidget(self.add_btn)
         self.main_layout.addLayout(input_layout)
 
-       
         control_layout = QHBoxLayout()
         control_layout.setSpacing(8)
 
@@ -844,7 +861,6 @@ class MainWindow(QMainWindow):
         control_layout.addWidget(self.filter_chk)
         self.main_layout.addLayout(control_layout)
 
-       
         self.scroll_area = QScrollArea(self)
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -878,18 +894,17 @@ class MainWindow(QMainWindow):
             update.show()
             data["V"] = V
             save_data(data)
-            
 
     def init_saved_data(self):
         data = load_data()
 
         trans_view.trans_ai.CUSTOM_AI_PROMPT = data.get("AI_PROMPT", "")
         down.downin.base_data.EXPORT_TEXT = data.get("RAW_TEXT", False)
+        down.downin.base_data.ORIGIN_NAME = data.get("origin_name", False)
         
         if data.get("src"):
             down.downin.base_data.OUTFOLDER = data["src"]
             trans_view.OUT = data["src"]
-            
 
         self.load_widgets_from_json()
 
@@ -927,12 +942,10 @@ class MainWindow(QMainWindow):
 
         visible_widgets = []
         for row in self.row_widgets:
-           
             if search_query and search_query not in row.title_text.lower():
                 row.hide()
                 continue
 
-           
             remaining = row.get_remaining_episodes()
             if only_remaining and remaining <= 0:
                 row.hide()
@@ -941,7 +954,6 @@ class MainWindow(QMainWindow):
             row.show()
             visible_widgets.append(row)
 
-       
         if sort_mode == 0:
             visible_widgets.sort(key=lambda x: x.title_text)
         elif sort_mode == 1:
@@ -953,7 +965,6 @@ class MainWindow(QMainWindow):
         elif sort_mode == 4:
             visible_widgets.sort(key=lambda x: x.down_time)
 
-       
         for row in visible_widgets:
             self.rows_layout.addWidget(row)
 
@@ -972,19 +983,16 @@ class MainWindow(QMainWindow):
 
         data = load_data()
 
-       
         if any(item.get("src") == url for item in data.get("list", {}).values()):
             QMessageBox.warning(self, "알림", "이미 등록된 주소입니다.")
             self.main_address_edit.clear()
             return
 
-       
         self.main_address_edit.setEnabled(False)
         self.add_btn.setEnabled(False)
         self.add_btn.setText("...")
         QApplication.processEvents()
 
-       
         temp_row = AddressRowWidget(url)
         title_text = temp_row.title_text
 
@@ -998,13 +1006,11 @@ class MainWindow(QMainWindow):
         }
         save_data(data)
 
-       
         self.main_address_edit.clear()
         self.main_address_edit.setEnabled(True)
         self.add_btn.setEnabled(True)
         self.add_btn.setText("추가")
 
-       
         row = temp_row
         row.setParent(self)
         row.del_btn.clicked.connect(lambda _, r=row: self.delete_row(r))
@@ -1019,7 +1025,6 @@ class MainWindow(QMainWindow):
         self.apply_filter_and_sort()
         self.scroll_area.verticalScrollBar().setValue(self.scroll_area.verticalScrollBar().maximum())
 
-       
         QMessageBox.information(self, "완료", "주소가 성공적으로 추가되었습니다.")
 
     def delete_row(self, row_widget):
@@ -1050,12 +1055,14 @@ class MainWindow(QMainWindow):
             dialog.path_edit.setText(down.downin.base_data.OUTFOLDER)
 
         dialog.raw_text_toggle.setChecked(data.get("RAW_TEXT", False))
+        dialog.origin_name_toggle.setChecked(data.get("origin_name", False))
         dialog.ai_prompt_edit.setPlainText(data.get("AI_PROMPT", ""))
 
         if dialog.exec():
             selected_path = dialog.path_edit.text().strip()
             selected_theme = data_iteam.THEME_DATA.get(dialog.theme_combo.currentText(), "DARK")
             raw_text = dialog.get_raw_text()
+            origin_name = dialog.get_origin_name()
             ai_prompt = dialog.get_ai_prompt()
 
             if selected_path:
@@ -1064,8 +1071,10 @@ class MainWindow(QMainWindow):
                 data["src"] = selected_path
 
             down.downin.base_data.EXPORT_TEXT = raw_text
+            down.downin.base_data.ORIGIN_NAME = origin_name
             data["theme"] = selected_theme
             data["RAW_TEXT"] = raw_text
+            data["origin_name"] = origin_name
             data["AI_PROMPT"] = ai_prompt
             save_data(data)
 
@@ -1078,7 +1087,6 @@ class MainWindow(QMainWindow):
                 app.setStyleSheet(data_iteam.MINIMAL_DARK_THEME)
             
     def open_kaku(self):
-        
         dialog = findsyou.MainWindow_Find(Sites.KAKUYOMU, self)
         dialog.show()
             
@@ -1091,14 +1099,14 @@ class MainWindow(QMainWindow):
         dialog.show()
         
     def open_gloss(self):
-        dialog=glossary_manager.GlossaryManagerDialog(self)
+        dialog = glossary_manager.GlossaryManagerDialog(self)
         dialog.show()
 
     def convert_txt_to_epub(self):
         file_paths, _ = QFileDialog.getOpenFileNames(
             self, 
             "EPUB으로 변환할 TXT 파일 선택", 
-             down.downin.base_data.OUTFOLDER, 
+            down.downin.base_data.OUTFOLDER, 
             "Text Files (*.txt)"
         )
 

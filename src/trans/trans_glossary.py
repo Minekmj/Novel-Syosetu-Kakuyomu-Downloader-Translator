@@ -259,7 +259,7 @@ class DictionaryDialog(QDialog):
         if parent is None:
             return ''
 
-        path = getattr(parent, 'file_path', '')
+        path = parent.file_path
         if not path or not os.path.exists(path):
             return ''
 

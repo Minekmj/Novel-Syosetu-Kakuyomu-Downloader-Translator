@@ -1,9 +1,10 @@
 import os
 import re
 import shutil
-import asyncio
+from src.system.data import load_data
 
-Fs = asyncio.run
+def Fs(f):
+    return f
 
 import src.site.kakuyoumu as kaku
 import src.site.narow as naru
@@ -105,8 +106,10 @@ def Download(
     if start == end:
         data = start
 
-    
-    book_title = f"{title} | {data}"
+    if load_data().get("origin_name", False):
+        book_title = f"{book_title} | {data}"
+    else:
+        book_title = f"{title} | {data}"
 
     clean_title = re.sub(
         r'[\\/:*?"<>|]',

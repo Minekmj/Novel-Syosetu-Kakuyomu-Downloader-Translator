@@ -416,6 +416,25 @@ def create_epub_from_merged_txt(input_txt_path="", base_dir=".", txt_value="", R
             if len(f) >= 3 and f[2] == "(raw)":
                 RAW = True
 
+        first_line = content.splitlines()[0].strip()
+        if first_line and set(first_line) == {"="}:
+            if input_txt_path != "":
+                filepath = input_txt_path
+                
+                ff = os.path.basename(os.path.dirname(filepath))
+
+                filename = os.path.splitext(os.path.basename(filepath))[0]
+
+                if filename.startswith("["):
+                    s = re.sub(r"^\[.*?[\]\"'\)]\s*", "", filename)
+                else:
+                    s = filename
+
+                result = f"{ff}\n{s}\n+---+\n"
+                
+                RAW = True
+
+                content = result + content
         content = content.replace("\r\n", "\n")
         content = content.replace("\r", "\n")
 

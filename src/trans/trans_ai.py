@@ -1014,7 +1014,7 @@ def translate_light_novel(
 
 
 def TransAi_All(
-    txt,
+    txt:str,
     max_chars=5000,
     model_name=_J,
     rpm=15,

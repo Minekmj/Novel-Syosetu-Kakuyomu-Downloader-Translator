@@ -216,7 +216,7 @@ class PresetLoadDialog(QDialog):
             del self.presets[name]
 
         parent = self.parent()
-        settings_file = getattr(parent, 'SETTINGS_FILE', './data.json')
+        settings_file = parent.SETTINGS_FILE
         try:
             data = {}
             if os.path.exists(settings_file):
@@ -1005,7 +1005,7 @@ class TranslateDialog(QDialog):
 
     def _available_model_names(self):
         names = []
-        combo = getattr(self, 'model_add_combo', None)
+        combo = self.model_add_combo
         if combo is None:
             return names
         for i in range(combo.count()):
@@ -1611,6 +1611,9 @@ class TranslateDialog(QDialog):
             if path.lower().endswith('.txt'):
                 with open(path, 'r', encoding='utf-8-sig') as f:
                     first_line = f.readline().strip()
+                if first_line and set(first_line) == {"="}:
+                    first_line = os.path.basename(os.path.dirname(path))
+                    
                 return first_line
             if path.lower().endswith('.json'):
                 with open(path, 'r', encoding='utf-8') as f:
