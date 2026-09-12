@@ -6,3 +6,4 @@ pyside6_essentials==6.11.1
 Requests==2.34.2
 google-genai==2.18.1
 ahocorasick-rs==1.0.3
+aiohttp==3.14.3

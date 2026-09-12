@@ -51,6 +51,8 @@
 * 내부 태그 및 카테고리를 이용한 작품 검색
 * 작품 상세 정보 확인
 * 소설가가 되자(Syosetu) 작품 검색 및 회차 수집
+  * 하위 플렛폼(녹턴, 미드나이트) 지원
+  * 나로우 플렛폼은 이미지를 지원합니다.
 * 카쿠요무(Kakuyomu) 작품 검색 및 회차 수집
 * 작품의 전체 회차 일괄 다운로드
 * 기존에 저장한 작품의 신규 회차 확인
@@ -60,12 +62,14 @@
 ### 번역
 
 * Google Gemini API를 이용한 번역
-* Naver Papago API 연동
+  * 다중 모델 동시 사용 지원
+  * 젬마 모델 지원
+* Naver Papago를 이용한 일반 번역
 * 청크 방식의 분할 번역
-* 번역 결과를 EPUB 변환 과정과 연계 가능
 * 사용자 지정 번역 프롬포트 설정 가능
 * 동적 작품별 용어집으로 번역 일관성 기능
   * 작품별로 각각 자동 지정
+* 완료된 번역을 검사하여 일본어를 한국어로 대체하는 검사 기능
 
 ### EPUB 변환
 
@@ -77,6 +81,7 @@
 * 표지 이미지 적용
 * 전자책에 맞춘 문단 및 줄바꿈 처리
 * 로컬 AI 모델을 이용한 문단 구분 최적화
+* 나로우 플렛폼 이미지 지원
 
 로컬 AI 기능을 사용하는 경우 `mDeBERTa-v3-base-mnli-xnli` 모델을 이용하여 텍스트의 문단 구분을 보조합니다.
 
@@ -89,129 +94,6 @@
 * 16가지 커스텀 테마
 * QSS 기반 UI 스타일
 * 최신 버전 EXE 자동 다운로드
-
-## 스크린샷
-
-<div align="center">
-
-<img src="https://github.com/user-attachments/assets/8e9cdee6-0266-4583-8218-8a255d2ad514" alt="프로그램 메인 화면">
-
-<p><i>프로그램 메인 화면 · 작품 및 다운로드 목록</i></p>
-
-<img src="https://github.com/user-attachments/assets/ea786cf8-5fcf-411e-a2a1-309647bd891f" alt="AI 번역 화면">
-
-<p><i>번역 화면</i></p>
-
-<img src="https://github.com/user-attachments/assets/66d8ad70-164b-495f-81b3-f2a7d8708f6e" alt="용어집 번역 화면">
-
-<p><i>용어집 화면</i></p>
-
-<img src="https://github.com/user-attachments/assets/c94b82ef-39e2-4d1b-9dd6-face6b678334" alt="환경 설정">
-
-<p><i>환경 설정</i></p>
-
-<img src="https://github.com/user-attachments/assets/1da3ab85-45a6-44ab-8934-40fa04767aac" alt="나로우 파인더">
-
-<p><i>소설가가 되자 작품 검색</i></p>
-
-<img src="https://github.com/user-attachments/assets/559a7c73-c279-4982-b8c3-59f8b31f3026" alt="카쿠요무 파인더">
-
-<p><i>카쿠요무 작품 검색</i></p>
-
-<img width="200" height="300" src="https://github.com/user-attachments/assets/8f60b459-851e-4489-9c6a-cb575fdffee9" alt="EPUB 표지">
-
-<p><i>EPUB 출력 결과 예시</i></p>
-
-<br>
-
-<p><b>스크린샷 기준 버전 · v1.3.0</b></p>
-
-</div>
-
-<h2/>
-
-## 테마
-
-프로그램은 기본 테마 외에도 다양한 색상의 커스텀 테마를 제공합니다.
-
-<details>
-<summary><b>테마 보기</b></summary>
-
-<br>
-
-<div align="center">
-
-<img width="952" height="732" src="https://github.com/user-attachments/assets/759f988c-8ef5-4045-bf29-1d01b4b25922" alt="Dark Theme">
-
-<p><b>Dark</b></p>
-
-<img width="952" height="732" src="https://github.com/user-attachments/assets/62317ec9-6d0f-49c1-bb41-51b7cafe1380" alt="Light Theme">
-
-<p><b>Light</b></p>
-
-<img width="952" height="732" src="https://github.com/user-attachments/assets/84e177e3-e120-463f-a596-adc4af24ba43" alt="Blue Theme">
-
-<p><b>Blue</b></p>
-
-<img width="952" height="732" src="https://github.com/user-attachments/assets/87c20051-7676-4d5d-b173-1a809a13682f" alt="Purple Theme">
-
-<p><b>Purple</b></p>
-
-<img width="952" height="732" src="https://github.com/user-attachments/assets/93d7a504-9e85-446f-a04c-3c10907be86b" alt="Cyan Theme">
-
-<p><b>Cyan</b></p>
-
-<img width="952" height="732" src="https://github.com/user-attachments/assets/bdefe340-4284-4123-a8a1-a0772e16076b" alt="Green Theme">
-
-<p><b>Green</b></p>
-
-<img width="952" height="732" src="https://github.com/user-attachments/assets/25d4b2c6-f61c-4cef-ac15-7c8fd6b57ec0" alt="Red Theme">
-
-<p><b>Red</b></p>
-
-<img width="952" height="732" src="https://github.com/user-attachments/assets/35a92352-aa22-416b-ae2f-75ca0d6af823" alt="Orange Theme">
-
-<p><b>Orange</b></p>
-
-<img width="952" height="732" src="https://github.com/user-attachments/assets/a73e3a19-023e-4892-9ce2-5c3732784bd0" alt="Pink Theme">
-
-<p><b>Pink</b></p>
-
-<img width="952" height="732" src="https://github.com/user-attachments/assets/1f6913f1-4a44-4bf9-af21-d4c7d4de38a2" alt="Yellow Theme">
-
-<p><b>Yellow</b></p>
-
-<img width="952" height="732" src="https://github.com/user-attachments/assets/358be041-cbbc-4670-a4a6-9e5be12540af" alt="Amber Theme">
-
-<p><b>Amber</b></p>
-
-<img width="952" height="732" src="https://github.com/user-attachments/assets/1ce1b656-1330-4681-9d52-858e9bc45331" alt="Teal Theme">
-
-<p><b>Teal</b></p>
-
-<img width="952" height="732" src="https://github.com/user-attachments/assets/dd179041-5439-4f1f-a837-f21253add54d" alt="Indigo Theme">
-
-<p><b>Indigo</b></p>
-
-<img width="952" height="732" src="https://github.com/user-attachments/assets/22ca54e0-603e-40de-9d48-cb0fd3471deb" alt="Slate Theme">
-
-<p><b>Slate</b></p>
-
-<img width="952" height="732" src="https://github.com/user-attachments/assets/d204e4c8-07fb-4aa2-bc75-7dab03404a93" alt="Mono Theme">
-
-<p><b>Mono</b></p>
-
-<img width="952" height="732" src="https://github.com/user-attachments/assets/319c3f1d-3871-413f-8544-e1d18972cac7" alt="OLED Theme">
-
-<p><b>OLED</b></p>
-
-<br>
-
-<p><b>스크린샷 기준 버전 · v1.1.2</b></p>
-
-</div>
-
-</details>
 
 ## 다운로드
 

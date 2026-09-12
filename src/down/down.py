@@ -369,6 +369,25 @@ def extract_number(filename):
     match = re.search(r'(\d+)번', filename)
     return int(match.group(1)) if match else 9999
 
+import os
+import re
+import html
+import time
+import shutil
+import zipfile
+
+def get_image_media_type(filename):
+    ext = os.path.splitext(filename)[1].lower()
+    if ext in [".jpg", ".jpeg"]:
+        return "image/jpeg"
+    elif ext == ".png":
+        return "image/png"
+    elif ext == ".gif":
+        return "image/gif"
+    elif ext == ".webp":
+        return "image/webp"
+    return "image/jpeg"
+
 def create_epub_from_merged_txt(input_txt_path="", base_dir=".", txt_value="", RAW=False):
     global IS_START
 
@@ -394,13 +413,31 @@ def create_epub_from_merged_txt(input_txt_path="", base_dir=".", txt_value="", R
                 with open(input_txt_path, "r", encoding="cp949") as f:
                     content = f.read()
             f = content.splitlines()
-            if f[2] == "(raw)":
+            if len(f) >= 3 and f[2] == "(raw)":
                 RAW = True
 
         content = content.replace("\r\n", "\n")
         content = content.replace("\r", "\n")
 
         delimiter = downin.SPLIT_POINT
+        out_folder_base = downin.base_data.OUTFOLDER
+        src_img_dir = os.path.join(out_folder_base, "img")
+        if not os.path.exists(src_img_dir):
+            src_img_dir = os.path.join("out", "img")
+
+        # 본문 내 사용된 이미지 추적 (중복 방지)
+        used_images = set()
+
+        def process_img_tags_in_line(text):
+            """-img-:파일명 패턴을 HTML <img> 태그로 변환하고 used_images에 기록"""
+            def replacer(match):
+                img_name = match.group(1).strip()
+                used_images.add(img_name)
+                return f'</p><p class="center"><img src="images/{img_name}" alt="{img_name}"/></p><p>'
+
+            if "-img-:" in text:
+                text = re.sub(r'-img-:\s*([^\s<>"\'\r\n]+)', replacer, text)
+            return text
 
         if RAW:
             lines = content.splitlines()
@@ -526,6 +563,7 @@ def create_epub_from_merged_txt(input_txt_path="", base_dir=".", txt_value="", R
             os.makedirs(os.path.join(build_dir, "META-INF"), exist_ok=True)
             os.makedirs(os.path.join(build_dir, "OEBPS"), exist_ok=True)
             os.makedirs(os.path.join(build_dir, "OEBPS", "css"), exist_ok=True)
+            os.makedirs(os.path.join(build_dir, "OEBPS", "images"), exist_ok=True)
 
             with open(
                 os.path.join(build_dir, "mimetype"),
@@ -574,6 +612,13 @@ p {
 
 p + p {
     margin-top: 0.3em;
+}
+
+img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 0 auto;
 }
 
 strong, b {
@@ -687,8 +732,6 @@ strong, b {
                 processed_lines = []
 
                 for line in chapter_body_lines:
-                    # RAW는 줄바꿈을 임의로 합치거나 분리하지 않는다.
-                    # HTML 안전 처리만 한다.
                     cleaned = line.rstrip("\r\n")
 
                     if not cleaned.strip():
@@ -701,10 +744,6 @@ strong, b {
                         .replace("」", "”")
                         .replace("｢", "“")
                         .replace("｣", "”")
-                    )
-
-                    cleaned = (
-                        cleaned
                         .replace("<", "〈")
                         .replace(">", "〉")
                     )
@@ -715,9 +754,12 @@ strong, b {
                         cleaned
                     )
 
-                    processed_lines.append(
-                        f"<p>{cleaned}</p>"
-                    )
+                    # -img- 이미지 태그 변환
+                    line_html = f"<p>{cleaned}</p>"
+                    line_html = process_img_tags_in_line(line_html)
+                    line_html = line_html.replace("<p></p>", "")
+
+                    processed_lines.append(line_html)
 
                 paragraphs = "\n".join(processed_lines)
 
@@ -763,8 +805,7 @@ strong, b {
                 print()
 
         # ============================================================
-        # 일반 EPUB
-        # 기존 +---+ 기반 처리
+        # 일반 EPUB (+---+ 기반 처리)
         # ============================================================
         else:
             content = content.replace("\n\n", "\n")
@@ -821,6 +862,7 @@ strong, b {
             os.makedirs(os.path.join(build_dir, "META-INF"), exist_ok=True)
             os.makedirs(os.path.join(build_dir, "OEBPS"), exist_ok=True)
             os.makedirs(os.path.join(build_dir, "OEBPS", "css"), exist_ok=True)
+            os.makedirs(os.path.join(build_dir, "OEBPS", "images"), exist_ok=True)
 
             with open(
                 os.path.join(build_dir, "mimetype"),
@@ -866,6 +908,13 @@ p {
 
 p + p {
     margin-top: 0.3em;
+}
+
+img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 0 auto;
 }
 
 strong, b { font-weight: bold; }
@@ -1063,16 +1112,19 @@ strong, b { font-weight: bold; }
                                 stripped_for_check
                             )
                         ):
-                            processed_lines.append(
+                            line_html = (
                                 f"<p><br/></p>"
                                 f"<p class='center'>{cleaned}</p>"
                             )
                             back_center = True
                         else:
-                            processed_lines.append(
-                                f"{start}<p>{cleaned}</p>"
-                            )
+                            line_html = f"{start}<p>{cleaned}</p>"
                             back_center = False
+
+                        # -img- 이미지 태그 변환
+                        line_html = process_img_tags_in_line(line_html)
+                        line_html = line_html.replace("<p></p>", "")
+                        processed_lines.append(line_html)
 
                     paragraphs = "\n".join(
                         processed_lines
@@ -1120,6 +1172,20 @@ strong, b { font-weight: bold; }
 
             if "print_progress" in globals():
                 print()
+
+        # ============================================================
+        # 이미지 파일 복사 및 Manifest 등록
+        # ============================================================
+        epub_img_dir = os.path.join(build_dir, "OEBPS", "images")
+        for img_idx, img_name in enumerate(sorted(used_images), 1):
+            src_file = os.path.join(src_img_dir, img_name)
+            if os.path.exists(src_file):
+                dst_file = os.path.join(epub_img_dir, img_name)
+                shutil.copy2(src_file, dst_file)
+                media_type = get_image_media_type(img_name)
+                manifest_items.append(
+                    f'<item id="img_{img_idx}" href="images/{img_name}" media-type="{media_type}"/>'
+                )
 
         # ============================================================
         # OPF / NCX / EPUB 생성

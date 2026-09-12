@@ -1,26 +1,45 @@
+import threading
+
 import src.trans.trans_ai as trans_ai
-from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import QObject, QThread, Signal
 import src.find.findsyou as findsyou
-import time
 import os
 from google import genai
 
 DOWN = None;
 
-class ClickWatcher(QThread):
+STOP_CLICK = False
+
+class ClickWatcher(QObject):
     update_address = Signal(str)
     add_address = Signal()
 
+    def __init__(self):
+        super().__init__()
+        self.stop_event = threading.Event()
+        self.thread = None
+
+    def start(self):
+        self.stop_event.clear()
+        self.thread = threading.Thread(target=self.run, daemon=True)
+        self.thread.start()
+
     def run(self):
-        while not self.isInterruptionRequested():
+        while not self.stop_event.is_set():
+            if STOP_CLICK:
+                break
             if findsyou.click:
                 url = findsyou.click_plus_url
                 findsyou.click = False
-
                 self.update_address.emit(url)
                 self.add_address.emit()
+            self.stop_event.wait(0.05)
 
-            self.msleep(50)
+    def stop(self):
+        self.stop_event.set()
+        if self.thread and self.thread.is_alive() and threading.current_thread() is not self.thread:
+            self.thread.join(timeout=1)
+        self.thread = None
             
 class DownloadThread(QThread):
     finished_signal = Signal(bool, str)

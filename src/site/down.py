@@ -1,6 +1,9 @@
 import os
 import re
 import shutil
+import asyncio
+
+Fs = asyncio.run
 
 import src.site.kakuyoumu as kaku
 import src.site.narow as naru
@@ -36,9 +39,9 @@ def CheckTitle(site):
     is_kakuyomu = (site_type == "kakuyomu") or site.isdigit()
 
     if is_kakuyomu:
-        title = kaku.kakuyomu_title(site)
+        title = Fs(kaku.kakuyomu_title(site))
     else:
-        title = naru.syosetu_title(site)
+        title = Fs(naru.syosetu_title(site))
 
     title_ko = Translator(title)
 
@@ -81,21 +84,21 @@ def Download(
     ) or site.isdigit()
 
     if is_kakuyomu:
-        book_title = kaku.download_kakuyomu_async(
+        book_title = Fs(kaku.download_kakuyomu_async(
             site,
             start,
             end,
             trs_path,
             label
-        )
+        ))
     else:
-        book_title = naru.download_syosetu_async(
+        book_title = Fs(naru.download_syosetu_async(
             site,
             start,
             end,
             trs_path,
             label
-        )
+        ))
 
     data = f"{start} ~ {end}"
 
@@ -146,8 +149,8 @@ def new_number(site):
     ) or site.isdigit()
 
     if is_kakuyomu:
-        new = kaku.new_kakuyomu(site)
+        new = Fs(kaku.new_kakuyomu(site))
     else:
-        new = naru.new_syosetu(site)
+        new = Fs(naru.new_syosetu(site))
 
     return new

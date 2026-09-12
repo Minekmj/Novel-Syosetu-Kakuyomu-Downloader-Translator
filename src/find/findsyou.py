@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QCursor, QDesktopServices
 from src.trans.trans import Translator
-from src.system.data import TAG_CATEGORIES, NaroSearch, KakuyomuSearch
+from src.system.data import TAG_CATEGORIES, NaroSearch, KakuyomuSearch, MidnightSearch, NocturneSearch
 import src.system.data as data_iteam
 
 click = False
@@ -21,6 +21,8 @@ istaiain = []
 class Sites(IntEnum):
     NAROU = 1
     KAKUYOMU = 2
+    MIDNIGHT = 3
+    NOCTURNE = 4
 
 
 SITES = {
@@ -39,6 +41,22 @@ SITES = {
         'has_star': True,
         'ui_setup': lambda window, layout: kaku_set_ui(window, layout),
         'build_params': lambda window: kaku_build_params(window),
+    },
+    Sites.MIDNIGHT: {
+        'name': '미드나이트',
+        'search_class': MidnightSearch,
+        'point_text': lambda value: f'pt {value}',
+        'has_star': False,
+        'ui_setup': lambda window, layout: na_set_ui(window, layout),
+        'build_params': lambda window: na_build_params(window),
+    },
+    Sites.NOCTURNE: {
+        'name': '녹턴',
+        'search_class': NocturneSearch,
+        'point_text': lambda value: f'pt {value}',
+        'has_star': False,
+        'ui_setup': lambda window, layout: na_set_ui(window, layout),
+        'build_params': lambda window: na_build_params(window),
     }
 }
 
@@ -945,6 +963,7 @@ class MainWindow_Find(QDialog):
 
         self.combo_genre = QComboBox()
         self.combo_genre.addItems(list(search_cls.GENRES.keys()))
+        self.combo_genre.hide()
 
         self.combo_serial_status = QComboBox()
         self.combo_serial_status.addItems(
@@ -971,7 +990,9 @@ class MainWindow_Find(QDialog):
         self.combo_order = QComboBox()
         self.combo_order.addItems(list(search_cls.SORT_ORDERS.keys()))
 
-        form.addRow('장르:', self.combo_genre)
+        if len(search_cls.GENRES.keys()) > 0:
+            self.combo_genre.show()
+            form.addRow('장르:', self.combo_genre)
         form.addRow('연재 상태:', self.combo_serial_status)
         form.addRow('최근 갱신:', self.combo_last_published)
         form.addRow('최소 글자수:', self.spin_min_chars)

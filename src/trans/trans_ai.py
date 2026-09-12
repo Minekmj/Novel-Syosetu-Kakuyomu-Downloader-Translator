@@ -32,6 +32,14 @@ API = _E
 MODEL_NAME = 'gemini-3.5-flash-lite'
 CUSTOM_AI_PROMPT = ''
 
+IMG_TAG_PATTERN = re.compile(r'-img-:[^\s\r\n]+')
+IMG_PLACEHOLDER = '-+++-'
+IMG_PROMPT_RULE = """
+[이미지 필수 규칙]
+1. 입력문에 포함된 '-+++-'는 글자를 절대 유지 하세요.
+2. '-+++-' 원문에 없는 곳에 새로 만들거나 추가해서는 안 됩니다. (절대 금지!).
+"""
+
 
 def set_api_key(api_key):
     global API, client
@@ -405,6 +413,13 @@ def build_dynamic_glossary(chunk, dictionary, max_chars=GLOSSARY_MAX_CHARS):
     return '\n'.join(selected)
 
 
+def restore_img_placeholders(text, img_tags):
+    """번역 결과 내의 '-+++-' 플레이스홀더를 원래 '-img-:*' 태그로 순서대로 복원합니다."""
+    for tag in img_tags:
+        text = text.replace(IMG_PLACEHOLDER, tag, 1)
+    return text
+
+
 async def translate_chunk_safe_async(
     chunk,
     model_name,
@@ -440,13 +455,18 @@ async def translate_chunk_safe_async(
             log_callback(f'[{chunk_idx} - {model_name}] [{depth}] [시도 0] 원문의 일본어 비율이 너무 낮아 번역 생략')
         return chunk, len(lines), False
 
-    current_chunk = chunk
+    # 1. 이미지 태그 추출 및 '-+++-'로 임시 마스킹
+    img_tags = IMG_TAG_PATTERN.findall(chunk)
+    expected_img_count = len(img_tags)
+    masked_chunk = IMG_TAG_PATTERN.sub(IMG_PLACEHOLDER, chunk)
+
+    current_chunk = masked_chunk
     is_censored = False
 
     if raw:
-        expected_delimiter_count = len(re.findall(r'^={4,}$', chunk, re.MULTILINE))
+        expected_delimiter_count = len(re.findall(r'^={4,}$', masked_chunk, re.MULTILINE))
     else:
-        expected_delimiter_count = chunk.count(_G)
+        expected_delimiter_count = masked_chunk.count(_G)
 
     attempt = 1
 
@@ -473,7 +493,11 @@ async def translate_chunk_safe_async(
             if raw:
                 system_prompt = SYSTEM_PROMPT_RAW
             else:
-                system_prompt = SYSTEM_PROMPT if _G in chunk else SYSTEM_PROMPT_NO_SPLIT
+                system_prompt = SYSTEM_PROMPT if _G in masked_chunk else SYSTEM_PROMPT_NO_SPLIT
+
+            # 이미지가 청크에 포함되어 있으면 프롬프트 추가
+            if expected_img_count > 0:
+                system_prompt += f"\n{IMG_PROMPT_RULE}\n"
 
             if CUSTOM_AI_PROMPT != '':
                 system_prompt += f"""[사용자 지정 추가 지침]
@@ -482,7 +506,7 @@ async def translate_chunk_safe_async(
 """
 
             if dicts:
-                glossary_value = build_dynamic_glossary(chunk, dicts)
+                glossary_value = build_dynamic_glossary(masked_chunk, dicts)
                 if glossary_value:
                     system_prompt += '\n\n' + GLOSSARY_CONTEXT.format(glossary=glossary_value)
                     glossary_log = ', '.join(glossary_value.splitlines())
@@ -506,7 +530,21 @@ async def translate_chunk_safe_async(
                 res_text = response.text.strip()
                 res_text = res_text.replace('「', '“').replace('」', '”').replace('｢', '“').replace('｣', '”')
 
-                if not raw and _G in chunk:
+                # 이미지 플레이스홀더 개수 검사
+                if expected_img_count > 0:
+                    actual_img_count = res_text.count(IMG_PLACEHOLDER)
+                    if actual_img_count != expected_img_count:
+                        if log_callback:
+                            log_callback(
+                                f"{prefix_log} 경고: '-+++-' 이미지 태그 개수 불일치 "
+                                f'(기대: {expected_img_count}, 결과: {actual_img_count}) -> 재시도'
+                            )
+                        current_chunk = masked_chunk
+                        is_censored = False
+                        attempt += 1
+                        continue
+
+                if not raw and _G in masked_chunk:
                     actual_delimiter_count = res_text.count(_G)
                     if actual_delimiter_count != expected_delimiter_count:
                         if log_callback:
@@ -514,12 +552,12 @@ async def translate_chunk_safe_async(
                                 f"{prefix_log} 경고: '+---+' 개수 불일치 "
                                 f'(기대: {expected_delimiter_count}, 결과: {actual_delimiter_count}) -> 재시도'
                             )
-                        current_chunk = chunk
+                        current_chunk = masked_chunk
                         is_censored = False
                         attempt += 1
                         continue
 
-                if raw and '====' in chunk:
+                if raw and '====' in masked_chunk:
                     actual_delimiter_count = len(re.findall(r'^={4,}$', res_text, re.MULTILINE))
                     if actual_delimiter_count != expected_delimiter_count:
                         if log_callback:
@@ -527,14 +565,14 @@ async def translate_chunk_safe_async(
                                 f"{prefix_log} 경고: '====...' 라인 개수 불일치 "
                                 f'(기대: {expected_delimiter_count}, 결과: {actual_delimiter_count}) -> 재시도'
                             )
-                        current_chunk = chunk
+                        current_chunk = masked_chunk
                         is_censored = False
                         attempt += 1
                         continue
 
                 jp_ratio = get_japanese_ratio(res_text)
                 ko_ratio = get_korean_ratio(res_text)
-                text_len = len(chunk.strip())
+                text_len = len(masked_chunk.strip())
 
                 if text_len < 100:
                     min_ko_ratio = 60.0
@@ -558,13 +596,17 @@ async def translate_chunk_safe_async(
                     min_line_ratio = 90.0
 
                 if raw:
-                    line_ratio = get_linebreak_preservation_ratio(chunk, res_text)
+                    line_ratio = get_linebreak_preservation_ratio(masked_chunk, res_text)
                     success = jp_ratio < max_jp_ratio and ko_ratio >= min_ko_ratio and line_ratio >= min_line_ratio
                 else:
                     line_ratio = 100.0
                     success = jp_ratio < max_jp_ratio and ko_ratio >= min_ko_ratio
 
                 if success:
+                    # 번역 성공 시 '-+++-'를 원래 '-img-:*' 태그로 복원
+                    if expected_img_count > 0:
+                        res_text = restore_img_placeholders(res_text, img_tags)
+
                     if log_callback:
                         if raw:
                             log_callback(f'{prefix_log} -> 성공: (줄바꿈 보존율: {line_ratio:.2f}%)')
@@ -587,7 +629,7 @@ async def translate_chunk_safe_async(
                             f'일어: {jp_ratio:.2f}% [기준 <{max_jp_ratio}%]) -> 재시도'
                         )
 
-                current_chunk = chunk
+                current_chunk = masked_chunk
                 is_censored = False
                 attempt += 1
 
@@ -604,7 +646,7 @@ async def translate_chunk_safe_async(
                     attempt += 1
                     break
 
-                current_chunk = x_making(chunk)
+                current_chunk = x_making(masked_chunk)
                 is_censored = True
                 attempt += 1
 
@@ -648,6 +690,7 @@ async def translate_chunk_safe_async(
             f'청크 분할 처리 (전반부 {mid}줄, 후반부 {len(lines)-mid}줄)'
         )
 
+    # 분할 시 원본 청크(이미지 태그 포함)를 기준으로 재귀 호출
     part1_text, part1_len, part1_ignore = await translate_chunk_safe_async(
         chunk=''.join(lines[:mid]),
         model_name=model_name,

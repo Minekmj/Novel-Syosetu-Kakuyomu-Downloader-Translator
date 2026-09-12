@@ -21,7 +21,6 @@ data_iteam.rest()
 import src.find.findsyou as findsyou
 from src.find.findsyou import Sites, SITES
 import src.main.thread_pyqt as thread_pyqt
-from src.main.thread_pyqt import *
 thread_pyqt.DOWN = down
 import src.trans.trans_view as trans_view
 import src.glossary_fast_py.glossary_manager as glossary_manager
@@ -365,7 +364,7 @@ class DownloadDetailDialog(QDialog):
                 self.end_edit.setText(self.now_res)
         
     def start_async_fetch(self):
-        self.worker = FetchNewNumberWorker(self.site_url)
+        self.worker = thread_pyqt.FetchNewNumberWorker(self.site_url)
         self.worker.finished.connect(self.update_new_label)
         self.worker.start()
 
@@ -395,7 +394,7 @@ class DownloadDetailDialog(QDialog):
         self.down_btn.setEnabled(False)
         self.down_btn.setText("진행 중...")
 
-        self.thread = DownloadThread(self.site_url, start, end, self.prograss, self.title_text)
+        self.thread = thread_pyqt.DownloadThread(self.site_url, start, end, self.prograss, self.title_text)
         self.thread.finished_signal.connect(
             lambda success, err_msg: self.on_download_finished(success, err_msg, start, end)
         )
@@ -544,7 +543,7 @@ class AddressRowWidget(QWidget):
         self.start_async_fetch()
 
     def start_async_fetch(self):
-        self.worker = FetchNewNumberWorker(self.site_url)
+        self.worker = thread_pyqt.FetchNewNumberWorker(self.site_url)
         self.worker.finished.connect(self.update_new_label)
         self.worker.start()
 
@@ -860,7 +859,7 @@ class MainWindow(QMainWindow):
         self.scroll_area.setWidget(self.scroll_widget)
         self.main_layout.addWidget(self.scroll_area)
         
-        self.click_watcher = ClickWatcher()
+        self.click_watcher = thread_pyqt.ClickWatcher()
         self.click_watcher.update_address.connect(self.main_address_edit.setText)
         self.click_watcher.add_address.connect(self.add_address_row)
         self.click_watcher.start()
@@ -1109,7 +1108,7 @@ class MainWindow(QMainWindow):
         self.epub_btn.setEnabled(False)
         self.epub_btn.setText("변환 중...")
 
-        self.epub_thread = EpubConvertThread(file_paths)
+        self.epub_thread = thread_pyqt.EpubConvertThread(file_paths)
         self.epub_thread.finished_signal.connect(self.on_epub_convert_finished)
         self.epub_thread.start()
 
@@ -1124,10 +1123,8 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "오류", f"EPUB 변환 도중 오류가 발생했습니다:\n{message}")
             
     def closeEvent(self, event):
-        if self.click_watcher.isRunning():
-            self.click_watcher.requestInterruption()
-            self.click_watcher.wait()
-        if not close_event is None: close_event()
+        thread_pyqt.STOP_CLICK = True
+        self.click_watcher.stop()
         super().closeEvent(event)
 
 def resource_path(relative_path):
@@ -1141,7 +1138,7 @@ def resource_path(relative_path):
 app = None
 close_event = None
 
-def main(callback = None, close = None):
+def main(callback = None):
     global app, close_event
     if sys.platform == "win32":
         try:
@@ -1152,8 +1149,7 @@ def main(callback = None, close = None):
         
     app = QApplication(sys.argv)
     app.setWindowIcon(QIcon(resource_path("main.ico")))
-    close_event = close
-        
+
     font = QFont("Pretendard", 10)
     font.setStyleHint(QFont.StyleHint.SansSerif)
     app.setFont(font)
