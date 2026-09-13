@@ -182,6 +182,7 @@ def fetch_kakuyomu_episode(
                     )
 
                 body_paragraphs = []
+                body_paragraphs_raw = []
 
                 for p in content_element.find_all("p"):
                     if base_data.EXPORT_TEXT:
@@ -234,9 +235,29 @@ def fetch_kakuyomu_episode(
                         body_paragraphs.append(
                             p_text
                         )
+                        
+                    if (
+                        p_text
+                        or (
+                            not p_text
+                        )
+                    ):
+                        p_text = re.sub(
+                            r"《《(.+?)》》",
+                            r"\1",
+                            p_text
+                        )
+
+                        body_paragraphs_raw.append(
+                            p_text
+                        )
 
                 body = "\n".join(
                     body_paragraphs
+                )
+                
+                body_raw = "\n".join(
+                    body_paragraphs_raw
                 )
 
                 safe_title = re.sub(
@@ -276,7 +297,7 @@ def fetch_kakuyomu_episode(
                         "\n" +
                         '=' * 30 +
                         "\n\n\n\n" +
-                        body
+                        body_raw
                     )
 
                 # 진행률
