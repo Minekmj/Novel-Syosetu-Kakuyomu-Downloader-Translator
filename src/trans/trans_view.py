@@ -366,7 +366,6 @@ class TranslateDialog(QDialog):
         self.model_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.model_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.model_scroll.setWidget(self.model_list_container)
-        self.model_scroll.viewport().setStyleSheet('background: transparent;')
         self.model_scroll.setFixedHeight(112)
         left_layout.addWidget(self.model_scroll)
 

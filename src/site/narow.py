@@ -566,107 +566,46 @@ def download_syosetu_async(
 
 
 def new_syosetu(novel_code):
-    url = (
-        f"https://ncode.syosetu.com/"
-        f"{novel_code}/"
-    )
-
-    session = create_session()
-
-    try:
-        res = session.get(
-            url,
-            timeout=15
-        )
-
-        if res.status_code != 200:
-            return None
-
-        soup = BeautifulSoup(
-            res.text,
-            "html.parser"
-        )
-
-        next_page = soup.find(
-            "a",
-            class_="c-pager__item c-pager__item--last"
-        )
-
-        u = 1
-
-        if next_page:
-            t = next_page.get("href", "")
-
-            match = re.search(
-                r"[?&]p=(\d+)",
-                t
-            )
-
-            if match:
-                u = int(match.group(1))
-
-        else:
-            urlp = f"{url}?p=1"
-
-            res = session.get(
-                urlp,
-                timeout=15
-            )
-
+    url = f"https://ncode.syosetu.com/{novel_code}/"
+    
+    with create_session() as session:
+        try:
+            res = session.get(url, timeout=15)
             if res.status_code != 200:
+                return None
+
+            soup = BeautifulSoup(res.text, "html.parser")
+
+            next_page = soup.find("a", class_="c-pager__item c-pager__item--last")
+            last_page = 1
+
+            if next_page:
+                href = next_page.get("href", "")
+                match = re.search(r"[?&]p=(\d+)", href)
+                if match:
+                    last_page = int(match.group(1))
+
+            if last_page > 1:
+                res = session.get(f"{url}?p={last_page}", timeout=15)
+                if res.status_code != 200:
+                    return None
+                soup = BeautifulSoup(res.text, "html.parser")
+
+            body_tag = soup.find("div", class_="p-eplist")
+            if body_tag:
+                episodes = body_tag.find_all("a", class_="p-eplist__subtitle")
+                if episodes:
+                    last_href = episodes[-1].get("href", "")
+                    match = re.search(r"/(\d+)/", last_href)
+                    if match:
+                        return int(match.group(1))
+
+            check_2_res = session.get(f"{url}2/", timeout=15)
+            if check_2_res.status_code == 404:
                 return 1
 
-        res = session.get(
-            f"{url}?p={u}",
-            timeout=15
-        )
-
-        if res.status_code != 200:
             return None
 
-        soup = BeautifulSoup(
-            res.text,
-            "html.parser"
-        )
-
-        body_tag = soup.find(
-            "div",
-            class_="p-eplist"
-        )
-
-        if not body_tag:
+        except Exception as e:
+            print(f"오류 발생 ({novel_code}): {e}")
             return None
-
-        episodes = body_tag.find_all(
-            "a",
-            class_="p-eplist__subtitle"
-        )
-
-        if not episodes:
-            return None
-
-        t = episodes[-1].get(
-            "href",
-            ""
-        )
-
-        match = re.search(
-            r"/(\d+)/",
-            t
-        )
-
-        return (
-            int(match.group(1))
-            if match
-            else None
-        )
-
-    except Exception as e:
-        print(
-            f"오류: {e}"
-        )
-
-        return None
-
-    finally:
-        session.close()
