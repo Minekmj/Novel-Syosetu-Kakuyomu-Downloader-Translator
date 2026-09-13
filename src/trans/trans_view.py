@@ -268,8 +268,8 @@ class TranslateDialog(QDialog):
         self.log_history = []
 
         self.setWindowTitle('AI 번역')
-        self.resize(920, 710)
-        self.setMinimumSize(920, 710)
+        self.resize(920, 750)
+        self.setMinimumSize(920, 730)
         self.setAcceptDrops(True)
         self.init_ui()
         self.load_settings()
@@ -407,8 +407,9 @@ class TranslateDialog(QDialog):
         lbl_chars = QLabel('청크 글자수')
         lbl_br = QLabel('분할 시작')
         lbl_censor = QLabel('검열하기')
+        lbl_thinking = QLabel('추론')
 
-        for label in [lbl_rpm, lbl_temp, lbl_conc, lbl_chars, lbl_br, lbl_censor]:
+        for label in [lbl_rpm, lbl_temp, lbl_conc, lbl_chars, lbl_br, lbl_censor, lbl_thinking]:
             label.setObjectName('optionLabel')
 
         self.rpm_combo = QComboBox()
@@ -440,7 +441,18 @@ class TranslateDialog(QDialog):
         self.censor_combo.addItems(['사용', '사용 안함'])
         self.censor_combo.setCurrentText('사용')
         self.censor_combo.setMinimumHeight(35)
-        self.censor_combo.setToolTip('사용: 검열 시도 후 분할 / 사용 안함: 검열 건너뛰고 바로 분할(isno_x)')
+        self.censor_combo.setToolTip('사용: 검열 시도 후 분할 / 사용 안함: 검열 건너뛰고 바로 분할')
+
+        self.thinking_combo = QComboBox()
+        self.thinking_combo.addItems([
+            '기본값',
+            'minimal',
+            'low',
+            'medium',
+            'high'
+        ])
+        self.thinking_combo.setCurrentText('기본값')
+        self.thinking_combo.setMinimumHeight(35)
 
         option_grid.addWidget(lbl_rpm, 0, 0)
         option_grid.addWidget(self.rpm_combo, 0, 1)
@@ -457,11 +469,15 @@ class TranslateDialog(QDialog):
         option_grid.addWidget(lbl_censor, 2, 2)
         option_grid.addWidget(self.censor_combo, 2, 3)
 
+        option_grid.addWidget(lbl_thinking, 3, 0)
+        option_grid.addWidget(self.thinking_combo, 3, 1, 1, 3)
+
         self.rpm_combo.currentTextChanged.connect(self.update_active_model)
         self.temp_combo.currentTextChanged.connect(self.update_active_model)
         self.concurrency_combo.currentTextChanged.connect(self.update_active_model)
         self.br_start_combo.currentTextChanged.connect(self.update_active_model)
         self.censor_combo.currentTextChanged.connect(self.update_active_model)
+        self.thinking_combo.currentTextChanged.connect(self.update_active_model)
 
         tab_params_layout.addLayout(option_grid)
         tab_params_layout.addStretch(1)
@@ -579,19 +595,17 @@ class TranslateDialog(QDialog):
         tab_api_layout.addStretch(1)
         self.settings_tab.addTab(tab_api, 'API 설정')
 
-        # [검사 탭 개편]
+        # [검사 탭]
         tab_inspect = QWidget()
         tab_inspect.setObjectName('no_back-tabInspect')
         tab_inspect_layout = QVBoxLayout(tab_inspect)
         tab_inspect_layout.setContentsMargins(8, 10, 8, 8)
         tab_inspect_layout.setSpacing(10)
 
-        # 1. [일본어 잔존 검사]
         inspect_title = QLabel('일본어 잔존 검사')
         inspect_title.setObjectName('subLabel')
         tab_inspect_layout.addWidget(inspect_title)
 
-        # 2. [모드]
         mode_layout = QHBoxLayout()
         mode_layout.setContentsMargins(0, 0, 0, 0)
         mode_layout.setSpacing(8)
@@ -609,7 +623,6 @@ class TranslateDialog(QDialog):
         mode_layout.addWidget(self.inspect_mode_combo, 1)
         tab_inspect_layout.addLayout(mode_layout)
 
-        # 3. [(비율 모드 시) % 이상] - 콤보 박스
         self.inspect_ratio_widget = QWidget()
         inspect_ratio_layout = QHBoxLayout(self.inspect_ratio_widget)
         inspect_ratio_layout.setContentsMargins(0, 0, 0, 0)
@@ -619,31 +632,28 @@ class TranslateDialog(QDialog):
         ratio_options = [1, 2, 3, 5, 7, 10, 15, 20, 30, 40, 50]
         for val in ratio_options:
             self.inspect_ratio_combo.addItem(f"{val}% 이상", float(val))
-        self.inspect_ratio_combo.setCurrentIndex(ratio_options.index(10))  # 기본 10%
+        self.inspect_ratio_combo.setCurrentIndex(ratio_options.index(10))
         self.inspect_ratio_combo.setMinimumHeight(35)
 
         inspect_ratio_layout.addWidget(self.inspect_ratio_combo, 1)
         tab_inspect_layout.addWidget(self.inspect_ratio_widget)
 
-        # 4. [(글자 수 모드 시) 자 이상] - 콤보 박스
         self.inspect_count_widget = QWidget()
         inspect_count_layout = QHBoxLayout(self.inspect_count_widget)
         inspect_count_layout.setContentsMargins(0, 0, 0, 0)
         inspect_count_layout.setSpacing(8)
 
-
         self.inspect_count_combo = QComboBox()
         count_options = [1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 100]
         for val in count_options:
             self.inspect_count_combo.addItem(f"{val}자 이상", int(val))
-        self.inspect_count_combo.setCurrentIndex(count_options.index(5))  # 기본 5자
+        self.inspect_count_combo.setCurrentIndex(count_options.index(5))
         self.inspect_count_combo.setMinimumHeight(35)
 
         inspect_count_layout.addWidget(self.inspect_count_combo, 1)
         tab_inspect_layout.addWidget(self.inspect_count_widget)
         self.inspect_count_widget.setVisible(False)
 
-        # 5. [검사하기]
         self.inspect_btn = QPushButton('검사하기')
         self.inspect_btn.setObjectName('primaryBtn')
         self.inspect_btn.setFixedHeight(36)
@@ -655,7 +665,6 @@ class TranslateDialog(QDialog):
         self.inspect_status_lbl.setVisible(False)
         tab_inspect_layout.addWidget(self.inspect_status_lbl)
 
-        # 6. [검사 설명]
         self.inspect_info = QLabel(
             "trs 폴더 내의 번역 JSON 파일을 분석하여, 각 줄에서 설정한 일본어 비율 또는 "
             "글자 수 이상 남은 문장(연속 줄 포함)을 찾아내고 직접 수정한 뒤 재저장합니다."
@@ -1082,7 +1091,8 @@ class TranslateDialog(QDialog):
             'temperature': 0.1,
             'concurrency': 4,
             'br_start': 0,
-            'isno_x': False
+            'isno_x': False,
+            'thinking_budget': '기본값'
         })
         new_index = len(self.selected_models) - 1
         self.active_model_index = new_index
@@ -1244,6 +1254,21 @@ class TranslateDialog(QDialog):
         self.censor_combo.setCurrentText(censor_text)
         self.censor_combo.blockSignals(False)
 
+        thinking_val = str(model.get('thinking_budget', '기본값'))
+        self.thinking_combo.blockSignals(True)
+        matched = False
+        for idx in range(self.thinking_combo.count()):
+            item_text = self.thinking_combo.itemText(idx).lower()
+            if thinking_val.lower() in item_text:
+                self.thinking_combo.setCurrentIndex(idx)
+                matched = True
+                break
+        if not matched:
+            if self.thinking_combo.findText(thinking_val) < 0:
+                self.thinking_combo.addItem(thinking_val)
+            self.thinking_combo.setCurrentText(thinking_val)
+        self.thinking_combo.blockSignals(False)
+
         self.rebuild_model_list()
 
     def update_active_model(self, *args):
@@ -1256,6 +1281,7 @@ class TranslateDialog(QDialog):
             self.selected_models[self.active_model_index]['concurrency'] = int(self.concurrency_combo.currentText())
             self.selected_models[self.active_model_index]['br_start'] = int(self.br_start_combo.currentText())
             self.selected_models[self.active_model_index]['isno_x'] = (self.censor_combo.currentText() == '사용 안함')
+            self.selected_models[self.active_model_index]['thinking_budget'] = self.thinking_combo.currentText()
         except (ValueError, TypeError):
             pass
 
@@ -1290,7 +1316,8 @@ class TranslateDialog(QDialog):
                 'temperature': float(x.get('temperature', 0.1)),
                 'concurrency': int(x.get('concurrency', 4)),
                 'br_start': int(x.get('br_start', 0)),
-                'isno_x': bool(x.get('isno_x', False))
+                'isno_x': bool(x.get('isno_x', False)),
+                'thinking_budget': str(x.get('thinking_budget', '기본값'))
             }
             for x in self.selected_models if str(x.get('model', '')).strip()
         ]
@@ -1317,6 +1344,7 @@ class TranslateDialog(QDialog):
 
         default_br = int(data.get('translate_br_start', 0))
         default_isno_x = bool(data.get('translate_isno_x', False))
+        default_thinking = str(data.get('translate_thinking_budget', '기본값'))
         models = data.get('translate_models')
         self.selected_models = []
 
@@ -1337,7 +1365,8 @@ class TranslateDialog(QDialog):
                         'temperature': float(data.get('translate_temperature', 0.1)),
                         'concurrency': int(data.get('translate_concurrency', 4)),
                         'br_start': default_br,
-                        'isno_x': default_isno_x
+                        'isno_x': default_isno_x,
+                        'thinking_budget': default_thinking
                     })
                 elif isinstance(item, dict):
                     model = str(item.get('model', '')).strip()
@@ -1353,7 +1382,8 @@ class TranslateDialog(QDialog):
                         'temperature': float(item.get('temperature', data.get('translate_temperature', 0.1))),
                         'concurrency': int(item.get('concurrency', data.get('translate_concurrency', 4))),
                         'br_start': int(item.get('br_start', default_br)),
-                        'isno_x': bool(item.get('isno_x', default_isno_x))
+                        'isno_x': bool(item.get('isno_x', default_isno_x)),
+                        'thinking_budget': str(item.get('thinking_budget', default_thinking))
                     })
 
         if not self.selected_models:
@@ -1365,7 +1395,8 @@ class TranslateDialog(QDialog):
                     'temperature': float(data.get('translate_temperature', 0.1)),
                     'concurrency': int(data.get('translate_concurrency', 4)),
                     'br_start': default_br,
-                    'isno_x': default_isno_x
+                    'isno_x': default_isno_x,
+                    'thinking_budget': default_thinking
                 })
 
         max_chars = str(data.get('translate_max_chars', 5000))
@@ -1422,6 +1453,7 @@ class TranslateDialog(QDialog):
                 'translate_concurrency': first['concurrency'],
                 'translate_br_start': first['br_start'],
                 'translate_isno_x': bool(first.get('isno_x', False)),
+                'translate_thinking_budget': str(first.get('thinking_budget', '기본값')),
                 'translate_max_chars': int(self.chars_combo.currentText()),
                 'translate_glossary_enabled': bool(self.glossary_enabled)
             })
@@ -1508,6 +1540,7 @@ class TranslateDialog(QDialog):
 
             default_br = int(preset.get('br_start', 0))
             default_isno_x = bool(preset.get('isno_x', False))
+            default_thinking = str(preset.get('thinking_budget', '기본값'))
 
             new_models = []
             used_names = set()
@@ -1526,7 +1559,8 @@ class TranslateDialog(QDialog):
                         'temperature': 0.1,
                         'concurrency': 4,
                         'br_start': default_br,
-                        'isno_x': default_isno_x
+                        'isno_x': default_isno_x,
+                        'thinking_budget': default_thinking
                     })
                 elif isinstance(item, dict):
                     model = str(item.get('model', '')).strip()
@@ -1542,7 +1576,8 @@ class TranslateDialog(QDialog):
                         'temperature': float(item.get('temperature', 0.1)),
                         'concurrency': int(item.get('concurrency', 4)),
                         'br_start': int(item.get('br_start', default_br)),
-                        'isno_x': bool(item.get('isno_x', default_isno_x))
+                        'isno_x': bool(item.get('isno_x', default_isno_x)),
+                        'thinking_budget': str(item.get('thinking_budget', default_thinking))
                     })
 
             if not new_models:
@@ -1746,6 +1781,7 @@ class TranslateDialog(QDialog):
         concurrencies = tuple(x['concurrency'] for x in model_configs)
         br_starts = tuple(x['br_start'] for x in model_configs)
         isno_xs = tuple(x['isno_x'] for x in model_configs)
+        thinking_budgets = tuple(x.get('thinking_budget', '기본값') for x in model_configs)
         dict_data = dict(self.current_dictionary) if self.glossary_enabled else {}
 
         self.is_trans = True
@@ -1761,7 +1797,7 @@ class TranslateDialog(QDialog):
             censor_state = "건너뜀(isno_x)" if config['isno_x'] else "적용"
             self.add_log(
                 f"모델 {i}: {config['model']} / RPM {config['rpm']} / Temp {config['temperature']} / "
-                f"동시 {config['concurrency']} / 분할시작 {config['br_start']} / 검열: {censor_state}"
+                f"동시 {config['concurrency']} / 분할시작 {config['br_start']} / 검열: {censor_state} / 추론: {config.get('thinking_budget', '기본값')}"
             )
         self.add_log(f"작품명: {self.file_title}")
         self.add_log(f"청크 글자수: {max_chars}")
@@ -1769,32 +1805,19 @@ class TranslateDialog(QDialog):
         self.add_log('=' * 55)
 
         try:
-            try:
-                self.thread = TranslateThread(
-                    self.file_path,
-                    model_names,
-                    rpms,
-                    temperatures,
-                    concurrencies,
-                    max_chars,
-                    dicts=dict_data,
-                    check=self.get_out,
-                    br_start=br_starts,
-                    isno_x=isno_xs
-                )
-            except TypeError:
-                self.thread = TranslateThread(
-                    self.file_path,
-                    model_names,
-                    rpms,
-                    temperatures,
-                    concurrencies,
-                    max_chars,
-                    dicts=dict_data,
-                    check=self.get_out,
-                    br_start=br_starts,
-                    isno_x=isno_xs
-                )
+            self.thread = TranslateThread(
+                self.file_path,
+                model_names,
+                rpms,
+                temperatures,
+                concurrencies,
+                max_chars,
+                dicts=dict_data,
+                check=self.get_out,
+                br_start=br_starts,
+                isno_x=isno_xs,
+                thinking_budget=thinking_budgets
+            )
             self.thread.progress_changed.connect(self.update_progress)
             self.thread.log_changed.connect(self.add_log)
             self.thread.finished_signal.connect(self.on_finished)

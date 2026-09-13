@@ -13,12 +13,16 @@ from src.trans.trans import Translator
 
 trans_ai = None  # 외부 삽입용
 
-JP_RANGES = r'\u3040-\u309f\u30a0-\u30ff\u31f0-\u31ff\uff65-\uff9f\u4e00-\u9fff\uf900-\ufaff\u3005\u3006\u3007'
+JP_RANGES = r'\u3040-\u309f\u30a0-\u30ff\u31f0-\u31ff\uff65-\uff9f\u4e00-\u9fff\uf900-\ufaff\u3005\u3006'
+
+JP_CHECK_RANGES = r'\u3040-\u309f\u30a0-\u30fb\u30fd-\u30ff\u31f0-\u31ff\uff65-\uff6f\uff71-\uff9f\u4e00-\u9fff\uf900-\ufaff\u3005\u3006'
+
 KO_RANGES = r'\uac00-\ud7af\u1100-\u11ff\u3130-\u318f'
-PROLONGED_RANGES = r'ー〜~'
+PROLONGED_RANGES = r'ー〜~～〰'
 SMALL_KANA_RANGES = r'っッぁぃぅぇぉァィゥェォゎヵヶゃゅょャュョㇰ-ㇿ'
 
-JP_PATTERN = re.compile(rf'[{JP_RANGES}]')
+# 일본어 검사/체크는 장음 부호 'ー'가 제외된 패턴을 사용
+JP_PATTERN = re.compile(rf'[{JP_CHECK_RANGES}]')
 KO_PATTERN = re.compile(rf'[{KO_RANGES}]')
 JP_BLOCK_PATTERN = re.compile(rf'[{JP_RANGES}]+')
 
@@ -158,9 +162,7 @@ def smart_translate(text: str, glossary: dict = None, is_word_mode: bool = False
                 text = text.replace(jp_word, ko_word)
 
     res = step1_calculate_brackets(text)
-
     res = step2_calculate_prolonged(res)
-
     res = step3_calculate_yon(res)
 
     if not has_japanese(res):
@@ -197,7 +199,8 @@ def smart_translate(text: str, glossary: dict = None, is_word_mode: bool = False
         for m in reversed(jp_matches):
             sub_jp = m.group()
 
-            if RESIDUE_PATTERN.fullmatch(sub_jp):
+            # 실제 일본어 문자가 없는 블록(단순 장음/요음 잔여물)은 제거
+            if not JP_PATTERN.search(sub_jp) or RESIDUE_PATTERN.fullmatch(sub_jp):
                 chars[m.start():m.end()] = []
                 continue
 
@@ -577,7 +580,13 @@ class JapaneseCheckDialog(QDialog):
         self.inspection_data = inspection_data
         self.json_path = inspection_data.get('json_path', '')
         self.title = inspection_data.get('title', '작품')
-        self.items = inspection_data.get('items', [])
+
+        # 실제 일본어 없이 'ー' 등 장음표만 있는 항목 자동 필터링 제외
+        raw_items = inspection_data.get('items', [])
+        self.items = [
+            item for item in raw_items
+            if has_japanese(item.get('original_text', ''))
+        ]
 
         self.editors = []
         self.chunk_button_map = {}

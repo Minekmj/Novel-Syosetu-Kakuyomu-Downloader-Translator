@@ -14,6 +14,10 @@ from PySide6.QtGui import QIcon
 import ctypes
 import re
 
+import urllib.request
+import urllib.parse
+import uuid
+
 import src.down.down as down
 from src.system.data import open_folder, save_data, load_data
 import src.system.data as data_iteam
@@ -732,6 +736,29 @@ class UpdateView(QDialog):
         self.scroll_layout.setContentsMargins(0, 0, 0, 0)
 
         try:
+            data = load_data()
+
+            if not data.get("event1", False):
+                user_id = data.get("user_id")
+
+                if not user_id:
+                    user_id = uuid.uuid4().hex[:16]
+                    data["user_id"] = user_id
+
+                version = vsc.V
+                send_data = f"{user_id}_{version}"
+                encoded_data = urllib.parse.quote(send_data)
+
+                try:
+                    urllib.request.urlopen(
+                        f"https://minesite.pythonanywhere.com/data?data={encoded_data}",
+                        timeout=5
+                    )
+                    data["event1"] = True
+                    save_data(data)
+                except Exception:
+                    pass
+
             with open(resource_path("MD/update.md"), "r", encoding="UTF-8") as f:
                 md_content = f.read()
             

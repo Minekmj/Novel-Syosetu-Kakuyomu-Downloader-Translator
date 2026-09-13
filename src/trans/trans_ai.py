@@ -96,7 +96,7 @@ def split_text_by_lines(text, max_chars=5000):
     return chunks
 
 JP_PATTERN = re.compile(
-    r'[\u3040-\u309f\u30a0-\u30ff\u31f0-\u31ff\uff65-\uff9f\u4e00-\u9fff\uf900-\ufaff\u3005\u3006\u3007]'
+    r'[\u3040-\u309f\u30a0-\u30fb\u30fd-\u30ff\u31f0-\u31ff\uff65-\uff6f\uff71-\uff9f\u4e00-\u9fff\uf900-\ufaff\u3005\u3006]'
 )
 
 def get_japanese_ratio(text):
@@ -309,17 +309,18 @@ class AsyncRateLimiter:
 
 
 class ModelWorker:
-    def __init__(self, model_name, rpm, max_concurrent, temperature, br_start=0, isno_x=False):
+    def __init__(self, model_name, rpm, max_concurrent, temperature, br_start=0, isno_x=False, thinking_budget=None):
         self.model_name = str(model_name).strip()
         self.rpm = max(1, int(rpm))
         self.max_concurrent = max(1, int(max_concurrent))
         self.temperature = float(temperature)
         self.br_start = max(0, int(br_start))
         self.isno_x = bool(isno_x)
+        self.thinking_budget = thinking_budget
         self.rate_limiter = AsyncRateLimiter(self.rpm)
 
     def __repr__(self):
-        return f"ModelWorker(model={self.model_name},rpm={self.rpm},concurrent={self.max_concurrent},temperature={self.temperature},br_start={self.br_start},isno_x={self.isno_x})"
+        return f"ModelWorker(model={self.model_name},rpm={self.rpm},concurrent={self.max_concurrent},temperature={self.temperature},br_start={self.br_start},isno_x={self.isno_x},thinking={self.thinking_budget})"
 
 
 def _parse_models(model_name):
@@ -353,16 +354,19 @@ def _normalize_model_values(value, count, name):
     return values
 
 
-def _create_model_workers(model_name, rpm, max_concurrent, temperature, br_start=0, isno_x=False):
+def _create_model_workers(model_name, rpm, max_concurrent, temperature, br_start=0, isno_x=False, thinking_budget=None):
     models = _parse_models(model_name)
     rpms = _normalize_model_values(rpm, len(models), 'RPM')
     concurrencies = _normalize_model_values(max_concurrent, len(models), '동시 작업수')
     temperatures = _normalize_model_values(temperature, len(models), 'Temperature')
     br_starts = _normalize_model_values(br_start, len(models), '분할 시작')
     isno_xs = _normalize_model_values(isno_x, len(models), '검열 건너뛰기')
+    thinking_budgets = _normalize_model_values(thinking_budget, len(models), '추론')
     workers = []
     for i, model in enumerate(models):
-        workers.append(ModelWorker(model, rpms[i], concurrencies[i], temperatures[i], br_starts[i], isno_xs[i]))
+        workers.append(ModelWorker(
+            model, rpms[i], concurrencies[i], temperatures[i], br_starts[i], isno_xs[i], thinking_budgets[i]
+        ))
     return workers
 
 
@@ -414,10 +418,64 @@ def build_dynamic_glossary(chunk, dictionary, max_chars=GLOSSARY_MAX_CHARS):
 
 
 def restore_img_placeholders(text, img_tags):
-    """번역 결과 내의 '-+++-' 플레이스홀더를 원래 '-img-:*' 태그로 순서대로 복원합니다."""
     for tag in img_tags:
         text = text.replace(IMG_PLACEHOLDER, tag, 1)
     return text
+
+
+def _build_thinking_config(thinking_val, model_name=""):
+    if thinking_val is None:
+        return None
+
+    val = str(thinking_val).strip().upper()
+    if val in ('기본값', 'NONE', '', 'DEFAULT'):
+        return None
+
+    level = None
+    for candidate in ('MINIMAL', 'LOW', 'MEDIUM', 'HIGH'):
+        if candidate in val:
+            level = candidate
+            break
+
+    digits = re.findall(r'-?\d+', val)
+    raw_number = int(digits[0]) if digits else None
+
+    m = str(model_name).lower()
+
+    if 'gemini-3' in m:
+        def _get_level_enum(name):
+            try:
+                return getattr(types.ThinkingLevel, name)
+            except AttributeError:
+                return name
+
+        is_pro = 'pro' in m
+
+        if level == 'MINIMAL':
+            target_level = 'LOW' if is_pro else 'MINIMAL'
+        elif level in ('LOW', 'MEDIUM', 'HIGH'):
+            target_level = level
+        elif raw_number == 0:
+            target_level = 'LOW' if is_pro else 'MINIMAL'
+        else:
+            target_level = 'LOW'
+
+        return types.ThinkingConfig(thinking_level=_get_level_enum(target_level))
+
+    elif 'gemini-2.5' in m:
+        budget_map = {
+            'MINIMAL': 0,
+            'LOW': 1024,
+            'MEDIUM': 2048,
+            'HIGH': 4096
+        }
+        if level in budget_map:
+            return types.ThinkingConfig(thinking_budget=budget_map[level])
+        if raw_number is not None:
+            return types.ThinkingConfig(thinking_budget=raw_number)
+        return types.ThinkingConfig(thinking_budget=1024)
+
+    return None
 
 
 async def translate_chunk_safe_async(
@@ -434,7 +492,8 @@ async def translate_chunk_safe_async(
     dicts=None,
     check=None,
     br_start=0,
-    isno_x=False
+    isno_x=False,
+    thinking_budget=None
 ):
     if dicts is None:
         dicts = {}
@@ -469,6 +528,7 @@ async def translate_chunk_safe_async(
         expected_delimiter_count = masked_chunk.count(_G)
 
     attempt = 1
+    cur_thinking_budget = thinking_budget
 
     while not force_split and attempt <= max_retries:
         if _is_stopped(check):
@@ -495,7 +555,6 @@ async def translate_chunk_safe_async(
             else:
                 system_prompt = SYSTEM_PROMPT if _G in masked_chunk else SYSTEM_PROMPT_NO_SPLIT
 
-            # 이미지가 청크에 포함되어 있으면 프롬프트 추가
             if expected_img_count > 0:
                 system_prompt += f"\n{IMG_PROMPT_RULE}\n"
 
@@ -515,22 +574,42 @@ async def translate_chunk_safe_async(
                     if log_callback:
                         log_callback(f'{prefix_log} 용어집 사용: {glossary_log}')
 
-            response = await client.aio.models.generate_content(
-                model=model_name,
-                contents=f'번역:\n{current_chunk}',
-                config=types.GenerateContentConfig(
-                    system_instruction=system_prompt,
-                    temperature=temperature,
-                    top_p=0.8,
-                    safety_settings=safety_settings
+            config_params = {
+                "system_instruction": system_prompt,
+                "temperature": temperature,
+                "top_p": 0.8,
+                "safety_settings": safety_settings
+            }
+            thinking_cfg = _build_thinking_config(cur_thinking_budget, model_name=model_name)
+            if thinking_cfg is not None:
+                config_params["thinking_config"] = thinking_cfg
+
+            try:
+                response = await client.aio.models.generate_content(
+                    model=model_name,
+                    contents=f'번역:\n{current_chunk}',
+                    config=types.GenerateContentConfig(**config_params)
                 )
-            )
+            except Exception as api_err:
+                err_str = str(api_err).lower()
+                # 모델이 추론 설정을 지원하지 않아 에러 발생 시 자동 fallback
+                if thinking_cfg is not None and any(kw in err_str for kw in ("thinking", "unsupported", "invalid argument")):
+                    if log_callback:
+                        log_callback(f'{prefix_log} 알림: 모델이 해당 추론 설정을 미지원하여 제외 후 일반 모드로 재시도합니다.')
+                    cur_thinking_budget = None
+                    config_params.pop("thinking_config", None)
+                    response = await client.aio.models.generate_content(
+                        model=model_name,
+                        contents=f'번역:\n{current_chunk}',
+                        config=types.GenerateContentConfig(**config_params)
+                    )
+                else:
+                    raise api_err
 
             if response and response.text:
                 res_text = response.text.strip()
                 res_text = res_text.replace('「', '“').replace('」', '”').replace('｢', '“').replace('｣', '”')
 
-                # 이미지 플레이스홀더 개수 검사
                 if expected_img_count > 0:
                     actual_img_count = res_text.count(IMG_PLACEHOLDER)
                     if actual_img_count != expected_img_count:
@@ -603,7 +682,6 @@ async def translate_chunk_safe_async(
                     success = jp_ratio < max_jp_ratio and ko_ratio >= min_ko_ratio
 
                 if success:
-                    # 번역 성공 시 '-+++-'를 원래 '-img-:*' 태그로 복원
                     if expected_img_count > 0:
                         res_text = restore_img_placeholders(res_text, img_tags)
 
@@ -690,7 +768,6 @@ async def translate_chunk_safe_async(
             f'청크 분할 처리 (전반부 {mid}줄, 후반부 {len(lines)-mid}줄)'
         )
 
-    # 분할 시 원본 청크(이미지 태그 포함)를 기준으로 재귀 호출
     part1_text, part1_len, part1_ignore = await translate_chunk_safe_async(
         chunk=''.join(lines[:mid]),
         model_name=model_name,
@@ -705,7 +782,8 @@ async def translate_chunk_safe_async(
         dicts=dicts,
         check=check,
         br_start=max(0, br_start - 1),
-        isno_x=isno_x
+        isno_x=isno_x,
+        thinking_budget=cur_thinking_budget
     )
 
     if part1_ignore:
@@ -731,7 +809,8 @@ async def translate_chunk_safe_async(
         dicts=dicts,
         check=check,
         br_start=max(0, br_start - 1),
-        isno_x=isno_x
+        isno_x=isno_x,
+        thinking_budget=cur_thinking_budget
     )
 
     if part2_ignore:
@@ -787,7 +866,8 @@ async def _translate_light_novel_async(
     dicts={},
     check=None,
     br_start=0,
-    isno_x=False
+    isno_x=False,
+    thinking_budget=None
 ):
     if API == _E:
         if log_callback:
@@ -795,7 +875,9 @@ async def _translate_light_novel_async(
         return 'error'
 
     try:
-        workers = _create_model_workers(model_name, rpm, max_concurrent, temperature, br_start, isno_x)
+        workers = _create_model_workers(
+            model_name, rpm, max_concurrent, temperature, br_start, isno_x, thinking_budget
+        )
     except Exception as e:
         if log_callback:
             log_callback(f'에러: 모델 설정 오류: {e}')
@@ -812,7 +894,7 @@ async def _translate_light_novel_async(
     os.makedirs(ai_dir, exist_ok=_C)
 
     model_info = ', '.join(
-        f'{worker.model_name}(RPM={worker.rpm},동시={worker.max_concurrent},온도={worker.temperature},분할={worker.br_start},검열건너뜀={worker.isno_x})'
+        f'{worker.model_name}(RPM={worker.rpm},동시={worker.max_concurrent},온도={worker.temperature},분할={worker.br_start},검열건너뜀={worker.isno_x},추론={worker.thinking_budget})'
         for worker in workers
     )
     msg = f'총 {len(chunks)}개 청크 분할 완료 (청크 크기: {max_chars}). 사용 모델: {model_info}, RAW: {raw}'
@@ -874,7 +956,8 @@ async def _translate_light_novel_async(
                 dicts=dicts,
                 check=check,
                 br_start=worker.br_start,
-                isno_x=worker.isno_x
+                isno_x=worker.isno_x,
+                thinking_budget=worker.thinking_budget
             )
 
             if result_text is not None and not result_ignore:
@@ -950,7 +1033,10 @@ error 청크 next
     json_path = f'{out}trs\\save_{safe} _ {max_chars}.json'
     try:
         first_br = workers[0].br_start if workers else 0
-        save_translation_json(translated_parts, chunks, max_chars, title, json_path, raw=raw, br_start=first_br)
+        first_tb = workers[0].thinking_budget if workers else None
+        save_translation_json(
+            translated_parts, chunks, max_chars, title, json_path, raw=raw, br_start=first_br, thinking_budget=first_tb
+        )
     except Exception as e:
         if log_callback:
             log_callback(f'JSON 저장 실패: {e}')
@@ -991,7 +1077,8 @@ def translate_light_novel(
     dicts={},
     check=None,
     br_start=0,
-    isno_x=False
+    isno_x=False,
+    thinking_budget=None
 ):
     return asyncio.run(
         _translate_light_novel_async(
@@ -1008,7 +1095,8 @@ def translate_light_novel(
             dicts,
             check,
             br_start,
-            isno_x
+            isno_x,
+            thinking_budget
         )
     )
 
@@ -1025,7 +1113,8 @@ def TransAi_All(
     dicts={},
     check=None,
     br_start=0,
-    isno_x=False
+    isno_x=False,
+    thinking_budget=None
 ):
     raw = detect_raw_text(txt)
 
@@ -1039,7 +1128,7 @@ def TransAi_All(
         if log_callback:
             log_callback(
                 f"RAW 번역 시작: 제목 '{book_title}', 작가 '{author}', "
-                f'청크 크기: {max_chars}, 동시 작업수: {max_concurrent}'
+                f'청크 크기: {max_chars}, 동시 작업수: {max_concurrent}, 추론: {thinking_budget}'
             )
 
         translated_result = _K + translate_light_novel(
@@ -1056,7 +1145,8 @@ def TransAi_All(
             dicts=dicts,
             check=check,
             br_start=br_start,
-            isno_x=isno_x
+            isno_x=isno_x,
+            thinking_budget=thinking_budget
         )
 
         if translated_result == 'ignore':
@@ -1094,7 +1184,7 @@ def TransAi_All(
     if log_callback:
         log_callback(
             f"전체 번역 시작: 제목 '{t}', 청크 크기: {max_chars}, "
-            f'동시 작업수: {max_concurrent}'
+            f'동시 작업수: {max_concurrent}, 추론: {thinking_budget}'
         )
 
     translated_result = _K + translate_light_novel(
@@ -1111,7 +1201,8 @@ def TransAi_All(
         dicts=dicts,
         check=check,
         br_start=br_start,
-        isno_x=isno_x
+        isno_x=isno_x,
+        thinking_budget=thinking_budget
     )
 
     if translated_result == 'ignore':
@@ -1146,7 +1237,8 @@ async def _TransAi_From_Json_async(
     dicts,
     check=None,
     br_start=0,
-    isno_x=False
+    isno_x=False,
+    thinking_budget=None
 ):
     if _is_stopped(check):
         if log_callback:
@@ -1167,7 +1259,9 @@ async def _TransAi_From_Json_async(
     raw = bool(data.get('raw', False))
 
     try:
-        workers = _create_model_workers(model_name, rpm, max_concurrent, temperature, br_start, isno_x)
+        workers = _create_model_workers(
+            model_name, rpm, max_concurrent, temperature, br_start, isno_x, thinking_budget
+        )
     except Exception as e:
         if log_callback:
             log_callback(f'에러: JSON 모델 설정 오류: {e}')
@@ -1187,7 +1281,7 @@ async def _TransAi_From_Json_async(
     )))
 
     model_info = ', '.join(
-        f'{worker.model_name}(RPM={worker.rpm},동시={worker.max_concurrent},온도={worker.temperature},분할={worker.br_start},검열건너뜀={worker.isno_x})'
+        f'{worker.model_name}(RPM={worker.rpm},동시={worker.max_concurrent},온도={worker.temperature},분할={worker.br_start},검열건너뜀={worker.isno_x},추론={worker.thinking_budget})'
         for worker in workers
     )
     msg = f'[{title}] JSON 로드 완료 (청크 크기: {max_chars}, 총 {len(chunk_indices)}개 청크 비동기 복원) / 사용 모델: {model_info} / RAW: {raw}'
@@ -1257,7 +1351,8 @@ async def _TransAi_From_Json_async(
                         dicts=dicts,
                         check=check,
                         br_start=worker.br_start,
-                        isno_x=worker.isno_x
+                        isno_x=worker.isno_x,
+                        thinking_budget=worker.thinking_budget
                     )
                     if result_ignore or result_text is None:
                         result_ignore_back = True
@@ -1347,11 +1442,9 @@ async def _TransAi_From_Json_async(
         author = ''
         episode = ''
 
-    # 기존에 붙어있던 _번역 제거 후 _복원 추가
     clean_book_title = re.sub(r'(_번역)+$', '', raw_book_title)
     restored_book_title = f'{clean_book_title}_복원'
 
-    # JSON 저장용 복원 타이틀 (화수 줄바꿈 구조 유지)
     if episode:
         restored_name = f'{restored_book_title}_{author}\n{episode}' if author else f'{restored_book_title}\n{episode}'
     else:
@@ -1363,7 +1456,10 @@ async def _TransAi_From_Json_async(
     save_path = f'{out}trs\\save_{safe_title}_{max_chars}_복원.json'
     try:
         first_br = workers[0].br_start if workers else 0
-        save_translation_json(translated_parts, original_chunks, max_chars, restored_name, save_path, raw=raw, br_start=first_br)
+        first_tb = workers[0].thinking_budget if workers else None
+        save_translation_json(
+            translated_parts, original_chunks, max_chars, restored_name, save_path, raw=raw, br_start=first_br, thinking_budget=first_tb
+        )
     except Exception as e:
         if log_callback:
             log_callback(f'복원 JSON 파일 저장 실패: {e}')
@@ -1375,7 +1471,7 @@ async def _TransAi_From_Json_async(
 
     final_result = '\n\n'.join(p for p in translated_parts if p)
 
-    # 3. EPUB 생성 텍스트 구성 (제목 -> 작가 -> 화수 순서 보장)
+    # 3. EPUB 생성 텍스트 구성
     if raw:
         os.makedirs(f'{out}epub', exist_ok=_C)
         os.makedirs(f'{out}epub\\raw_txt', exist_ok=_C)
@@ -1396,7 +1492,6 @@ async def _TransAi_From_Json_async(
         epub_text = '\n'.join(raw_header) + f'\n{_K}{final_result}'
 
     else:
-        # 일반 번역: 제목_복원_번역 -> 작가 -> 화수 순으로 줄바꿈 배치
         normal_header = [f'{restored_book_title}_번역']
         if author:
             normal_header.append(author)
@@ -1421,7 +1516,8 @@ def TransAi_From_Json(
     dicts={},
     check=None,
     br_start=0,
-    isno_x=False
+    isno_x=False,
+    thinking_budget=None
 ):
     return asyncio.run(
         _TransAi_From_Json_async(
@@ -1435,7 +1531,8 @@ def TransAi_From_Json(
             dicts,
             check,
             br_start,
-            isno_x
+            isno_x,
+            thinking_budget
         )
     )
 
@@ -1447,7 +1544,8 @@ def save_translation_json(
     title,
     file_path,
     raw=False,
-    br_start=0
+    br_start=0,
+    thinking_budget=None
 ):
     data = {}
     count = max(
@@ -1469,6 +1567,8 @@ def save_translation_json(
     if raw:
         data['raw'] = True
     data['br_start'] = br_start
+    if thinking_budget is not None:
+        data['thinking_budget'] = thinking_budget
 
     with open(file_path, 'w', encoding=_A) as f:
         json.dump(data, f, ensure_ascii=_F, indent=4)

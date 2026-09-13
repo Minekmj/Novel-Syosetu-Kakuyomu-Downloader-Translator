@@ -7,7 +7,7 @@ import src.find.findsyou as findsyou
 import os
 from google import genai
 
-DOWN = None;
+DOWN = None
 
 STOP_CLICK = False
 
@@ -70,8 +70,7 @@ class EpubConvertThread(QThread):
     def run(self):
         try:
             for path in self.txt_paths:
-               
-                DOWN.create_epub_from_merged_txt(path, )
+                DOWN.create_epub_from_merged_txt(path)
             
             output_dir = os.path.join(DOWN.downin.base_data.OUTFOLDER, "epub")
 
@@ -98,7 +97,7 @@ class TranslateThread(QThread):
     log_changed = Signal(str)
     finished_signal = Signal(bool, str, str)
 
-    def __init__(self, file_path, model_name, rpm, temperature, max_concurrent, max_chars, dicts, check, br_start, isno_x):
+    def __init__(self, file_path, model_name, rpm, temperature, max_concurrent, max_chars, dicts, check, br_start, isno_x, thinking_budget=None):
         super().__init__()
 
         self.file_path = file_path
@@ -111,6 +110,7 @@ class TranslateThread(QThread):
         self.check = check
         self.br_start = br_start
         self.isno_x = isno_x
+        self.thinking_budget = thinking_budget
 
     def run(self):
         try:
@@ -125,6 +125,7 @@ class TranslateThread(QThread):
             self.log_changed.emit(f"Temperature: {self.temperature}")
             self.log_changed.emit(f"동시 작업수: {self.max_concurrent}")
             self.log_changed.emit(f"청크 글자수: {self.max_chars}")
+            self.log_changed.emit(f"추론(Thinking): {self.thinking_budget}")
             self.log_changed.emit("번역 작업 시작")
             self.log_changed.emit("=" * 60)
 
@@ -142,7 +143,8 @@ class TranslateThread(QThread):
                     dicts=self.dict,
                     check=self.check,
                     br_start=self.br_start,
-                    isno_x=self.isno_x
+                    isno_x=self.isno_x,
+                    thinking_budget=self.thinking_budget
                 )
 
             else:
@@ -180,7 +182,8 @@ class TranslateThread(QThread):
                     dicts=self.dict,
                     check=self.check,
                     br_start=self.br_start,
-                    isno_x=self.isno_x
+                    isno_x=self.isno_x,
+                    thinking_budget=self.thinking_budget
                 )
             if not self.check():
                 output_dir = os.path.join(DOWN.downin.base_data.OUTFOLDER, "epub")
@@ -196,7 +199,6 @@ class TranslateThread(QThread):
                     output_dir
                 )
             else:
-    
                 self.log_changed.emit("=" * 60)
                 self.log_changed.emit("번역 중지")
                 self.log_changed.emit("=" * 60)
@@ -240,7 +242,6 @@ class ModelLoadThread(QThread):
                 if not (m.startswith("gemini") or m.startswith("gemma")):
                     continue
                     
-               
                 exclude_keywords = [
                     "embedding", "robotics", "tts", "audio", "image", 
                     "omni", "computer-use", "customtools", "live", "transcribe"
@@ -248,7 +249,6 @@ class ModelLoadThread(QThread):
                 if any(keyword in name.lower() for keyword in exclude_keywords):
                     continue
 
-               
                 supported_methods = getattr(model, "supported_generation_methods", None)
                 if supported_methods and "generateContent" not in supported_methods:
                     continue
