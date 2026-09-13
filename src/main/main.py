@@ -739,23 +739,19 @@ class UpdateView(QDialog):
             data = load_data()
 
             if not data.get("event1", False):
-                user_id = data.get("user_id")
-
-                if not user_id:
-                    user_id = uuid.uuid4().hex[:16]
-                    data["user_id"] = user_id
+                user_id = uuid.uuid4().hex[:16]
 
                 version = vsc.V
                 send_data = f"{user_id}_{version}"
                 encoded_data = urllib.parse.quote(send_data)
 
                 try:
+                    data["event1"] = True
+                    save_data(data)
                     urllib.request.urlopen(
                         f"https://minesite.pythonanywhere.com/data?data={encoded_data}",
                         timeout=5
                     )
-                    data["event1"] = True
-                    save_data(data)
                 except Exception:
                     pass
 
@@ -924,10 +920,10 @@ class MainWindow(QMainWindow):
         data = load_data()
         vn = data.get("V", "")
         if vn == "" or vn != V:
-            update = UpdateView(self)
-            update.show()
             data["V"] = V
             save_data(data)
+            update = UpdateView(self)
+            update.show()
 
     def init_saved_data(self):
         data = load_data()
