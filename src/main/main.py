@@ -24,6 +24,8 @@ import src.main.thread_pyqt as thread_pyqt
 thread_pyqt.DOWN = down
 import src.trans.trans_view as trans_view
 import src.glossary_fast_py.glossary_manager as glossary_manager
+import src.qr.qr_view as qr_view
+qr_view.down = down
 
 import src.system.v as vsc
 
@@ -770,8 +772,8 @@ class MainWindow(QMainWindow):
         self.row_widgets = []
 
         self.setWindowTitle(f"MINE DOWNLOADER - Novel(Syosetu, Kakuyomu) Downloader & Translator - {vsc.V}")
-        self.resize(950, 700)
-        self.setMinimumSize(650, 550)
+        self.resize(980, 700)
+        self.setMinimumSize(980, 550)
         self.setWindowIcon(QIcon(resource_path("main.ico")))
 
         main_widget = QWidget()
@@ -799,6 +801,10 @@ class MainWindow(QMainWindow):
         self.translate_btn = QPushButton("AI 번역")
         self.translate_btn.setObjectName("secondaryBtn")
         self.translate_btn.clicked.connect(self.open_translate_dialog)
+        
+        self.qr_btn = QPushButton("번역 목록")
+        self.qr_btn.setObjectName("secondaryBtn")
+        self.qr_btn.clicked.connect(lambda: qr_view.QRViewDialog(self).show())
 
         self.manager_path_btn = QPushButton("환경 설정")
         self.manager_path_btn.setObjectName("secondaryBtn")
@@ -821,6 +827,7 @@ class MainWindow(QMainWindow):
         
         header_layout.addWidget(self.epub_btn)
         header_layout.addWidget(self.translate_btn)
+        header_layout.addWidget(self.qr_btn)
         header_layout.addWidget(self.manager_path_btn)
         self.main_layout.addLayout(header_layout)
 

@@ -1322,11 +1322,48 @@ async def _TransAi_From_Json_async(
 
     await asyncio.gather(*worker_tasks)
 
+    # 1. title에서 제목 / 작가 / 화수 분리 파싱
+    title_lines = [line.strip() for line in title.splitlines() if line.strip()]
+    if len(title_lines) >= 3:
+        raw_book_title = title_lines[0]
+        author = title_lines[1]
+        episode = '\n'.join(title_lines[2:])
+    elif len(title_lines) == 2:
+        if '_' in title_lines[0]:
+            raw_book_title, author = title_lines[0].rsplit('_', 1)
+        else:
+            raw_book_title = title_lines[0]
+            author = ''
+        episode = title_lines[1]
+    elif len(title_lines) == 1:
+        if '_' in title_lines[0]:
+            raw_book_title, author = title_lines[0].rsplit('_', 1)
+        else:
+            raw_book_title = title_lines[0]
+            author = ''
+        episode = ''
+    else:
+        raw_book_title = 'restored'
+        author = ''
+        episode = ''
+
+    # 기존에 붙어있던 _번역 제거 후 _복원 추가
+    clean_book_title = re.sub(r'(_번역)+$', '', raw_book_title)
+    restored_book_title = f'{clean_book_title}_복원'
+
+    # JSON 저장용 복원 타이틀 (화수 줄바꿈 구조 유지)
+    if episode:
+        restored_name = f'{restored_book_title}_{author}\n{episode}' if author else f'{restored_book_title}\n{episode}'
+    else:
+        restored_name = f'{restored_book_title}_{author}' if author else restored_book_title
+
+    # 2. 복원 JSON 파일 저장
     os.makedirs(f'{out}trs', exist_ok=_C)
-    save_path = f'{out}trs\\save_{safe}_{max_chars}_복원.json'
+    safe_title = re.sub(_I, '_', restored_book_title).strip()
+    save_path = f'{out}trs\\save_{safe_title}_{max_chars}_복원.json'
     try:
         first_br = workers[0].br_start if workers else 0
-        save_translation_json(translated_parts, original_chunks, max_chars, f'{title}_복원', save_path, raw=raw, br_start=first_br)
+        save_translation_json(translated_parts, original_chunks, max_chars, restored_name, save_path, raw=raw, br_start=first_br)
     except Exception as e:
         if log_callback:
             log_callback(f'복원 JSON 파일 저장 실패: {e}')
@@ -1338,34 +1375,34 @@ async def _TransAi_From_Json_async(
 
     final_result = '\n\n'.join(p for p in translated_parts if p)
 
+    # 3. EPUB 생성 텍스트 구성 (제목 -> 작가 -> 화수 순서 보장)
     if raw:
         os.makedirs(f'{out}epub', exist_ok=_C)
         os.makedirs(f'{out}epub\\raw_txt', exist_ok=_C)
-        txt_path = f'{out}epub\\raw_txt\\{safe}_복원.txt'
-        if '_' in title:
-            book_title, author = title.rsplit('_', 1)
-        else:
-            book_title = title
-            author = ''
-        restored_title = f'{book_title}_복원'
-        r_title = f'''{restored_title}
+        txt_path = f'{out}epub\\raw_txt\\{safe_title}.txt'
+
+        r_title = f'''{restored_book_title}
 {author}
 (raw)
-{_K}{restored_title} | {author}
+{_K}{restored_book_title} | {author}
 
 '''
         if not _is_stopped(check):
             save_translation_txt(translated_parts, r_title, txt_path)
 
-    if raw:
-        if '_' in title:
-            book_title, author = title.rsplit('_', 1)
-        else:
-            book_title = title
-            author = ''
-        epub_text = f'{book_title}_복원\n{author}\n(raw)\n{_K}{final_result}'
+        raw_header = [restored_book_title, author, '(raw)']
+        if episode:
+            raw_header.append(episode)
+        epub_text = '\n'.join(raw_header) + f'\n{_K}{final_result}'
+
     else:
-        epub_text = f'{title}_복원_번역\n{_K}{final_result}'
+        # 일반 번역: 제목_복원_번역 -> 작가 -> 화수 순으로 줄바꿈 배치
+        normal_header = [f'{restored_book_title}_번역']
+        if author:
+            normal_header.append(author)
+        if episode:
+            normal_header.append(episode)
+        epub_text = '\n'.join(normal_header) + f'\n{_K}{final_result}'
 
     if not _is_stopped(check):
         down.create_epub_from_merged_txt(txt_value=epub_text, RAW=raw)
