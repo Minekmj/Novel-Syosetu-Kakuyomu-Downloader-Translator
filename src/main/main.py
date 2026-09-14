@@ -43,7 +43,7 @@ class PathSettingsDialog(QDialog):
         
         self.widths = 600
         self.min_height = 220
-        self.max_height = 580
+        self.max_height = 720
         
         self.setBaseSize(self.widths, self.min_height)
         self.setFixedSize(self.widths, self.min_height)
@@ -125,7 +125,7 @@ class PathSettingsDialog(QDialog):
 
         advanced_layout = QVBoxLayout(advanced_widget)
         advanced_layout.setContentsMargins(0, 4, 0, 0)
-        advanced_layout.setSpacing(4)
+        advanced_layout.setSpacing(6)
 
         raw_layout = QHBoxLayout()
         raw_layout.setSpacing(8)
@@ -152,7 +152,7 @@ class PathSettingsDialog(QDialog):
 
         origin_name_layout = QHBoxLayout()
         origin_name_layout.setSpacing(8)
-        origin_name_layout.setContentsMargins(0, 6, 0, 0)
+        origin_name_layout.setContentsMargins(0, 4, 0, 0)
 
         origin_name_label = QLabel("원문 제목으로 파일 저장", self)
         self.origin_name_toggle = QCheckBox(self)
@@ -168,7 +168,80 @@ class PathSettingsDialog(QDialog):
         origin_name_layout.addStretch()
         advanced_layout.addLayout(origin_name_layout)
 
-        advanced_layout.addSpacing(10)
+        censor_group_layout = QVBoxLayout()
+        censor_group_layout.setSpacing(4)
+        censor_group_layout.setContentsMargins(0, 6, 0, 0)
+
+        censor_main_layout = QHBoxLayout()
+        censor_main_layout.setSpacing(8)
+        censor_main_label = QLabel("세분화된 검열 옵션 활성화", self)
+        self.censor_toggle = QCheckBox(self)
+        self.censor_toggle.setChecked(False)
+
+        censor_main_label.setCursor(Qt.PointingHandCursor)
+        censor_main_label.mousePressEvent = lambda *event: self.censor_toggle.setChecked(
+            not self.censor_toggle.isChecked()
+        )
+
+        censor_main_layout.addWidget(censor_main_label)
+        censor_main_layout.addWidget(self.censor_toggle)
+        censor_main_layout.addStretch()
+        censor_group_layout.addLayout(censor_main_layout)
+
+        self.censor_sub_widget = QWidget(self)
+        self.censor_sub_widget.setStyleSheet("background-color: transparent;")
+        censor_sub_layout = QVBoxLayout(self.censor_sub_widget)
+        censor_sub_layout.setContentsMargins(16, 2, 0, 2)
+        censor_sub_layout.setSpacing(4)
+
+        shuffle_layout = QHBoxLayout()
+        shuffle_label = QLabel("문맥 검열 방지 - 셔플", self)
+        self.shuffle_toggle = QCheckBox(self)
+        self.shuffle_toggle.setChecked(True)
+        shuffle_label.setCursor(Qt.PointingHandCursor)
+        shuffle_label.mousePressEvent = lambda *event: self.shuffle_toggle.setChecked(
+            not self.shuffle_toggle.isChecked()
+        )
+        shuffle_layout.addWidget(shuffle_label)
+        shuffle_layout.addWidget(self.shuffle_toggle)
+        shuffle_layout.addStretch()
+        censor_sub_layout.addLayout(shuffle_layout)
+
+        mode_layout = QHBoxLayout()
+        mode_label = QLabel("검열 모드", self)
+        self.mode_combo = QComboBox(self)
+        self.mode_combo.addItem("단어 검열", "word")
+        self.mode_combo.addItem("줄 검열", "sentence")
+        mode_layout.addWidget(mode_label)
+        mode_layout.addWidget(self.mode_combo)
+        mode_layout.addStretch()
+        censor_sub_layout.addLayout(mode_layout)
+
+        papago_layout = QHBoxLayout()
+        papago_label = QLabel("검열 항목 파파고 사전 번역 적용", self)
+        self.papago_toggle = QCheckBox(self)
+        self.papago_toggle.setChecked(False)
+        papago_label.setCursor(Qt.PointingHandCursor)
+        papago_label.mousePressEvent = lambda *event: self.papago_toggle.setChecked(
+            not self.papago_toggle.isChecked()
+        )
+        papago_layout.addWidget(papago_label)
+        papago_layout.addWidget(self.papago_toggle)
+        papago_layout.addStretch()
+        censor_sub_layout.addLayout(papago_layout)
+
+        self.censor_sub_widget.setVisible(False)
+        self.censor_toggle.toggled.connect(self.censor_sub_widget.setVisible)
+
+        censor_group_layout.addWidget(self.censor_sub_widget)
+        censor_group_layout.addStretch()
+        raw_description_c = QLabel("새로운 테스트 검열 방식 - 검열 시 단어 유지를 위한 방식\n검열 시 최대 3회 재시도 및, 문장 또는 단어를 사전에 제거하여 검열 확률을 높임.\n문장을 셔플하여 ai가 문맥을 파악하지 못 하게 하여 검열 확률을 높이는 옵션 포함.\n단점 : 문맥 보존 어려움")
+        raw_description_c.setWordWrap(True)
+        raw_description_c.setObjectName("lbl_original_title")
+        censor_group_layout.addWidget(raw_description_c)
+        advanced_layout.addLayout(censor_group_layout)
+
+        advanced_layout.addSpacing(6)
         
         prompt_label = QLabel("사용자 지정 AI 번역 프롬프트", self)
         prompt_label.setObjectName("setting_title_txt")
@@ -179,18 +252,14 @@ class PathSettingsDialog(QDialog):
             "AI 번역 시 사용할 추가 프롬프트를 입력하세요.\n"
             "비워두면 기본 번역 프롬프트만 사용합니다."
         )
-        self.ai_prompt_edit.setMinimumHeight(90)
-        self.ai_prompt_edit.setMaximumHeight(130)
-        self.ai_prompt_edit.setObjectName(
-            "detail_description"
-        )
-        self.ai_prompt_edit.viewport().setStyleSheet(
-            "background: transparent;"
-        )
+        self.ai_prompt_edit.setMinimumHeight(70)
+        self.ai_prompt_edit.setMaximumHeight(100)
+        self.ai_prompt_edit.setObjectName("detail_description")
+        self.ai_prompt_edit.viewport().setStyleSheet("background: transparent;")
         advanced_layout.addWidget(self.ai_prompt_edit)
 
         link_layout = QHBoxLayout()
-        link_layout.setContentsMargins(0, 8, 0, 0)
+        link_layout.setContentsMargins(0, 4, 0, 0)
         link_layout.setSpacing(6)
 
         def create_link_button(text, url):
@@ -228,16 +297,14 @@ class PathSettingsDialog(QDialog):
         link_layout.addWidget(release_button)
         link_layout.addWidget(github_button)
         link_layout.addStretch()
-        
         link_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        advanced_layout.addSpacerItem(QSpacerItem(0, 8, QSizePolicy.Minimum, QSizePolicy.Expanding))
+        advanced_layout.addSpacerItem(QSpacerItem(0, 6, QSizePolicy.Minimum, QSizePolicy.Expanding))
         
         hr_line = QFrame(self)
         hr_line.setFrameShape(QFrame.HLine)
         hr_line.setFrameShadow(QFrame.Sunken)
         hr_line.setObjectName("hr_line")
-        
         advanced_layout.addWidget(hr_line)
 
         advanced_layout.addLayout(link_layout)
@@ -245,8 +312,6 @@ class PathSettingsDialog(QDialog):
         v_label = QLabel("현재 버전 : " + vsc.V, self)
         v_label.setObjectName("lbl_original_title")
         advanced_layout.addWidget(v_label)
-        
-        advanced_layout.addSpacerItem(QSpacerItem(0, 8, QSizePolicy.Minimum, QSizePolicy.Expanding))
 
         advanced_widget.setVisible(False)
         layout.addWidget(advanced_widget)
@@ -279,6 +344,18 @@ class PathSettingsDialog(QDialog):
 
     def get_ai_prompt(self):
         return self.ai_prompt_edit.toPlainText().strip()
+    
+    def get_censor_advanced(self):
+        return self.censor_toggle.isChecked()
+
+    def get_censor_shuffle(self):
+        return self.shuffle_toggle.isChecked()
+
+    def get_censor_mode(self):
+        return self.mode_combo.currentData()
+
+    def get_censor_papago(self):
+        return self.papago_toggle.isChecked()
 
 class EditTitleDialog(QDialog):
     def __init__(self, current_title, parent=None):
@@ -931,6 +1008,12 @@ class MainWindow(QMainWindow):
         trans_view.trans_ai.CUSTOM_AI_PROMPT = data.get("AI_PROMPT", "")
         down.downin.base_data.EXPORT_TEXT = data.get("RAW_TEXT", False)
         down.downin.base_data.ORIGIN_NAME = data.get("origin_name", False)
+
+        # 세분화 검열 옵션 로드 및 trans_ai 모듈 변수에 반영
+        trans_view.trans_ai.USE_ADVANCED_CENSOR = data.get("CENSOR_ADVANCED", False)
+        trans_view.trans_ai.CENSOR_SHUFFLE = data.get("CENSOR_SHUFFLE", True)
+        trans_view.trans_ai.CENSOR_EXTRACT_MODE = data.get("CENSOR_MODE", "word")
+        trans_view.trans_ai.CENSOR_PAPAGO = data.get("CENSOR_PAPAGO", False)
         
         if data.get("src"):
             down.downin.base_data.OUTFOLDER = data["src"]
@@ -1088,12 +1171,30 @@ class MainWindow(QMainWindow):
         dialog.origin_name_toggle.setChecked(data.get("origin_name", False))
         dialog.ai_prompt_edit.setPlainText(data.get("AI_PROMPT", ""))
 
+        # 저장된 세분화 검열 설정 값 다이얼로그에 세팅
+        censor_adv = data.get("CENSOR_ADVANCED", False)
+        dialog.censor_toggle.setChecked(censor_adv)
+        dialog.censor_sub_widget.setVisible(censor_adv)
+        dialog.shuffle_toggle.setChecked(data.get("CENSOR_SHUFFLE", True))
+        
+        saved_mode = data.get("CENSOR_MODE", "word")
+        idx = dialog.mode_combo.findData(saved_mode)
+        if idx >= 0:
+            dialog.mode_combo.setCurrentIndex(idx)
+
+        dialog.papago_toggle.setChecked(data.get("CENSOR_PAPAGO", False))
+
         if dialog.exec():
             selected_path = dialog.path_edit.text().strip()
             selected_theme = data_iteam.THEME_DATA.get(dialog.theme_combo.currentText(), "DARK")
             raw_text = dialog.get_raw_text()
             origin_name = dialog.get_origin_name()
             ai_prompt = dialog.get_ai_prompt()
+
+            censor_advanced = dialog.get_censor_advanced()
+            censor_shuffle = dialog.get_censor_shuffle()
+            censor_mode = dialog.get_censor_mode()
+            censor_papago = dialog.get_censor_papago()
 
             if selected_path:
                 down.downin.base_data.OUTFOLDER = selected_path
@@ -1106,9 +1207,21 @@ class MainWindow(QMainWindow):
             data["RAW_TEXT"] = raw_text
             data["origin_name"] = origin_name
             data["AI_PROMPT"] = ai_prompt
+
+            # 세분화 검열 설정 저장
+            data["CENSOR_ADVANCED"] = censor_advanced
+            data["CENSOR_SHUFFLE"] = censor_shuffle
+            data["CENSOR_MODE"] = censor_mode
+            data["CENSOR_PAPAGO"] = censor_papago
+
             save_data(data)
 
+            # trans_ai 전역 상태 업데이트
             trans_view.trans_ai.CUSTOM_AI_PROMPT = ai_prompt
+            trans_view.trans_ai.USE_ADVANCED_CENSOR = censor_advanced
+            trans_view.trans_ai.CENSOR_SHUFFLE = censor_shuffle
+            trans_view.trans_ai.CENSOR_EXTRACT_MODE = censor_mode
+            trans_view.trans_ai.CENSOR_PAPAGO = censor_papago
 
             if data["theme"] != data_iteam.THEME_NAME:
                 data_iteam.THEME_NAME = data["theme"]

@@ -125,7 +125,7 @@ class TranslateThread(QThread):
             self.log_changed.emit(f"Temperature: {self.temperature}")
             self.log_changed.emit(f"동시 작업수: {self.max_concurrent}")
             self.log_changed.emit(f"청크 글자수: {self.max_chars}")
-            self.log_changed.emit(f"추론(Thinking): {self.thinking_budget}")
+            self.log_changed.emit(f"추론: {self.thinking_budget}")
             self.log_changed.emit("번역 작업 시작")
             self.log_changed.emit("=" * 60)
 

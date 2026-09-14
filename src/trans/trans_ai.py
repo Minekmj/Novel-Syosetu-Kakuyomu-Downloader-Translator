@@ -13,7 +13,14 @@ from google.genai import types
 import src.down.down as down
 from src.system.config import DATA_FILE
 from src.trans.prom import *
-from src.trans.prompt_sanitizer import x_making, get_safety_settings
+from src.trans.prompt_sanitizer import (
+    assemble_final_text,
+    prepare_for_ratio_check,
+    x_making,
+    get_safety_settings,
+    make_statrt_stain,
+    check_statrt_stain
+)
 
 _K = '+---+\n'
 _J = 'gemini-3.5-flash-Lite'
@@ -32,12 +39,25 @@ API = _E
 MODEL_NAME = 'gemini-3.5-flash-lite'
 CUSTOM_AI_PROMPT = ''
 
+USE_ADVANCED_CENSOR = False  
+CENSOR_SHUFFLE = True  
+CENSOR_EXTRACT_MODE = "word"  
+CENSOR_PAPAGO = False
+
 IMG_TAG_PATTERN = re.compile(r'-img-:[^\s\r\n]+')
 IMG_PLACEHOLDER = '-+++-'
 IMG_PROMPT_RULE = """
 [이미지 필수 규칙]
 1. 입력문에 포함된 '-+++-'는 글자를 절대 유지 하세요.
 2. '-+++-' 원문에 없는 곳에 새로 만들거나 추가해서는 안 됩니다. (절대 금지!).
+"""
+
+CENSOR_PROMPT_RULE = """
+[특수 규칙 반드시 지킬 것 : 초강력 지침]
+1. 각 줄의 시작 부분에 있는 '<data=id>' 형태의 태그를 절대 지우거나 수정하지 말고, 번역된 줄의 맨 앞에도 그대로 유지하세요.
+2. 본문에 포함된 '{{data=id}}' 형태의 태그는 해당 위치에 그대로 유지하고 번역하거나 삭제하지 마세요.
+3. 임의로 줄을 병합하거나 누락하지 말고 각 태그가 붙은 줄 구조를 원본 그대로 출력하세요.
+4. 모든 문장이 반드시 나오도록 하며 절대로 숫자를 누락하지 마십시오. (절대 규칙!)
 """
 
 
@@ -94,6 +114,7 @@ def split_text_by_lines(text, max_chars=5000):
         chunks.append(''.join(current_chunk))
 
     return chunks
+
 
 JP_PATTERN = re.compile(
     r'[\u3040-\u309f\u30a0-\u30fb\u30fd-\u30ff\u31f0-\u31ff\uff65-\uff6f\uff71-\uff9f\u4e00-\u9fff\uf900-\ufaff\u3005\u3006]'
@@ -514,13 +535,13 @@ async def translate_chunk_safe_async(
             log_callback(f'[{chunk_idx} - {model_name}] [{depth}] [시도 0] 원문의 일본어 비율이 너무 낮아 번역 생략')
         return chunk, len(lines), False
 
-    # 1. 이미지 태그 추출 및 '-+++-'로 임시 마스킹
     img_tags = IMG_TAG_PATTERN.findall(chunk)
     expected_img_count = len(img_tags)
     masked_chunk = IMG_TAG_PATTERN.sub(IMG_PLACEHOLDER, chunk)
 
     current_chunk = masked_chunk
     is_censored = False
+    censor_data = None
 
     if raw:
         expected_delimiter_count = len(re.findall(r'^={4,}$', masked_chunk, re.MULTILINE))
@@ -528,16 +549,28 @@ async def translate_chunk_safe_async(
         expected_delimiter_count = masked_chunk.count(_G)
 
     attempt = 1
+    censor_attempt = 0
+    max_censor_attempts = 3
     cur_thinking_budget = thinking_budget
 
-    while not force_split and attempt <= max_retries:
+    while not force_split:
         if _is_stopped(check):
             if log_callback:
                 log_callback(f'[{chunk_idx} - {model_name}] [{depth}] 중지: 다음 API 요청을 실행하지 않습니다.')
             return None, 0, True
 
-        censored_label = '검열' if is_censored else ''
-        prefix_log = f'[{chunk_idx} - {model_name} - {censored_label}] [{depth}] [시도 {attempt}/{max_retries}]'
+        if is_censored and USE_ADVANCED_CENSOR:
+            if censor_attempt >= max_censor_attempts:
+                if log_callback:
+                    log_callback(f'[{chunk_idx} - {model_name}] [{depth}] 세분화 검열 {max_censor_attempts}회 재시도 모두 실패 -> 분할 처리로 전환')
+                break
+            censor_attempt += 1
+            prefix_log = f'[{chunk_idx} - {model_name} - 세분화검열] [{depth}] [검열 시도 {censor_attempt}/{max_censor_attempts}]'
+        else:
+            if attempt > max_retries:
+                break
+            censored_label = '검열' if is_censored else ''
+            prefix_log = f'[{chunk_idx} - {model_name}{(" - " + censored_label) if censored_label else ""}] [{depth}] [시도 {attempt}/{max_retries}]'
 
         await rate_limiter.wait()
 
@@ -553,10 +586,13 @@ async def translate_chunk_safe_async(
             if raw:
                 system_prompt = SYSTEM_PROMPT_RAW
             else:
-                system_prompt = SYSTEM_PROMPT if _G in masked_chunk else SYSTEM_PROMPT_NO_SPLIT
+                system_prompt = SYSTEM_PROMPT if _G in current_chunk else SYSTEM_PROMPT_NO_SPLIT
 
             if expected_img_count > 0:
                 system_prompt += f"\n{IMG_PROMPT_RULE}\n"
+
+            if is_censored and USE_ADVANCED_CENSOR:
+                system_prompt += f"\n{CENSOR_PROMPT_RULE}\n"
 
             if CUSTOM_AI_PROMPT != '':
                 system_prompt += f"""[사용자 지정 추가 지침]
@@ -592,7 +628,6 @@ async def translate_chunk_safe_async(
                 )
             except Exception as api_err:
                 err_str = str(api_err).lower()
-                # 모델이 추론 설정을 지원하지 않아 에러 발생 시 자동 fallback
                 if thinking_cfg is not None and any(kw in err_str for kw in ("thinking", "unsupported", "invalid argument")):
                     if log_callback:
                         log_callback(f'{prefix_log} 알림: 모델이 해당 추론 설정을 미지원하여 제외 후 일반 모드로 재시도합니다.')
@@ -610,6 +645,23 @@ async def translate_chunk_safe_async(
                 res_text = response.text.strip()
                 res_text = res_text.replace('「', '“').replace('」', '”').replace('｢', '“').replace('｣', '”')
 
+                if is_censored and USE_ADVANCED_CENSOR and censor_data:
+                    valid, err_msg = check_statrt_stain(censor_data, res_text)
+                    if not valid:
+                        if log_callback:
+                            log_callback(f"{prefix_log} 경고: 세분화 검열 무결성 검증 실패: {err_msg} ->{' 순서 재셔플 후' if CENSOR_SHUFFLE else ""} 재시도")
+                        censor_data, current_chunk = make_statrt_stain(
+                            masked_chunk,
+                            shuffle=CENSOR_SHUFFLE,
+                            extract_mode=CENSOR_EXTRACT_MODE,
+                            papago=CENSOR_PAPAGO
+                        )
+                        continue
+
+                    check_text = prepare_for_ratio_check(res_text, censor_data)
+                else:
+                    check_text = res_text
+
                 if expected_img_count > 0:
                     actual_img_count = res_text.count(IMG_PLACEHOLDER)
                     if actual_img_count != expected_img_count:
@@ -618,9 +670,12 @@ async def translate_chunk_safe_async(
                                 f"{prefix_log} 경고: '-+++-' 이미지 태그 개수 불일치 "
                                 f'(기대: {expected_img_count}, 결과: {actual_img_count}) -> 재시도'
                             )
-                        current_chunk = masked_chunk
-                        is_censored = False
-                        attempt += 1
+                        if is_censored and USE_ADVANCED_CENSOR:
+                            censor_data, current_chunk = make_statrt_stain(masked_chunk, shuffle=CENSOR_SHUFFLE, extract_mode=CENSOR_EXTRACT_MODE, papago=CENSOR_PAPAGO)
+                        else:
+                            current_chunk = masked_chunk
+                            is_censored = False
+                            attempt += 1
                         continue
 
                 if not raw and _G in masked_chunk:
@@ -631,9 +686,12 @@ async def translate_chunk_safe_async(
                                 f"{prefix_log} 경고: '+---+' 개수 불일치 "
                                 f'(기대: {expected_delimiter_count}, 결과: {actual_delimiter_count}) -> 재시도'
                             )
-                        current_chunk = masked_chunk
-                        is_censored = False
-                        attempt += 1
+                        if is_censored and USE_ADVANCED_CENSOR:
+                            censor_data, current_chunk = make_statrt_stain(masked_chunk, shuffle=CENSOR_SHUFFLE, extract_mode=CENSOR_EXTRACT_MODE, papago=CENSOR_PAPAGO)
+                        else:
+                            current_chunk = masked_chunk
+                            is_censored = False
+                            attempt += 1
                         continue
 
                 if raw and '====' in masked_chunk:
@@ -644,13 +702,16 @@ async def translate_chunk_safe_async(
                                 f"{prefix_log} 경고: '====...' 라인 개수 불일치 "
                                 f'(기대: {expected_delimiter_count}, 결과: {actual_delimiter_count}) -> 재시도'
                             )
-                        current_chunk = masked_chunk
-                        is_censored = False
-                        attempt += 1
+                        if is_censored and USE_ADVANCED_CENSOR:
+                            censor_data, current_chunk = make_statrt_stain(masked_chunk, shuffle=CENSOR_SHUFFLE, extract_mode=CENSOR_EXTRACT_MODE, papago=CENSOR_PAPAGO)
+                        else:
+                            current_chunk = masked_chunk
+                            is_censored = False
+                            attempt += 1
                         continue
 
-                jp_ratio = get_japanese_ratio(res_text)
-                ko_ratio = get_korean_ratio(res_text)
+                jp_ratio = get_japanese_ratio(check_text)
+                ko_ratio = get_korean_ratio(check_text)
                 text_len = len(masked_chunk.strip())
 
                 if text_len < 100:
@@ -675,13 +736,16 @@ async def translate_chunk_safe_async(
                     min_line_ratio = 90.0
 
                 if raw:
-                    line_ratio = get_linebreak_preservation_ratio(masked_chunk, res_text)
+                    line_ratio = get_linebreak_preservation_ratio(masked_chunk, check_text)
                     success = jp_ratio < max_jp_ratio and ko_ratio >= min_ko_ratio and line_ratio >= min_line_ratio
                 else:
                     line_ratio = 100.0
                     success = jp_ratio < max_jp_ratio and ko_ratio >= min_ko_ratio
 
                 if success:
+                    if is_censored and USE_ADVANCED_CENSOR and censor_data:
+                        res_text = assemble_final_text(res_text, censor_data, use_translated=CENSOR_PAPAGO)
+
                     if expected_img_count > 0:
                         res_text = restore_img_placeholders(res_text, img_tags)
 
@@ -693,23 +757,17 @@ async def translate_chunk_safe_async(
                     return res_text, len(lines), False
 
                 if log_callback:
-                    if raw:
-                        log_callback(
-                            f'{prefix_log} 경고: 번역 조건 미달 '
-                            f'(한글: {ko_ratio:.2f}% [기준 {min_ko_ratio}%], '
-                            f'일어: {jp_ratio:.2f}% [기준 <{max_jp_ratio}%], '
-                            f'줄바꿈: {line_ratio:.2f}% [기준 {min_line_ratio}%]) -> 재시도'
-                        )
-                    else:
-                        log_callback(
-                            f'{prefix_log} 경고: 번역 조건 미달 '
-                            f'(한글: {ko_ratio:.2f}% [기준 {min_ko_ratio}%], '
-                            f'일어: {jp_ratio:.2f}% [기준 <{max_jp_ratio}%]) -> 재시도'
-                        )
+                    log_callback(
+                        f'{prefix_log} 경고: 번역 조건 미달 '
+                        f'(한글: {ko_ratio:.2f}% [기준 {min_ko_ratio}%], 일어: {jp_ratio:.2f}% [기준 <{max_jp_ratio}%]) -> 재시도'
+                    )
 
-                current_chunk = masked_chunk
-                is_censored = False
-                attempt += 1
+                if is_censored and USE_ADVANCED_CENSOR:
+                    censor_data, current_chunk = make_statrt_stain(masked_chunk, shuffle=CENSOR_SHUFFLE, extract_mode=CENSOR_EXTRACT_MODE, papago=CENSOR_PAPAGO)
+                else:
+                    current_chunk = masked_chunk
+                    is_censored = False
+                    attempt += 1
 
             else:
                 if isno_x:
@@ -717,16 +775,28 @@ async def translate_chunk_safe_async(
                         log_callback(f'{prefix_log} 경고: API 응답이 비어있음 -> 검열 우회 설정으로 즉시 분할 실행')
                     break
 
-                if log_callback:
-                    log_callback(f'{prefix_log} 경고: API 응답이 비어있음 -> 검열 실행')
-
                 if is_censored:
-                    attempt += 1
-                    break
+                    if USE_ADVANCED_CENSOR:
+                        if log_callback:
+                            log_callback(f'{prefix_log} 경고: 세분화 검열 중에도 응답 비어있음 -> 청크 분할')
+                        break
+                    else:
+                        attempt += 1
+                        break
 
-                current_chunk = x_making(masked_chunk)
-                is_censored = True
-                attempt += 1
+                if USE_ADVANCED_CENSOR:
+                    if log_callback:
+                        log_callback(f'{prefix_log} 경고: API 응답 비어있음 -> 세분화 검열 모드 진입 (최대 {max_censor_attempts}회 시도)')
+                    is_censored = True
+                    censor_attempt = 0
+                    censor_data, current_chunk = make_statrt_stain(masked_chunk, shuffle=CENSOR_SHUFFLE, extract_mode=CENSOR_EXTRACT_MODE, papago=CENSOR_PAPAGO)
+                    continue
+                else:
+                    if log_callback:
+                        log_callback(f'{prefix_log} 경고: API 응답 비어있음 -> 기본 검열 실행')
+                    current_chunk = x_making(masked_chunk)
+                    is_censored = True
+                    attempt += 1
 
         except Exception as e:
             if _is_stopped(check):
@@ -735,16 +805,16 @@ async def translate_chunk_safe_async(
                 return None, 0, True
 
             if log_callback:
-                log_callback(
-                    f'{prefix_log} 오류: API 호출 중 예외 발생: {e} -> 재시도. '
-                    '원래 대기 시간에 3배 대기'
-                )
+                log_callback(f'{prefix_log} 오류: API 호출 중 예외 발생: {e} -> 재시도 (3배 대기)')
 
             await rate_limiter.wait()
             await rate_limiter.wait()
 
-            is_censored = False
-            attempt += 1
+            if is_censored and USE_ADVANCED_CENSOR:
+                censor_data, current_chunk = make_statrt_stain(masked_chunk, shuffle=CENSOR_SHUFFLE, extract_mode=CENSOR_EXTRACT_MODE, papago=CENSOR_PAPAGO)
+            else:
+                is_censored = False
+                attempt += 1
 
     if _is_stopped(check):
         if log_callback:
@@ -753,16 +823,13 @@ async def translate_chunk_safe_async(
 
     if len(lines) <= 2 or depth >= 4:
         if log_callback:
-            log_callback(
-                f'[{chunk_idx} - {model_name}] [{depth}] 오류: '
-                '[최대초과] 최대 재시도 초과 및 분할 한계 도달 -> 원문 유지'
-            )
+            log_callback(f'[{chunk_idx} - {model_name}] [{depth}] 오류: [최대초과] 분할 한계 도달 -> 원문 유지')
         return chunk, len(lines), False
 
     mid = len(lines) // 2
 
     if log_callback:
-        split_type = f"[강제분할: 남은단계 {br_start}]" if force_split else "[경고: 분할]"
+        split_type = f"[강제분할: 남은단계 {br_start}]" if force_split else "[검열실패/최대초과: 분할]"
         log_callback(
             f'[{chunk_idx} - {model_name}] [{depth}] {split_type} '
             f'청크 분할 처리 (전반부 {mid}줄, 후반부 {len(lines)-mid}줄)'
@@ -1417,7 +1484,6 @@ async def _TransAi_From_Json_async(
 
     await asyncio.gather(*worker_tasks)
 
-    # 1. title에서 제목 / 작가 / 화수 분리 파싱
     title_lines = [line.strip() for line in title.splitlines() if line.strip()]
     if len(title_lines) >= 3:
         raw_book_title = title_lines[0]
@@ -1450,7 +1516,6 @@ async def _TransAi_From_Json_async(
     else:
         restored_name = f'{restored_book_title}_{author}' if author else restored_book_title
 
-    # 2. 복원 JSON 파일 저장
     os.makedirs(f'{out}trs', exist_ok=_C)
     safe_title = re.sub(_I, '_', restored_book_title).strip()
     save_path = f'{out}trs\\save_{safe_title}_{max_chars}_복원.json'
@@ -1471,7 +1536,6 @@ async def _TransAi_From_Json_async(
 
     final_result = '\n\n'.join(p for p in translated_parts if p)
 
-    # 3. EPUB 생성 텍스트 구성
     if raw:
         os.makedirs(f'{out}epub', exist_ok=_C)
         os.makedirs(f'{out}epub\\raw_txt', exist_ok=_C)
