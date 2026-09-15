@@ -8,5 +8,6 @@ venv/
 
 # Files
 data.json
+session_info.json
 build.txt
 main.ico~

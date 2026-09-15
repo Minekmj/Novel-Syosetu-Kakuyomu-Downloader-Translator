@@ -8,13 +8,15 @@ def Fs(f):
 
 import src.site.kakuyoumu as kaku
 import src.site.narow as naru
+import src.site.hameln as hame
 
-site_list = [kaku, naru]
+site_list = [kaku, naru, hame]
 
 from src.trans.trans import Translator
 
-base_data = None #외부 주입용
-create_merged_txt = None #외부 주입용
+base_data = None  # 외부 주입용
+create_merged_txt = None  # 외부 주입용
+
 
 def set_base_data(data, void):
     for i in site_list:
@@ -26,27 +28,47 @@ def set_base_data(data, void):
     global create_merged_txt
     create_merged_txt = void
 
+
+def parse_site_info(site):
+    site_str = str(site).strip()
+
+    if "syosetu.org" in site_str or "h.syosetu.org" in site_str:
+        is_r18 = "h.syosetu.org" in site_str
+        match = re.search(r'/novel/(\d+)', site_str)
+        nid = match.group(1) if match else site_str.strip("/").split("/")[-1]
+        clean_site = f"h.{nid}" if is_r18 else nid
+        return clean_site, "hameln"
+
+    elif site_str.startswith("h.") or site_str.startswith("h_"):
+        return site_str, "hameln"
+
+    elif "kakuyomu.jp" in site_str:
+        clean_site = site_str.strip("/").split("/")[-1]
+        return clean_site, "kakuyomu"
+
+    elif "syosetu.com" in site_str:
+        clean_site = site_str.strip("/").split("/")[-1]
+        return clean_site, "syosetu"
+
+    elif site_str.isdigit():
+        return site_str, "kakuyomu"
+
+    return site_str, "syosetu"
+
+
 def CheckTitle(site):
-    site_type = ""
+    clean_site, site_type = parse_site_info(site)
 
-    if "syosetu.com" in site:
-        site = site.split("/")[-2]
-        site_type = "syosetu"
-
-    elif "kakuyomu.jp" in site:
-        site = site.split("/")[-1]
-        site_type = "kakuyomu"
-
-    is_kakuyomu = (site_type == "kakuyomu") or site.isdigit()
-
-    if is_kakuyomu:
-        title = Fs(kaku.kakuyomu_title(site))
+    if site_type == "hameln":
+        title = Fs(hame.hameln_title(clean_site))
+    elif site_type == "kakuyomu":
+        title = Fs(kaku.kakuyomu_title(clean_site))
     else:
-        title = Fs(naru.syosetu_title(site))
+        title = Fs(naru.syosetu_title(clean_site))
 
     title_ko = Translator(title)
-
     return title_ko
+
 
 def Download(
     site,
@@ -55,38 +77,27 @@ def Download(
     label,
     title
 ):
-    site_type = ""
-
     start = int(start)
     end = int(end)
 
-    if "syosetu.com" in site:
-        site = site.split("/")[-2]
-        site_type = "syosetu"
+    clean_site, site_type = parse_site_info(site)
 
-    elif "kakuyomu.jp" in site:
-        site = site.split("/")[-1]
-        site_type = "kakuyomu"
+    safe_folder_name = re.sub(r'[\\/:*?"<>|.]', '_', clean_site)
+    trs_path = f"./temp_trs_{site_type}_{safe_folder_name}"
 
-    trs_path = (
-        "./temp_trs_"
-        + site_type
-        + "_"
-        + site
-    )
+    os.makedirs(trs_path, exist_ok=True)
 
-    os.makedirs(
-        trs_path,
-        exist_ok=True
-    )
-
-    is_kakuyomu = (
-        site_type == "kakuyomu"
-    ) or site.isdigit()
-
-    if is_kakuyomu:
+    if site_type == "hameln":
+        book_title = Fs(hame.download_hameln_async(
+            clean_site,
+            start,
+            end,
+            trs_path,
+            label
+        ))
+    elif site_type == "kakuyomu":
         book_title = Fs(kaku.download_kakuyomu_async(
-            site,
+            clean_site,
             start,
             end,
             trs_path,
@@ -94,7 +105,7 @@ def Download(
         ))
     else:
         book_title = Fs(naru.download_syosetu_async(
-            site,
+            clean_site,
             start,
             end,
             trs_path,
@@ -102,7 +113,6 @@ def Download(
         ))
 
     data = f"{start} ~ {end}"
-
     if start == end:
         data = start
 
@@ -117,13 +127,8 @@ def Download(
         book_title
     )
 
-    if not os.path.exists(
-        base_data.OUTFOLDER
-    ):
-        os.makedirs(
-            base_data.OUTFOLDER,
-            exist_ok=True
-        )
+    if not os.path.exists(base_data.OUTFOLDER):
+        os.makedirs(base_data.OUTFOLDER, exist_ok=True)
 
     create_merged_txt(
         trs_path,
@@ -136,24 +141,15 @@ def Download(
         ignore_errors=True
     )
 
+
 def new_number(site):
-    site_type = ""
+    clean_site, site_type = parse_site_info(site)
 
-    if "syosetu.com" in site:
-        site = site.split("/")[-2]
-        site_type = "syosetu"
-
-    elif "kakuyomu.jp" in site:
-        site = site.split("/")[-1]
-        site_type = "kakuyomu"
-
-    is_kakuyomu = (
-        site_type == "kakuyomu"
-    ) or site.isdigit()
-
-    if is_kakuyomu:
-        new = Fs(kaku.new_kakuyomu(site))
+    if site_type == "hameln":
+        new = Fs(hame.new_hameln(clean_site))
+    elif site_type == "kakuyomu":
+        new = Fs(kaku.new_kakuyomu(clean_site))
     else:
-        new = Fs(naru.new_syosetu(site))
+        new = Fs(naru.new_syosetu(clean_site))
 
     return new

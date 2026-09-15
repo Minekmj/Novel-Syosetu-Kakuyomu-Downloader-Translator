@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QCursor, QDesktopServices
 from src.trans.trans import Translator
-from src.system.data import TAG_CATEGORIES, NaroSearch, KakuyomuSearch, MidnightSearch, NocturneSearch
+from src.system.data import TAG_CATEGORIES, NaroSearch, KakuyomuSearch, MidnightSearch, NocturneSearch, SyosetuSearch, SyosetuSearch18
 import src.system.data as data_iteam
 
 click = False
@@ -21,8 +21,10 @@ istaiain = []
 class Sites(IntEnum):
     NAROU = 1
     KAKUYOMU = 2
-    MIDNIGHT = 3
-    NOCTURNE = 4
+    HAMELLEUN = 3
+    MIDNIGHT = 4
+    NOCTURNE = 5
+    HAMELLEUN18 = 6
 
 
 SITES = {
@@ -42,6 +44,14 @@ SITES = {
         'ui_setup': lambda window, layout: kaku_set_ui(window, layout),
         'build_params': lambda window: kaku_build_params(window),
     },
+    Sites.HAMELLEUN: {
+        'name': '하멜른',
+        'search_class': SyosetuSearch,
+        'point_text': lambda value: f'{value}',
+        'has_star': False,
+        'ui_setup': lambda window, layout: ha_set_ui(window, layout),
+        'build_params': lambda window: ha_build_params(window),
+    },
     Sites.MIDNIGHT: {
         'name': '미드나이트',
         'search_class': MidnightSearch,
@@ -57,6 +67,14 @@ SITES = {
         'has_star': False,
         'ui_setup': lambda window, layout: na_set_ui(window, layout),
         'build_params': lambda window: na_build_params(window),
+    },
+    Sites.HAMELLEUN18: {
+        'name': '하멜른18',
+        'search_class': SyosetuSearch18,
+        'point_text': lambda value: f'{value}',
+        'has_star': False,
+        'ui_setup': lambda window, layout: ha18_set_ui(window, layout),
+        'build_params': lambda window: ha_build_params(window),
     }
 }
 
@@ -109,6 +127,115 @@ def na_set_ui(window, layout):
         NaroSearch.FIND_AREA,
         window.naro_find_area_values
     )
+    
+def ha_set_ui(window, layout):
+    ha_set_ui_main(window,layout,SyosetuSearch)
+    
+def ha18_set_ui(window, layout):
+    ha_set_ui_main(window,layout,SyosetuSearch18)
+
+def ha_set_ui_main(window, layout, l):
+    l.set_flag()
+    
+    window.naro_exclude_values = []
+    window.naro_find_area_values = []
+    window.ha_selected_origin = ''
+
+    flags_main = l.FLAGS_MAIN
+
+    if flags_main:
+        origin_label = QLabel('주요 원작')
+        origin_label.setObjectName('cat_label')
+        layout.addWidget(origin_label)
+
+        window.combo_ha_origin = QComboBox()
+        window.combo_ha_origin.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        window.combo_ha_origin.setMinimumContentsLength(10)
+        window.combo_ha_origin.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed
+        )
+        if window.combo_ha_origin.view():
+            window.combo_ha_origin.view().setTextElideMode(Qt.TextElideMode.ElideRight)
+
+        window.combo_ha_origin.addItem('전체 (선택 안 함)', '')
+        for ko_name, jp_name in flags_main.items():
+            window.combo_ha_origin.addItem(ko_name, jp_name)
+
+            btn_text = ko_name if len(ko_name) <= 14 else ko_name[:13] + '…'
+            btn = QPushButton(btn_text)
+            btn.setToolTip(f"{ko_name}\n({jp_name})")
+        layout.addWidget(window.combo_ha_origin)
+
+        scroll_origin = QScrollArea()
+        scroll_origin.hide()
+        scroll_origin.setWidgetResizable(True)
+        scroll_origin.setFixedHeight(130)
+        scroll_origin.setFrameShape(QFrame.Shape.NoFrame)
+        scroll_origin.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_origin.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+
+        container_origin = QWidget()
+        container_origin.setObjectName('tag_container')
+        container_origin.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+        flow_origin = FlowLayout(container_origin, margin=0, spacing=5)
+
+        window.ha_origin_buttons = {}
+
+        def on_origin_btn_clicked(checked, name):
+            if checked:
+                for btn_name, btn in window.ha_origin_buttons.items():
+                    if btn_name != name:
+                        btn.setChecked(False)
+                window.ha_selected_origin = name
+                idx = window.combo_ha_origin.findData(name)
+                if idx >= 0:
+                    window.combo_ha_origin.blockSignals(True)
+                    window.combo_ha_origin.setCurrentIndex(idx)
+                    window.combo_ha_origin.blockSignals(False)
+            else:
+                window.ha_selected_origin = ''
+                window.combo_ha_origin.blockSignals(True)
+                window.combo_ha_origin.setCurrentIndex(0)
+                window.combo_ha_origin.blockSignals(False)
+
+        def on_origin_combo_changed(index):
+            chosen = window.combo_ha_origin.currentData() or ''
+            window.ha_selected_origin = chosen
+            for btn_name, btn in window.ha_origin_buttons.items():
+                btn.setChecked(btn_name == chosen)
+
+        window.combo_ha_origin.currentIndexChanged.connect(on_origin_combo_changed)
+
+        for name in flags_main:
+            btn_text = name if len(name) <= 16 else name[:15] + '…'
+            btn = QPushButton(btn_text)
+            btn.setToolTip(name)
+            btn.setObjectName('btn')
+            btn.setCheckable(True)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setMaximumWidth(220)
+            btn.clicked.connect(
+                lambda checked, n=name: on_origin_btn_clicked(checked, n)
+            )
+            flow_origin.addWidget(btn)
+            window.ha_origin_buttons[name] = btn
+
+        scroll_origin.setWidget(container_origin)
+        layout.addWidget(scroll_origin)
+
+    data = {}
+    for k, v in l.FLAG_EXCLUSION.items():
+        if v == 'stop':
+            continue
+        data[k] = v
+        
+    window.naro_exclude_buttons = window.create_multi_select_section(
+        layout, '제외 조건',
+        l.FLAG_EXCLUSION,
+        window.naro_exclude_values
+    )
 
 
 def kaku_set_ui(window, layout):
@@ -129,6 +256,7 @@ def kaku_set_ui(window, layout):
         window.kaku_exclude_values
     )
     
+
 def na_build_params(window):
     return {
         'query': window.input_query.text().strip(),
@@ -151,7 +279,33 @@ def na_build_params(window):
         'exlusion_flags': window.naro_exclude_values.copy(),
         'find_areas': window.naro_find_area_values.copy()
     }
+    
 
+def ha_build_params(window):
+    selected_origin = getattr(window, 'ha_selected_origin', '')
+    return {
+        'query': window.input_query.text().strip(),
+        'genre_val': SyosetuSearch.GENRES.get(
+            window.combo_genre.currentText(), 0
+        ),
+        'flags_main': selected_origin,
+        'origin': selected_origin,
+        'exclude_words': window.input_exclude.text().strip().split(),
+        'min_chars': window.spin_min_chars.value(),
+        'min_pt': window.spin_min_start.value(),
+        'last_published': SyosetuSearch.LAST_PUBLISHED_PERIODS.get(
+            window.combo_last_published.currentText()
+        ),
+        'serial_status': SyosetuSearch.SERIAL_STATUSES.get(
+            window.combo_serial_status.currentText(), ''
+        ),
+        'order': SyosetuSearch.SORT_ORDERS.get(
+            window.combo_order.currentText(), 'hyoka'
+        ),
+        'exlusion_flags': window.naro_exclude_values.copy(),
+        'find_areas': window.naro_find_area_values.copy()
+    }
+    
 
 def kaku_build_params(window):
     return {
@@ -701,7 +855,7 @@ class DetailDialog(QDialog):
 
     def load_detail(self):
         target_url = self.item_data.get(
-            'url' if self.site == Sites.KAKUYOMU else 'story',
+            'url' if (self.site == Sites.KAKUYOMU or self.site == Sites.HAMELLEUN or self.site == Sites.HAMELLEUN18) else 'story',
             ''
         )
 
@@ -721,7 +875,7 @@ class DetailDialog(QDialog):
         description = translated_data[0].strip()
 
         self.text_detail.setText(
-            description if description else '작품 소개가 없습니다.'
+            description if (description and description != "error") else '작품 소개가 없습니다.'
         )
 
         original_tags = []
@@ -986,6 +1140,7 @@ class MainWindow_Find(QDialog):
         self.spin_min_start.setSuffix(
             ' ★' if self.site_config['has_star'] else ' pt'
         )
+        self.spin_min_start.hide()
 
         self.combo_order = QComboBox()
         self.combo_order.addItems(list(search_cls.SORT_ORDERS.keys()))
@@ -996,7 +1151,9 @@ class MainWindow_Find(QDialog):
         form.addRow('연재 상태:', self.combo_serial_status)
         form.addRow('최근 갱신:', self.combo_last_published)
         form.addRow('최소 글자수:', self.spin_min_chars)
-        form.addRow('최소 포인트:', self.spin_min_start)
+        if not (getattr(search_cls, "NO_POINT", False)):
+            self.spin_min_start.show()
+            form.addRow('최소 포인트:', self.spin_min_start)
         form.addRow('정렬:', self.combo_order)
 
         layout.addLayout(form)

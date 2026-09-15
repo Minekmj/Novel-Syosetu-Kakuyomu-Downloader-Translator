@@ -1,6 +1,8 @@
 EXPORT_TEXT = False
 CONCURRENCY_LIMIT = 5
+CONCURRENCY_LIMIT_H = 15
 DELAY = 0.1
+DELAY_H = 2.8
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
