@@ -42,6 +42,23 @@ CLEAN_UI_JS = """
 """
 
 
+def get_browser_path():
+    candidates = [
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+        os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\Edge\Application\msedge.exe"),
+    ]
+
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+
+    return None
+
+
 def get_center_position(width=380, height=180):
     try:
         user32 = ctypes.windll.user32
@@ -67,6 +84,20 @@ def find_cf():
     pos_x, pos_y = get_center_position(win_w, win_h)
 
     co = ChromiumOptions()
+
+    browser_path = get_browser_path()
+    if browser_path:
+        co.set_browser_path(browser_path)
+    else:
+        print("[!] 브라우저를 찾을 수 없습니다.")
+
+    co.set_argument("--log-level=3") 
+    co.set_argument("--disable-logging") 
+    co.set_argument("--silent")
+    co.set_argument("--no-first-run") 
+    co.set_argument("--no-default-browser-check") 
+    co.set_argument("--disable-features=Translate")
+
     co.set_argument(f"--app={TARGET_URL}")
     co.set_argument(f"--window-size={win_w},{win_h}")
     co.set_argument(f"--window-position={pos_x},{pos_y}")
@@ -75,19 +106,13 @@ def find_cf():
 
     try:
         page.set.cookies.clear()
-    except Exception:
-        pass
-
-    try:
         page.run_cdp("Network.clearBrowserCookies")
         page.run_cdp("Network.clearBrowserCache")
     except Exception:
         pass
 
-    print("[*] 기존 브라우저 쿠키를 모두 삭제했습니다.")
-
     page.get(TARGET_URL)
-    print(f"[*] 화면 정중앙({pos_x}, {pos_y})에 확인 창이 열렸습니다. 버튼을 클릭해주세요...")
+    print(f"[*] 화면 정중앙에 창이 열렸습니다. 버튼을 클릭해주세요...")
 
     cf_cookie = None
 
@@ -120,7 +145,7 @@ def find_cf():
                         break
 
             if cf_cookie:
-                print(f"[+] 새 cf_clearance 획득: {cf_cookie['value'][:15]}...")
+                print(f"[+] 인증 완료: {cf_cookie['value'][:15]}...")
                 break
 
         except Exception:
@@ -150,3 +175,7 @@ def find_cf():
         json.dump(session_data, f, ensure_ascii=False, indent=4)
 
     print(f"[+] '{SRC}' 저장 완료! 세션이 준비되었습니다.")
+
+
+if __name__ == "__main__":
+    find_cf()
