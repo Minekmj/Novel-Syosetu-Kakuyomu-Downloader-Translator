@@ -5,6 +5,9 @@ __pycache__/
 build/
 dist/
 venv/
+run.dist/
+run.build/
+src/MINE_DOWNLOADER.egg-info/
 
 # Files
 data.json

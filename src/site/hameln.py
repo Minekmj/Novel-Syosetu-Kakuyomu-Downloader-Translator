@@ -192,14 +192,27 @@ def fetch_hameln_episode(
                 html = res.text
                 ep_soup = BeautifulSoup(html, "html.parser")
 
-                subtitle_tag = (
-                    ep_soup.select_one("#maind span[style*='font-size:120%']")
-                    or ep_soup.select_one(".ss .bold")
-                    or ep_soup.find("h1")
-                )
+                subtitle_tag = ""
+
+                targets = ep_soup.select("#maind span[style*='font-size:120%']")
+
+                for target in targets:
+                    if target.find("a") is None:
+
+                        if target.find("br"):
+                            last_content = target.contents[-1]
+                            subtitle_tag = (
+                                last_content.strip()
+                                if isinstance(last_content, str)
+                                else last_content.get_text(strip=True)
+                            )
+                        else:
+                            subtitle_tag = target.get_text(strip=True)
+
+                        break
 
                 subtitle = (
-                    subtitle_tag.get_text(strip=True)
+                    subtitle_tag
                     if subtitle_tag
                     else ep.get("subtitle", f"{current_idx}화")
                 )
