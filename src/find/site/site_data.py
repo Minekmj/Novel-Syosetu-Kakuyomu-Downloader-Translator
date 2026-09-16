@@ -17,7 +17,7 @@ def reset(b):
         with open(sf.SRC, "r", encoding="UTF-8") as f:
             g = json.load(f)
             BASE_HEADERS = g["headers"]
-            COOKIES =  { "cf_clearance": g["cookies"][0]["value"] }
+            COOKIES =  { "cf_clearance": g["cf_clearance"]["value"] }
             
 def reset_b():
     global COOKIES
@@ -26,6 +26,6 @@ def reset_b():
         with open(sf.SRC, "r", encoding="UTF-8") as f:
             g = json.load(f)
             BASE_HEADERS = g["headers"]
-            COOKIES =  { "cf_clearance": g["cookies"][0]["value"] }
+            COOKIES =  { "cf_clearance": g["cf_clearance"]["value"] }
 
 reset(False)

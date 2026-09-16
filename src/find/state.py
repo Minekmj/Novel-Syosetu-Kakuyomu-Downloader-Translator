@@ -1,201 +1,152 @@
+import ctypes
 import json
 import os
-import re
-import subprocess
 import time
-from selenium import webdriver
-from selenium.webdriver.edge.options import Options as EdgeOptions
-import undetected_chromedriver as uc
+from DrissionPage import ChromiumOptions, ChromiumPage
 
 SRC = "session_info.json"
+TARGET_URL = "https://syosetu.org"
 
-_orig_quit = uc.Chrome.quit
+CLEAN_UI_JS = """
+(function() {
+    if (document.getElementById('cf-clean-style')) return;
+    const style = document.createElement('style');
+    style.id = 'cf-clean-style';
+    style.innerHTML = `
+        html, body {
+            width: 100% !important;
+            height: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+            overflow: hidden !important;
+            background-color: #f8fafc !important;
+        }
+        h1, h2, h3, p, footer, #footer, .footer, 
+        .attribution, #cf-error-details, .cf-subheadline,
+        #cf-content, #cf-wrapper > div:not(#challenge-stage) {
+            display: none !important;
+        }
+        #challenge-stage, #challenge-form, [id*="cf-stage"], [id*="turnstile"] {
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+    `;
+    document.head.appendChild(style);
+})();
+"""
 
 
-def _safe_quit(self):
+def get_center_position(width=380, height=180):
     try:
-        _orig_quit(self)
+        user32 = ctypes.windll.user32
+        screen_w = user32.GetSystemMetrics(0)
+        screen_h = user32.GetSystemMetrics(1)
+    except Exception:
+        screen_w, screen_h = 1920, 1080
+
+    pos_x = max(0, (screen_w - width) // 2)
+    pos_y = max(0, (screen_h - height) // 2)
+    return pos_x, pos_y
+
+
+def find_cf():
+    if os.path.exists(SRC):
+        try:
+            os.remove(SRC)
+            print(f"[*] 이전 '{SRC}' 파일을 삭제했습니다.")
+        except Exception:
+            pass
+
+    win_w, win_h = 380, 180
+    pos_x, pos_y = get_center_position(win_w, win_h)
+
+    co = ChromiumOptions()
+    co.set_argument(f"--app={TARGET_URL}")
+    co.set_argument(f"--window-size={win_w},{win_h}")
+    co.set_argument(f"--window-position={pos_x},{pos_y}")
+
+    page = ChromiumPage(co)
+
+    try:
+        page.set.cookies.clear()
     except Exception:
         pass
 
+    try:
+        page.run_cdp("Network.clearBrowserCookies")
+        page.run_cdp("Network.clearBrowserCache")
+    except Exception:
+        pass
 
-uc.Chrome.quit = _safe_quit
-uc.Chrome.__del__ = lambda self: None
+    print("[*] 기존 브라우저 쿠키를 모두 삭제했습니다.")
 
+    page.get(TARGET_URL)
+    print(f"[*] 화면 정중앙({pos_x}, {pos_y})에 확인 창이 열렸습니다. 버튼을 클릭해주세요...")
 
-def get_chrome_version():
-    cmds = [
-        r'reg query "HKEY_CURRENT_USER\Software\Google\Chrome\BLBeacon" /v version',
-        r'reg query "HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Google\Update\Clients\{8A69D345-D564-463c-AFF1-A69D9E530F96}" /v pv',
-    ]
-    for cmd in cmds:
+    cf_cookie = None
+
+    while True:
         try:
-            output = subprocess.check_output(cmd, shell=True).decode(
-                "utf-8", errors="ignore"
-            )
-            match = re.search(r"(?:version|pv)\s+REG_SZ\s+(\d+)\.", output)
-            if match:
-                return int(match.group(1))
+            page.run_js(CLEAN_UI_JS)
+
+            raw_cookies = page.cookies()
+
+            if isinstance(raw_cookies, dict):
+                if "cf_clearance" in raw_cookies:
+                    cf_cookie = {
+                        "name": "cf_clearance",
+                        "value": raw_cookies["cf_clearance"],
+                        "domain": ".syosetu.org",
+                        "path": "/",
+                    }
+            elif isinstance(raw_cookies, list):
+                for c in raw_cookies:
+                    if isinstance(c, dict) and c.get("name") == "cf_clearance":
+                        cf_cookie = c
+                        break
+                    elif hasattr(c, "name") and c.name == "cf_clearance":
+                        cf_cookie = {
+                            "name": c.name,
+                            "value": c.value,
+                            "domain": getattr(c, "domain", ".syosetu.org"),
+                            "path": getattr(c, "path", "/"),
+                        }
+                        break
+
+            if cf_cookie:
+                print(f"[+] 새 cf_clearance 획득: {cf_cookie['value'][:15]}...")
+                break
+
         except Exception:
             pass
-    return None
 
-
-def wait_for_challenge_completion(driver, timeout=60):
-    print(f"[*] 봇 통과 감지 중... (최대 {timeout}초 대기)")
-    print(
-        "[!] (자동 통과되지 않고 체크박스가 멈춰 있다면 직접 마우스로 눌러주세요)"
-    )
-
-    start_time = time.time()
-    cf_keywords = ["Just a moment", "보안 확인", "セキュリティ", "Cloudflare"]
-
-    while time.time() - start_time < timeout:
-        try:
-            cookies = driver.get_cookies()
-            cf_cookie = next(
-                (c for c in cookies if c.get("name") == "cf_clearance"), None
-            )
-            title = driver.title.strip()
-            is_cf_page = any(kw in title for kw in cf_keywords) or not title
-
-            if cf_cookie and not is_cf_page:
-                print(f"[+] 봇 통과 확인! (현재 페이지 제목: {title})")
-                time.sleep(1.5)
-                return cf_cookie
-        except Exception:
-            pass
-
-        time.sleep(1)
-
-    print("[-] 대기 시간 초과: 봇 체크를 통과하지 못했습니다.")
-    return None
-
-
-def init_driver(browser_type="auto"):
-    browser_type = browser_type.lower()
-
-    if browser_type in ["auto", "chrome"]:
-        print("[*] Chrome 드라이버 초기화 시도 중...")
-        chrome_version = get_chrome_version()
-        if chrome_version:
-            print(f"[*] 감지된 Chrome 메이저 버전: {chrome_version}")
-
-        options = uc.ChromeOptions()
-        options.add_argument("--start-maximized")
-        options.page_load_strategy = "eager"
-        options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
-
-        try:
-            if chrome_version:
-                driver = uc.Chrome(options=options, version_main=chrome_version)
-            else:
-                driver = uc.Chrome(options=options)
-            return driver, "chrome"
-        except Exception as e:
-            if browser_type == "auto":
-                print(f"[-] Chrome 실행 실패 ({e}). Edge로 자동 전환합니다.")
-            else:
-                raise e
-
-    if browser_type in ["auto", "edge"]:
-        print("[*] Edge 드라이버 초기화 중...")
-        options = EdgeOptions()
-        options.add_argument("--start-maximized")
-        options.add_argument("--disable-blink-features=AutomationControlled")
-        options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        options.add_experimental_option("useAutomationExtension", False)
-        options.set_capability("ms:loggingPrefs", {"performance": "ALL"})
-
-        driver = webdriver.Edge(options=options)
-        driver.execute_cdp_cmd(
-            "Page.addScriptToEvaluateOnNewDocument",
-            {
-                "source": """
-                    Object.defineProperty(navigator, 'webdriver', {
-                        get: () => undefined
-                    });
-                """
-            },
-        )
-        return driver, "edge"
-
-    raise ValueError(f"지원하지 않는 브라우저입니다: {browser_type}")
-
-
-def get_cookies_and_headers(browser="auto"):
-    url = "https://syosetu.org"
-    driver = None
+        time.sleep(0.5)
 
     try:
-        driver, used_browser = init_driver(browser_type=browser)
-        print(f"[+] {url} 접속 중... (사용 브라우저: {used_browser})")
-        driver.get(url)
+        user_agent = page.user_agent
+    except Exception:
+        user_agent = page.run_js("return navigator.userAgent;")
 
-        cf_cookie = wait_for_challenge_completion(driver, timeout=60)
-        print("[*] 데이터 추출 중...")
+    page.quit()
 
-        captured_headers = {}
+    session_data = {
+        "browser": "drission_page",
+        "url": TARGET_URL,
+        "headers": {
+            "User-Agent": user_agent,
+            "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Referer": "https://syosetu.org/",
+        },
+        "cf_clearance": cf_cookie,
+    }
 
-        try:
-            logs = driver.get_log("performance")
-            for entry in logs:
-                message = json.loads(entry["message"])["message"]
-                if message["method"] == "Network.requestWillBeSent":
-                    req = message["params"]["request"]
-                    if (
-                        "syosetu.org" in req["url"]
-                        and message["params"].get("type") == "Document"
-                    ):
-                        captured_headers.clear()
-                        captured_headers.update(req["headers"])
-        except Exception:
-            pass
+    with open(SRC, "w", encoding="utf-8") as f:
+        json.dump(session_data, f, ensure_ascii=False, indent=4)
 
-        if not captured_headers:
-            captured_headers = {
-                "User-Agent": driver.execute_script(
-                    "return navigator.userAgent;"
-                ),
-                "Accept-Language": driver.execute_script(
-                    "return navigator.language;"
-                ),
-                "Referer": "https://syosetu.org/",
-            }
-
-        cookies_to_save = [cf_cookie] if cf_cookie else []
-
-        if cf_cookie:
-            print(
-                f"[+] cf_clearance 쿠키 수집 성공! ({cf_cookie['value'][:15]}...)"
-            )
-        else:
-            print("[-] cf_clearance 쿠키 수집 실패")
-
-        session_data = {
-            "browser": used_browser,
-            "url": driver.current_url,
-            "headers": captured_headers,
-            "cookies": cookies_to_save,
-        }
-
-        output_file = SRC
-        with open(output_file, "w", encoding="utf-8") as f:
-            json.dump(session_data, f, ensure_ascii=False, indent=4)
-
-        print(f"[+] '{output_file}'에 저장 완료! 브라우저를 종료합니다.")
-        return True
-
-    except Exception as e:
-        print(f"[-] 오류 발생: {e}")
-        return False
-    finally:
-        if driver:
-            try:
-                driver.quit()
-            except Exception:
-                pass
-
-
-def find_cf(browser="auto"):
-    return get_cookies_and_headers(browser=browser)
+    print(f"[+] '{SRC}' 저장 완료! 세션이 준비되었습니다.")
