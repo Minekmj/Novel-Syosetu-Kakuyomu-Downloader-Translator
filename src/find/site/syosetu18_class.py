@@ -499,7 +499,7 @@ class SyosetuSearch18:
 
 			if len(ss_divs) > 1:
 				tag_text = ','.join(tag_text_list)
-				return f"{story_text}\n\n_____tags_____\n{tag_text}"
+				return f"{story_text}\n\n_____1234_____\n{tag_text}"
 
 			return story_text
 

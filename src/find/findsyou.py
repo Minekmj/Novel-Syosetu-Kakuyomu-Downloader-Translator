@@ -869,8 +869,8 @@ class DetailDialog(QDialog):
         self.worker.start()
 
     def on_finished(self, raw_desc, translated_desc):
-        raw_data = str(raw_desc).split('_____tags_____')
-        translated_data = str(translated_desc).split('_____tags_____')
+        raw_data = str(raw_desc).split('_____1234_____')
+        translated_data = str(translated_desc).split('_____1234_____')
 
         description = translated_data[0].strip()
 

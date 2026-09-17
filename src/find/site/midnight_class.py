@@ -165,7 +165,7 @@ class MidnightSearch:
                         "updated_at": item.get("general_lastup", "")[:10],
                         "ncode": ncode,
                         "story": item.get("story", "")
-                        + "_____tags_____"
+                        + "_____1234_____"
                         + ", ".join(keywords_list),
                         "keywords": keywords_list,
                     }

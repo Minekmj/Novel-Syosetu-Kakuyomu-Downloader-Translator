@@ -219,7 +219,7 @@ class NaroSearch:
 
                     "ncode": ncode,
                     
-                    "story": item.get("story", "") + '_____tags_____' + ', '.join(keywords_list),
+                    "story": item.get("story", "") + '_____1234_____' + ', '.join(keywords_list),
 
                     "keywords": keywords_list
                 })

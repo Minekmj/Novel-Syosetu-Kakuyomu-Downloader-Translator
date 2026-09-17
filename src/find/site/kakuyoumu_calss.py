@@ -226,7 +226,7 @@ class KakuyomuSearch:
                     intro_text = find_key(data, "introduction")
                     lal = ', '.join(find_key(data, "tagLabels"))
                     if intro_text:
-                        return str(intro_text).strip() + "\n\n_____tags_____\n" + lal
+                        return str(intro_text).strip() + "\n\n_____1234_____\n" + lal
 
                 return "상세 줄거리를 찾을 수 없습니다."
             return f"페이지 로드 실패 (HTTP {res.status_code})"

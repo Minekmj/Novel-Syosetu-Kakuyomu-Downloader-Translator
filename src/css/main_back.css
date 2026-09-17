@@ -3,7 +3,7 @@ QDialog,
 QWidget {
     background-color: |bg||;
     color: |text||;
-    font-family: 'Pretendard', 'Malgun Gothic', 'Segoe UI', -apple-system, sans-serif;
+    font-family: 'Pretendard', 'Malgun Gothic', 'Segoe UI', sans-serif;
     |dv_window||
 }
 
@@ -19,7 +19,7 @@ QLabel {
 QLabel#app_title {
     color: |text_primary||;
     font-size: 15pt;
-    font-weight: 800;
+    font-weight: 700;
     |dv_app_title||
 }
 
@@ -28,31 +28,35 @@ QLabel#title_lbl,
 QLabel#label_title {
     color: |text_title||;
     font-size: 11pt;
-    font-weight: 700;
+    font-weight: 600;
     |dv_title||
 }
 
 QLabel#title_label {
     color: |text_title_bright||;
     font-size: 13pt;
-    font-weight: 750;
+    font-weight: 700;
     |dv_title_label||
 }
 
 QLabel#lbl_title {
     color: |text||;
     font-size: 10.5pt;
-    font-weight: 700;
+    font-weight: 650;
+    line-height: 1.25;
     |dv_lbl_title||
 }
 
-QLabel#lbl_original_title,
+QLabel#lbl_original_title {
+    color: |text_original||;
+    font-size: 8.5pt;
+    padding-top: 1px;
+    |dv_original_title||
+}
+
 QToolButton#lbl_original_title {
     color: |text_original||;
     font-size: 8.5pt;
-    font-style: italic;
-    background: transparent;
-    border: none;
     padding-top: 1px;
     |dv_original_title||
 }
@@ -62,15 +66,13 @@ QLabel#new_and_now,
 QLabel#label_meta {
     color: |text_meta||;
     font-size: 8.5pt;
-    font-weight: 600;
     |dv_label_meta||
 }
 
 QLabel#url_lbl,
 QLabel#lbl_url {
     color: |text_url||;
-    font-size: 8pt;
-    font-weight: 550;
+    font-size: 7.8pt;
     |dv_url||
 }
 
@@ -78,55 +80,54 @@ QLabel#lbl_episodes,
 QLabel#prograss {
     color: |text_muted||;
     font-size: 8.5pt;
-    font-weight: 600;
+    font-weight: 500;
     |dv_progress||
 }
 
 QLabel#cat_label {
     color: |text_category||;
     font-size: 8.5pt;
-    font-weight: 750;
-    padding-top: 2px;
+    font-weight: 650;
+    padding-top: 3px;
     padding-bottom: 2px;
     |dv_cat_label||
 }
 
 QLabel#tilde {
     color: |text_dim||;
-    font-size: 10pt;
+    font-size: 11pt;
     |dv_tilde||
 }
 
 QLabel#lbl_stars {
     background-color: |surface_rating||;
     color: |text_star||;
-    border-radius: 6px;
-    padding: 3px 8px;
+    border-radius: 7px;
+    padding: 4px 8px;
     font-size: 8.5pt;
-    font-weight: 750;
+    font-weight: 700;
     |dv_stars||
 }
 
 QLabel#detail_dialog_title {
     color: |text||;
-    font-size: 14pt;
-    font-weight: 800;
-    padding-bottom: 2px;
+    font-size: 15pt;
+    font-weight: 700;
+    padding-bottom: 1px;
     |dv_detail_title||
 }
 
 QLabel#detail_original_title {
     color: |text_original||;
     font-size: 9pt;
-    font-style: italic;
-    padding-bottom: 4px;
+    padding-bottom: 3px;
     |dv_detail_original_title||
 }
 
 QLabel#detail_section_title {
     color: |text_category||;
     font-size: 8.5pt;
-    font-weight: 750;
+    font-weight: 700;
     padding-top: 3px;
     padding-bottom: 2px;
     |dv_detail_section_title||
@@ -134,8 +135,8 @@ QLabel#detail_section_title {
 
 QLabel#detail_rating {
     color: |text_star||;
-    font-size: 9.5pt;
-    font-weight: 800;
+    font-size: 9pt;
+    font-weight: 700;
     |dv_detail_rating||
 }
 
@@ -149,10 +150,9 @@ QLabel#detail_meta_text {
 QLabel#detail_url {
     color: |text_url||;
     font-size: 8pt;
-    padding: 7px 10px;
+    padding: 8px 10px;
     background-color: |surface_input||;
-    border: |border_input||;
-    border-radius: |radius_input||;
+    border-radius: 7px;
     |dv_detail_url||
 }
 
@@ -172,39 +172,37 @@ QLabel#dialog_hint {
 QLabel#lbl_tag {
     background-color: |surface_tag||;
     color: |tag_text||;
-    border: |border_chip||;
-    border-radius: |radius_chip||;
-    padding: 3px 8px;
+    border: none;
+    border-radius: 10px;
+    padding: 4px 9px;
     font-size: 8pt;
-    font-weight: 600;
     |dv_tag||
 }
 
-/* ==========================================================================
-   3. INPUTS & COMBOBOX (사각형 화살표 & 글씨 증발 버그 영구 해결)
-   ========================================================================== */
 QLineEdit,
+QComboBox,
 QSpinBox {
     background-color: |surface_input||;
     color: |text_input||;
-    border: |border_input||;
-    border-radius: |radius_input||;
-    min-height: 24px;
-    padding: 5px 9px;
-    font-size: 9pt;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    min-height: 22px;
+    padding: 7px 10px;
+    font-size: 9.5pt;
     selection-background-color: |selection_input||;
     selection-color: |selection_text||;
     |dv_input||
 }
 
 QLineEdit:hover,
+QComboBox:hover,
 QSpinBox:hover {
     background-color: |surface_input_hover||;
-    border: 1px solid |border_default||;
     |dv_input_hover||
 }
 
 QLineEdit:focus,
+QComboBox:focus,
 QSpinBox:focus {
     background-color: |surface_input_focus||;
     border: 1px solid |border_input_focus||;
@@ -212,125 +210,89 @@ QSpinBox:focus {
 }
 
 QLineEdit:disabled,
+QComboBox:disabled,
 QSpinBox:disabled {
     background-color: |surface_disabled||;
     color: |text_disabled||;
-    border: 1px solid |border_disabled||;
     |dv_input_disabled||
 }
 
-/* 콤보박스 본체: selection 속성 제거로 파란 사각형 아티팩트 박멸 */
 QComboBox {
-    background-color: |surface_input||;
-    color: |text_input||;
-    border: |border_input||;
-    border-radius: |radius_input||;
-    min-height: 24px;
-    padding: 5px 28px 5px 10px;
-    font-size: 9pt;
+    padding-right: 30px;
     |dv_combo||
 }
 
-QComboBox:hover {
-    background-color: |surface_input_hover||;
-    border: 1px solid |border_default||;
-}
-
-QComboBox:focus {
-    border: 1px solid |border_input_focus||;
-}
-
-/* 드롭다운 영역 */
 QComboBox::drop-down {
     subcontrol-origin: padding;
     subcontrol-position: top right;
-    width: 24px;
+    width: 28px;
     background: transparent;
     border: none;
     |dv_combo_dropdown||
 }
 
-/* 네모로 깨지던 CSS 삼각형을 완벽한 Qt 기본 벡터 화살표로 복원 */
 QComboBox::down-arrow {
-    width: 10px;
-    height: 10px;
-    margin-right: 6px;
+    width: 7px;
+    height: 7px;
     |dv_combo_arrow||
 }
 
-/* 콤보박스 팝업 리스트: 선택 시 글자 지워짐 현상 완벽 방지 */
 QComboBox QAbstractItemView {
-    background-color: |surface_menu||;
+    background-color: |surface_input||;
     color: |combo_text||;
     border: 1px solid |border_default||;
-    border-radius: |radius_input||;
-    padding: 4px;
+    border-radius: 7px;
+    padding: 5px;
     outline: none;
-    selection-background-color: transparent;
+    selection-background-color: |surface_combo_selected||;
+    selection-color: |selection_text||;
     |dv_combo_view||
 }
 
 QComboBox QAbstractItemView::item {
-    min-height: 26px;
-    padding: 4px 10px;
-    border-radius: 4px;
-    color: |combo_text||;
+    min-height: 28px;
+    padding: 4px 8px;
     |dv_combo_item||
 }
 
-QComboBox QAbstractItemView::item:hover,
-QComboBox QAbstractItemView::item:selected {
-    background-color: |surface_combo_selected||;
-    color: |combo_selected_text||;
-}
-
-/* ==========================================================================
-   4. BUTTONS & INTERACTION (손에 잡히는 확실한 입체 버튼!)
-   ========================================================================== */
 QPushButton {
     background-color: |surface_button||;
     color: |text_button||;
-    border: |border_button||;
-    border-radius: |radius_button||;
+    border: none;
+    border-radius: 8px;
     min-height: 20px;
-    padding: 5px 14px;
+    padding: 7px 13px;
     font-size: 9pt;
-    font-weight: 650;
+    font-weight: 500;
     |dv_button||
 }
 
 QPushButton:hover {
     background-color: |surface_button_hover||;
     color: |text_button_hover||;
-    border: 1px solid |border_card_hover||;
     |dv_button_hover||
 }
 
 QPushButton:pressed {
     background-color: |surface_button_pressed||;
     color: |text_button_pressed||;
-    border: 1px solid |border_subtle||;
-    padding-top: 6px;
-    padding-bottom: 4px;
     |dv_button_pressed||
 }
 
 QPushButton:disabled {
     background-color: |surface_disabled||;
     color: |text_disabled_button||;
-    border: 1px solid |border_disabled||;
     |dv_button_disabled||
 }
 
-/* 메인 강조 버튼: 과도하지 않고 캔버스와 조화로운 하이엔드 펀치력 */
 QPushButton#primaryBtn {
     background-color: |primary_bg||;
     color: |primary_text||;
-    border: 1px solid |border_input_focus||;
-    border-radius: |radius_button||;
+    border: none;
+    border-radius: 8px;
     min-height: 22px;
-    padding: 6px 16px;
-    font-weight: 800;
+    padding: 8px 16px;
+    font-weight: 650;
     |dv_primary_btn||
 }
 
@@ -342,23 +304,18 @@ QPushButton#primaryBtn:hover {
 
 QPushButton#primaryBtn:pressed {
     background-color: |primary_pressed||;
-    padding-top: 7px;
-    padding-bottom: 5px;
     |dv_primary_btn_pressed||
 }
 
 QPushButton#secondaryBtn {
     background-color: |secondary_bg||;
     color: |secondary_text||;
-    border: |border_button||;
-    border-radius: |radius_button||;
     |dv_secondary_btn||
 }
 
 QPushButton#secondaryBtn:hover {
     background-color: |secondary_hover||;
     color: |secondary_hover_text||;
-    border: 1px solid |border_card_hover||;
     |dv_secondary_btn_hover||
 }
 
@@ -366,7 +323,7 @@ QPushButton#del {
     background-color: transparent;
     color: |delete_text||;
     border: none;
-    border-radius: 6px;
+    border-radius: 7px;
     |dv_del_btn||
 }
 
@@ -376,16 +333,15 @@ QPushButton#del:hover {
     |dv_del_btn_hover||
 }
 
-/* 상단 탭 버튼들 */
 QPushButton#btn {
     background-color: |surface_chip||;
     color: |chip_text||;
-    border: |border_chip||;
-    border-radius: |radius_chip||;
-    min-height: 16px;
-    padding: 4px 11px;
-    font-size: 8.5pt;
-    font-weight: 600;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    min-height: 15px;
+    padding: 5px 10px;
+    font-size: 8pt;
+    font-weight: 500;
     |dv_chip_btn||
 }
 
@@ -399,20 +355,20 @@ QPushButton#btn:hover {
 QPushButton#btn:checked {
     background-color: |chip_checked||;
     color: |chip_checked_text||;
-    font-weight: 800;
-    border: 1px solid |border_input_focus||;
+    font-weight: 650;
+    border: 1px solid transparent;
     |dv_chip_btn_checked||
 }
 
 QPushButton#detail_tag_btn {
     background-color: |surface_chip||;
     color: |chip_text||;
-    border: |border_chip||;
-    border-radius: |radius_chip||;
-    min-height: 16px;
-    padding: 4px 10px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    min-height: 15px;
+    padding: 5px 11px;
     font-size: 8pt;
-    font-weight: 550;
+    font-weight: 500;
     |dv_detail_tag_btn||
 }
 
@@ -426,22 +382,18 @@ QPushButton#detail_tag_btn:hover {
 QPushButton#detail_tag_btn:pressed {
     background-color: |chip_checked||;
     color: |chip_checked_text||;
-    border: 1px solid |border_input_focus||;
     |dv_detail_tag_btn_pressed||
 }
 
-/* ==========================================================================
-   5. CARDS & ELEVATION
-   ========================================================================== */
 QGroupBox {
     background-color: transparent;
     border: none;
     border-top: 1px solid |border_subtle||;
-    margin-top: 14px;
-    padding-top: 14px;
+    margin-top: 15px;
+    padding-top: 16px;
     color: |text_group||;
     font-size: 9pt;
-    font-weight: 700;
+    font-weight: 600;
     |dv_groupbox||
 }
 
@@ -449,18 +401,17 @@ QGroupBox::title {
     subcontrol-origin: margin;
     subcontrol-position: top left;
     left: 0px;
-    padding: 0px 6px 0px 0px;
+    padding: 0px 7px 0px 0px;
     background-color: |bg||;
     color: |text_group_title||;
     |dv_groupbox_title||
 }
 
-/* 목록 카드 */
 QFrame#CardFrame,
 QWidget#cardContainer {
     background-color: |surface_card||;
-    border: |border_card||;
-    border-radius: |radius_card||;
+    border: 1px solid transparent;
+    border-radius: 10px;
     |dv_card||
 }
 
@@ -491,34 +442,31 @@ QListWidget::item:selected {
     background: transparent;
     |dv_list_item_selected||
 }
-
 QFrame#detail_meta {
     background-color: |surface_card||;
-    border: |border_card||;
-    border-radius: |radius_card||;
+    border: 1px solid transparent;
+    border-radius: 9px;
     |dv_detail_meta||
 }
 
 QWidget#detail_tags {
     background-color: transparent;
-    min-height: 24px;
+    min-height: 25px;
     |dv_detail_tags||
 }
 
 QFrame#dialog_separator {
     background-color: |border_subtle||;
-    min-height: 1px;
-    max-height: 1px;
     border: none;
     |dv_dialog_separator||
 }
 
 QTextEdit {
-    background-color: |surface_input||;
+    background-color: |surface_card||;
     color: |textedit_text||;
-    border: |border_input||;
-    border-radius: |radius_input||;
-    padding: 10px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    padding: 13px;
     font-size: 9pt;
     selection-background-color: |selection_textedit||;
     selection-color: |selection_text||;
@@ -528,20 +476,22 @@ QTextEdit {
 QTextEdit#detail_description {
     background-color: |surface_card||;
     color: |textedit_text||;
-    border: |border_card||;
-    border-radius: |radius_card||;
-    padding: 12px;
-    font-size: 9pt;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    padding: 14px;
+    font-size: 9.5pt;
     selection-background-color: |selection_textedit||;
     selection-color: |selection_text||;
     |dv_detail_description||
 }
 
-QTextEdit#detail_description QAbstractScrollArea,
-QTextEdit#detail_description QWidget {
+QTextEdit#detail_description QAbstractScrollArea {
     background: transparent;
 }
 
+QTextEdit#detail_description QWidget {
+    background: transparent;
+}
 QTextEdit#t {
     background: transparent;
     border: none;
@@ -551,9 +501,6 @@ QTextEdit#t {
     |dv_textedit_transparent||
 }
 
-/* ==========================================================================
-   6. CONTROLS, SCROLLBAR & DICTIONARY
-   ========================================================================== */
 QCheckBox {
     background: transparent;
     color: |checkbox_text||;
@@ -569,11 +516,11 @@ QCheckBox:hover {
 }
 
 QCheckBox::indicator {
-    width: 14px;
-    height: 14px;
+    width: 15px;
+    height: 15px;
     background-color: |checkbox_bg||;
     border: 1px solid |border_checkbox||;
-    border-radius: 4px;
+    border-radius: 5px;
     |dv_checkbox_indicator||
 }
 
@@ -585,7 +532,7 @@ QCheckBox::indicator:hover {
 
 QCheckBox::indicator:checked {
     background-color: |checkbox_checked||;
-    border-color: |checkbox_checked_border||;
+    border-color: |checkbox_checked||;
     |dv_checkbox_indicator_checked||
 }
 
@@ -611,7 +558,7 @@ QScrollBar:vertical {
 
 QScrollBar::handle:vertical {
     background-color: |scrollbar||;
-    min-height: 28px;
+    min-height: 30px;
     border-radius: 3px;
     |dv_scrollbar_handle_v||
 }
@@ -633,16 +580,16 @@ QScrollBar::sub-page:vertical {
 QMenu {
     background-color: |surface_menu||;
     border: 1px solid |border_default||;
-    border-radius: 7px;
-    padding: 4px;
+    border-radius: 8px;
+    padding: 5px;
     |dv_menu||
 }
 
 QMenu::item {
     background: transparent;
     color: |menu_text||;
-    border-radius: 4px;
-    padding: 5px 16px 5px 10px;
+    border-radius: 5px;
+    padding: 7px 20px 7px 10px;
     font-size: 9pt;
     |dv_menu_item||
 }
@@ -655,8 +602,8 @@ QMenu::item:selected {
 
 QMenu::separator {
     height: 1px;
-    background-color: |border_subtle||;
-    margin: 3px 2px;
+    background-color: |surface_menu_selected||;
+    margin: 4px 3px;
     |dv_menu_separator||
 }
 
@@ -687,11 +634,11 @@ QGroupBox#group_box::title {
 QToolButton#link_button {
     background-color: |surface_chip||;
     color: |chip_text||;
-    border: |border_chip||;
-    padding: 4px 10px;
+    border: 1px solid transparent;
+    padding: 5px 11px;
     font-size: 8pt;
     font-weight: 500;
-    border-radius: |radius_chip||;
+    border-radius: 10px;
 }
 
 QToolButton#link_button:hover {
@@ -705,16 +652,18 @@ QToolButton#link_button:pressed {
     color: |chip_checked_text||;
 }
 
-QFrame#hr_line {
+QFrame#hr_line{
     background-color: |border_subtle||;
-    min-height: 1px;
-    max-height: 1px;
     border: none;
 }
 
-#isCo:hover {
+#isCo:hover{
     |dv_is_remainder_point_color||
 }
+
+/* ================================
+   Dictionary
+   ================================ */
 
 QDialog#dictionaryDialog {
     background-color: |bg||;
@@ -725,7 +674,7 @@ QDialog#dictionaryDialog {
 QLabel#dictionaryTitle {
     color: |text_title||;
     font-size: 11pt;
-    font-weight: 700;
+    font-weight: 650;
     padding: 2px 2px 5px 2px;
     |dv_dictionary_title||
 }
@@ -737,9 +686,9 @@ QWidget#dictionaryContainer {
 
 QWidget#dictionaryItem {
     background-color: |surface_card||;
-    border: |border_card||;
-    border-radius: |radius_card||;
-    min-height: 38px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    min-height: 42px;
     |dv_dictionary_item||
 }
 
@@ -753,10 +702,10 @@ QLineEdit#dictionarySource,
 QLineEdit#dictionaryTarget {
     background-color: transparent;
     color: |text_input||;
-    border: 1px solid transparent;
-    border-radius: 5px;
+    border: none;
+    border-radius: 7px;
     min-height: 20px;
-    padding: 4px 6px;
+    padding: 5px 6px;
     font-size: 9pt;
     selection-background-color: |selection_input||;
     selection-color: |selection_text||;
@@ -779,7 +728,7 @@ QLineEdit#dictionaryTarget:focus {
 QLabel#dictionaryArrow {
     background: transparent;
     color: |text_dim||;
-    font-size: 9.5pt;
+    font-size: 10pt;
     font-weight: 600;
     padding: 0px 4px;
     |dv_dictionary_arrow||
@@ -789,30 +738,30 @@ QPushButton#dictionaryRemove {
     background-color: transparent;
     color: |delete_text||;
     border: none;
-    border-radius: 6px;
-    min-height: 20px;
-    min-width: 20px;
-    padding: 2px;
-    font-size: 11pt;
-    font-weight: 600;
+    border-radius: 7px;
+    min-height: 22px;
+    min-width: 22px;
+    padding: 2px 5px;
+    font-size: 12pt;
+    font-weight: 500;
     |dv_dictionary_remove||
 }
 
 QPushButton#dictionaryRemove:hover {
     background-color: |surface_delete||;
-    color: #FFFFFF;
+    color: white;
     |dv_dictionary_remove_hover||
 }
 
 QPushButton#dictionaryAdd {
     background-color: |surface_chip||;
     color: |chip_text||;
-    border: |border_chip||;
-    border-radius: |radius_chip||;
+    border: 1px solid transparent;
+    border-radius: 10px;
     min-height: 22px;
-    padding: 5px 12px;
+    padding: 7px 12px;
     font-size: 8.5pt;
-    font-weight: 600;
+    font-weight: 500;
     |dv_dictionary_add||
 }
 
@@ -829,13 +778,15 @@ QPushButton#dictionaryAdd:pressed {
     |dv_dictionary_add_pressed||
 }
 
-QLabel#setting_title_txt {
+QLabel#setting_title_txt{
     color: |checkbox_text||;
+    spacing: 7px;
+    padding: 2px 0px;
     font-size: 9pt;
 }
 
 QTabWidget QStackedWidget {
     background: transparent;
     border: none;
-    border-top: 1px solid |border_subtle||;
+    border-top: 1px solid |text_original||;
 }

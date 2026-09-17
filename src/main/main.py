@@ -75,7 +75,10 @@ class PathSettingsDialog(QDialog):
         for i, h in data_iteam.THEME_DATA.items():
             g[h] = i
 
-        self.theme_combo.setCurrentText(g[data_iteam.THEME_NAME])
+        try:
+            self.theme_combo.setCurrentText(g[data_iteam.THEME_NAME])
+        except:
+            self.theme_combo.setCurrentText(g[list(g.keys())[0]])
 
         theme_layout.addWidget(theme_label)
         theme_layout.addWidget(self.theme_combo, stretch=1)
