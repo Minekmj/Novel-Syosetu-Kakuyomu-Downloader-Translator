@@ -790,3 +790,184 @@ QTabWidget QStackedWidget {
     border: none;
     border-top: 1px solid |text_original||;
 }
+
+QWidget[objectName^="no_back-"] {
+    background: transparent;
+    background-color: transparent;
+}
+
+QFrame#chunkSepBox {
+    border: 1px solid rgba(77, 166, 255, 0.3);
+    border-radius: 6px;
+    background: rgba(77, 166, 255, 0.06);
+}
+
+QLabel#dropArea {
+    background: transparent;
+    border-radius: 6px;
+    padding: 4px;
+}
+
+QLabel#subLabel {
+    background: transparent;
+    font-size: 11px;
+    font-weight: 600;
+    margin-top: 2px;
+    margin-bottom: 2px;
+}
+
+QLabel#optionLabel {
+    background: transparent;
+    font-size: 11px;
+}
+
+QLabel#secondaryInfo {
+    background: transparent;
+    font-size: 10px;
+}
+
+QPushButton#subtleBtn {
+    min-height: 34px;
+    padding: 0px 11px;
+    border-radius: 5px;
+}
+
+QPushButton#subtleBtn:pressed {
+    padding-top: 1px;
+}
+
+QLineEdit,
+QComboBox,
+QSpinBox,
+QDoubleSpinBox {
+    min-height: 34px;
+    padding: 0px 8px;
+    border-radius: 5px;
+}
+
+QLineEdit#selectedModelDisplay {
+    min-height: 35px;
+}
+
+QScrollArea#no_back-modelScroll {
+    border: none;
+    background: transparent;
+    background-color: transparent;
+}
+
+QScrollArea#no_back-modelScroll > QWidget {
+    border: none;
+    background: transparent;
+    background-color: transparent;
+}
+
+QScrollArea#no_back-modelScroll QWidget#no_back-modelListContainer {
+    border: none;
+    background: transparent;
+    background-color: transparent;
+}
+
+QWidget#no_back-modelRow {
+    background: transparent;
+    background-color: transparent;
+}
+
+QComboBox#modelRowCombo {
+    min-height: 36px;
+    padding: 0px 9px;
+    border-radius: 5px;
+}
+
+QPushButton#modelSelectBtn,
+QPushButton#modelDeleteBtn {
+    min-height: 36px;
+    padding: 0px 10px;
+    border-radius: 5px;
+}
+
+QLabel#modelActiveIndicator {
+    background: transparent;
+    min-width: 12px;
+    max-width: 12px;
+}
+
+QTabWidget#no_back-settingsTab {
+    background: transparent;
+    background-color: transparent;
+    border: none;
+}
+
+QTabWidget#no_back-settingsTab::pane {
+    background: transparent;
+    background-color: transparent;
+    border: none;
+    padding: 0px;
+    margin: 0px;
+}
+
+QTabWidget#no_back-settingsTab::tab-bar {
+    background: transparent;
+    background-color: transparent;
+}
+
+QWidget#no_back-tabParams,
+QWidget#no_back-tabDict,
+QWidget#no_back-tabPre,
+QWidget#no_back-tabApi,
+QWidget#no_back-tabInspect {
+    background: transparent;
+    background-color: transparent;
+    border: none;
+}
+
+QTabWidget#no_back-settingsTab QTabBar {
+    background: transparent;
+    background-color: transparent;
+    color: |text_original||;
+}
+
+QTabWidget#no_back-settingsTab QTabBar::tab {
+    background: transparent;
+    background-color: transparent;
+    border: none;
+    border-radius: 5px;
+    padding: 7px 14px;
+    margin-right: 2px;
+    font-size: 11px;
+    min-height: 34px;
+    color: |text_original||;
+}
+
+QTabWidget#no_back-settingsTab QTabBar::tab:selected {
+    background: transparent;
+    background-color: transparent;
+}
+
+QTabWidget#no_back-settingsTab QTabBar::tab:hover {
+    background: transparent;
+    background-color: transparent;
+}
+
+QTabWidget#no_back-settingsTab QAbstractScrollArea {
+    background: transparent;
+    background-color: transparent;
+    border: none;
+    color: |text_original||;
+}
+
+QProgressBar {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.05);
+    text-align: center;
+}
+
+QProgressBar::chunk {
+    border-radius: 3px;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #3b82f6, stop:1 #60a5fa);
+}
+
+QTextEdit#detail_description {
+    border-radius: 6px;
+    padding: 5px;
+}

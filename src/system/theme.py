@@ -331,7 +331,7 @@ def _make_light_theme(c, dv=None):
 
 
 # 01. 화이트
-_, THEME_WHITE = _make_light_theme({
+COLORS_NEW_WHITE, THEME_WHITE = _make_light_theme({
     "bg": "#F4F5F7",
     "bg2": "#ECEEF2",
     "surface": "#FFFFFF",
@@ -363,7 +363,7 @@ _, THEME_WHITE = _make_light_theme({
 
 
 # 02. 샌드
-_, THEME_SAND = _make_light_theme({
+COLORS_SAND, THEME_SAND = _make_light_theme({
     "bg": "#F6F1E8",
     "bg2": "#EEE6D9",
     "surface": "#FCFAF6",
@@ -395,7 +395,7 @@ _, THEME_SAND = _make_light_theme({
 
 
 # 03. 로즈
-_, THEME_ROSE = _make_light_theme({
+COLORS_ROSE, THEME_ROSE = _make_light_theme({
     "bg": "#F8F3F5",
     "bg2": "#F0E6EA",
     "surface": "#FFFDFE",
@@ -427,7 +427,7 @@ _, THEME_ROSE = _make_light_theme({
 
 
 # 04. 옐로우 HUD
-_, THEME_YELLOW_HUD = _make_dark_theme({
+COLORS_YELLOW_HUD, THEME_YELLOW_HUD = _make_dark_theme({
     "bg": "#10100F",
     "bg2": "#161613",
     "surface": "#1B1B18",
@@ -463,7 +463,7 @@ _, THEME_YELLOW_HUD = _make_dark_theme({
 
 
 # 05. 크림슨
-_, THEME_CRIMSON = _make_dark_theme({
+COLORS_CRIMSON, THEME_CRIMSON = _make_dark_theme({
     "bg": "#120C0E",
     "bg2": "#191013",
     "surface": "#21161A",
@@ -497,7 +497,7 @@ _, THEME_CRIMSON = _make_dark_theme({
 
 
 # 06. 에메랄드
-_, THEME_EMERALD = _make_dark_theme({
+COLORS_EMERALD, THEME_EMERALD = _make_dark_theme({
     "bg": "#0B1210",
     "bg2": "#101A16",
     "surface": "#17231D",
@@ -531,7 +531,7 @@ _, THEME_EMERALD = _make_dark_theme({
 
 
 # 07. 노르딕
-_, THEME_NORDIC = _make_dark_theme({
+COLORS_NORDIC, THEME_NORDIC = _make_dark_theme({
     "bg": "#272D36",
     "bg2": "#22272F",
     "surface": "#303744",
@@ -564,7 +564,7 @@ _, THEME_NORDIC = _make_dark_theme({
 
 
 # 08. 브라운
-_, THEME_BROWN = _make_dark_theme({
+COLORS_BROWN, THEME_BROWN = _make_dark_theme({
     "bg": "#211D1A",
     "bg2": "#191613",
     "surface": "#2A2521",
@@ -596,7 +596,7 @@ _, THEME_BROWN = _make_dark_theme({
 
 
 # 09. 라벤더
-_, THEME_LAVENDER = _make_dark_theme({
+COLORS_LAVENDER, THEME_LAVENDER = _make_dark_theme({
     "bg": "#20202C",
     "bg2": "#1A1A24",
     "surface": "#2A2A39",
@@ -628,7 +628,7 @@ _, THEME_LAVENDER = _make_dark_theme({
 
 
 # 10. 틸
-_, THEME_TEAL = _make_dark_theme({
+COLORS_NEW_TEAL, THEME_TEAL = _make_dark_theme({
     "bg": "#0B1719",
     "bg2": "#091215",
     "surface": "#122225",
@@ -660,7 +660,7 @@ _, THEME_TEAL = _make_dark_theme({
 
 
 # 11. 인디고
-_, THEME_INDIGO = _make_dark_theme({
+COLORS_NEW_INDIGO, THEME_INDIGO = _make_dark_theme({
     "bg": "#11131A",
     "bg2": "#0D0F15",
     "surface": "#191C26",
@@ -692,7 +692,7 @@ _, THEME_INDIGO = _make_dark_theme({
 
 
 # 12. 바이올렛
-_, THEME_VIOLET = _make_dark_theme({
+COLORS_VIOLET, THEME_VIOLET = _make_dark_theme({
     "bg": "#17141D",
     "bg2": "#121017",
     "surface": "#211C2A",
@@ -724,7 +724,7 @@ _, THEME_VIOLET = _make_dark_theme({
 
 
 # 13. 오렌지
-_, THEME_ORANGE = _make_dark_theme({
+COLORS_NEW_ORANGE, THEME_ORANGE = _make_dark_theme({
     "bg": "#14110F",
     "bg2": "#0F0D0B",
     "surface": "#201A16",
@@ -756,7 +756,7 @@ _, THEME_ORANGE = _make_dark_theme({
 
 
 # 14. 딥 블루
-_, THEME_DEEP_BLUE = _make_dark_theme({
+COLORS_DEEP_BLUE, THEME_DEEP_BLUE = _make_dark_theme({
     "bg": "#0B111A",
     "bg2": "#080D14",
     "surface": "#121B27",
@@ -788,7 +788,7 @@ _, THEME_DEEP_BLUE = _make_dark_theme({
 
 
 # 15. 모노
-_, THEME_MONO = _make_dark_theme({
+COLORS_NEW_MONO, THEME_MONO = _make_dark_theme({
     "bg": "#111214",
     "bg2": "#0C0D0F",
     "surface": "#191A1D",
@@ -822,7 +822,7 @@ _, THEME_MONO = _make_dark_theme({
 
 
 # 16. 시안
-_, THEME_CYAN = _make_dark_theme({
+COLORS_NEW_CYAN, THEME_CYAN = _make_dark_theme({
     "bg": "#0A1519",
     "bg2": "#081115",
     "surface": "#122027",
@@ -854,7 +854,7 @@ _, THEME_CYAN = _make_dark_theme({
 
 
 # 17. OLED
-_, THEME_OLED = _make_dark_theme({
+COLORS_NEW_OLED, THEME_OLED = _make_dark_theme({
     "bg": "#000000",
     "bg2": "#030303",
     "surface": "#08090A",

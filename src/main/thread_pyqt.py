@@ -79,18 +79,25 @@ class EpubConvertThread(QThread):
             self.finished_signal.emit(False, str(e), "")
 
 class FetchNewNumberWorker(QThread):
-    finished = Signal(str)
+    finished = Signal(tuple)
+    _semaphore = threading.Semaphore(10)
 
-    def __init__(self, site_url):
+    def __init__(self, site_url, use_have=False):
         super().__init__()
         self.site_url = site_url
+        self.use_have = use_have
 
     def run(self):
         try:
-            num = DOWN.downin.new_number(self.site_url)
-            self.finished.emit(str(num))
+            with FetchNewNumberWorker._semaphore:
+                if self.use_have:
+                    num, time = DOWN.downin.new_number(self.site_url, True)
+                    self.finished.emit((str(num), time))
+                else:
+                    num = DOWN.downin.new_number(self.site_url)
+                    self.finished.emit((str(num), ""))
         except Exception:
-            self.finished.emit("오류")
+            self.finished.emit(("오류", ""))
             
 class TranslateThread(QThread):
     progress_changed = Signal(int, int, str)

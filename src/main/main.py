@@ -472,8 +472,8 @@ class DownloadDetailDialog(QDialog):
         self.worker.start()
 
     def update_new_label(self, result_text):
-        self.new_lbl.setText(f"최신: {result_text}화")
-        self.now_res = str(result_text)
+        self.new_lbl.setText(f"최신: {result_text[0]}화")
+        self.now_res = str(result_text[0])
         if not self.end_edit.text():
             self.end_edit.setText(self.now_res)
 
@@ -540,6 +540,7 @@ class AddressRowWidget(QWidget):
         self.last = "0" if last == "" else last
         self.down_time = "0" if not down_time else down_time
         self.now = "-"
+        self.time = ""
 
         self.is_empty = not site_url
 
@@ -646,19 +647,22 @@ class AddressRowWidget(QWidget):
         self.start_async_fetch()
 
     def start_async_fetch(self):
-        self.worker = thread_pyqt.FetchNewNumberWorker(self.site_url)
+        self.worker = thread_pyqt.FetchNewNumberWorker(self.site_url, True)
         self.worker.finished.connect(self.update_new_label)
         self.worker.start()
 
     def update_new_label(self, result_text):
-        self.now = str(result_text)
-        self.new_and_now.setText(f"{self.last} / {self.now} 화")
+        self.now = str(result_text[0])
+        self.time = str(result_text[1]) if len(result_text) > 1 and result_text[1] else ""
+        time_display = f" - {self.time}" if self.time else ""
+        self.new_and_now.setText(f"{self.last} / {self.now} 화{time_display}")
         self.status_updated.emit()
 
     def update_download_info(self, last, down_time):
         self.last = str(last)
         self.down_time = str(down_time)
-        self.new_and_now.setText(f"{self.last} / {self.now} 화")
+        time_display = f" - {self.time}" if self.time else ""
+        self.new_and_now.setText(f"{self.last} / {self.now} 화{time_display}")
         self.status_updated.emit()
 
     def get_remaining_episodes(self):
@@ -850,6 +854,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.row_widgets = []
+        self.newly_added_widget = None  # 새로 추가된 위젯 추적
 
         self.setWindowTitle(f"MINE DOWNLOADER - Novel(Syosetu, Kakuyomu) Downloader & Translator - {vsc.V}")
         self.resize(1200, 700)
@@ -936,8 +941,17 @@ class MainWindow(QMainWindow):
         self.search_edit.textChanged.connect(self.apply_filter_and_sort)
 
         self.sort_combo = QComboBox(self)
-        self.sort_combo.addItems(["이름순", "역이름순", "남은 화수순", "최근 다운로드순", "역 최근 다운로드순"])
-        self.sort_combo.currentIndexChanged.connect(self.apply_filter_and_sort)
+        self.sort_combo.addItems([
+            "이름순", 
+            "역이름순", 
+            "남은 화수순", 
+            "역 남은 화수순",
+            "최근 다운로드순", 
+            "역 최근 다운로드순",
+            "최신화 날짜순",
+            "역 최신화 날짜순"
+        ])
+        self.sort_combo.currentIndexChanged.connect(self.on_sort_changed)
 
         self.filter_chk = QCheckBox("남은 화수 있음", self)
         self.filter_chk.stateChanged.connect(self.apply_filter_and_sort)
@@ -982,6 +996,10 @@ class MainWindow(QMainWindow):
             update = UpdateView(self)
             update.show()
 
+    def on_sort_changed(self):
+        self.newly_added_widget = None
+        self.apply_filter_and_sort()
+
     def init_saved_data(self):
         data = load_data()
 
@@ -989,7 +1007,6 @@ class MainWindow(QMainWindow):
         down.downin.base_data.EXPORT_TEXT = data.get("RAW_TEXT", False)
         down.downin.base_data.ORIGIN_NAME = data.get("origin_name", False)
 
-        # 세분화 검열 옵션 로드 및 trans_ai 모듈 변수에 반영
         trans_view.trans_ai.USE_ADVANCED_CENSOR = data.get("CENSOR_ADVANCED", False)
         trans_view.trans_ai.CENSOR_SHUFFLE = data.get("CENSOR_SHUFFLE", True)
         trans_view.trans_ai.CENSOR_EXTRACT_MODE = data.get("CENSOR_MODE", "word")
@@ -1047,6 +1064,10 @@ class MainWindow(QMainWindow):
             row.show()
             visible_widgets.append(row)
 
+        is_pinned = self.newly_added_widget in visible_widgets
+        if is_pinned:
+            visible_widgets.remove(self.newly_added_widget)
+
         if sort_mode == 0:
             visible_widgets.sort(key=lambda x: x.title_text)
         elif sort_mode == 1:
@@ -1054,9 +1075,18 @@ class MainWindow(QMainWindow):
         elif sort_mode == 2:
             visible_widgets.sort(key=lambda x: x.get_remaining_episodes(), reverse=True)
         elif sort_mode == 3:
-            visible_widgets.sort(key=lambda x: x.down_time, reverse=True)
+            visible_widgets.sort(key=lambda x: x.get_remaining_episodes())
         elif sort_mode == 4:
+            visible_widgets.sort(key=lambda x: x.down_time, reverse=True)
+        elif sort_mode == 5:
             visible_widgets.sort(key=lambda x: x.down_time)
+        elif sort_mode == 6:
+            visible_widgets.sort(key=lambda x: (x.time != "", x.time), reverse=True)
+        elif sort_mode == 7:
+            visible_widgets.sort(key=lambda x: (x.time == "", x.time))
+
+        if is_pinned:
+            visible_widgets.insert(0, self.newly_added_widget)
 
         for row in visible_widgets:
             self.rows_layout.addWidget(row)
@@ -1109,18 +1139,26 @@ class MainWindow(QMainWindow):
         row.del_btn.clicked.connect(lambda _, r=row: self.delete_row(r))
         row.status_updated.connect(self.apply_filter_and_sort)
 
-        self.rows_layout.addWidget(row)
-        self.row_widgets.append(row)
-        
+        self.row_widgets.insert(0, row)
+        self.newly_added_widget = row
+
         if len(self.row_widgets) > 0:
             self.is_first_massage.hide()
 
+        if self.search_edit.text():
+            self.search_edit.blockSignals(True)
+            self.search_edit.clear()
+            self.search_edit.blockSignals(False)
+
         self.apply_filter_and_sort()
-        self.scroll_area.verticalScrollBar().setValue(self.scroll_area.verticalScrollBar().maximum())
+        self.scroll_area.verticalScrollBar().setValue(0)
 
         QMessageBox.information(self, "완료", "주소가 성공적으로 추가되었습니다.")
 
     def delete_row(self, row_widget):
+        if self.newly_added_widget == row_widget:
+            self.newly_added_widget = None
+
         data = load_data()
         if row_widget.title_text in data.get("list", {}):
             del data["list"][row_widget.title_text]
@@ -1151,7 +1189,6 @@ class MainWindow(QMainWindow):
         dialog.origin_name_toggle.setChecked(data.get("origin_name", False))
         dialog.ai_prompt_edit.setPlainText(data.get("AI_PROMPT", ""))
 
-        # 저장된 세분화 검열 설정 값 다이얼로그에 세팅
         censor_adv = data.get("CENSOR_ADVANCED", False)
         dialog.censor_toggle.setChecked(censor_adv)
         dialog.censor_sub_widget.setVisible(censor_adv)
@@ -1188,7 +1225,6 @@ class MainWindow(QMainWindow):
             data["origin_name"] = origin_name
             data["AI_PROMPT"] = ai_prompt
 
-            # 세분화 검열 설정 저장
             data["CENSOR_ADVANCED"] = censor_advanced
             data["CENSOR_SHUFFLE"] = censor_shuffle
             data["CENSOR_MODE"] = censor_mode
@@ -1196,7 +1232,6 @@ class MainWindow(QMainWindow):
 
             save_data(data)
 
-            # trans_ai 전역 상태 업데이트
             trans_view.trans_ai.CUSTOM_AI_PROMPT = ai_prompt
             trans_view.trans_ai.USE_ADVANCED_CENSOR = censor_advanced
             trans_view.trans_ai.CENSOR_SHUFFLE = censor_shuffle

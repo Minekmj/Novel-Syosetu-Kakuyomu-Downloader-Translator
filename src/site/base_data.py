@@ -1,3 +1,7 @@
+from datetime import datetime, timedelta, timezone
+import re
+
+
 EXPORT_TEXT = False
 CONCURRENCY_LIMIT = 5
 CONCURRENCY_LIMIT_H = 15
@@ -18,3 +22,30 @@ HEADERS = {
 }
 
 OUTFOLDER = "./out"
+
+def normalize_date(date_str):
+    if not date_str:
+        return None
+    
+    date_str = date_str.strip()
+    jst = timezone(timedelta(hours=9))
+
+    if "T" in date_str:
+        try:
+            clean_str = date_str.replace("Z", "+00:00")
+            dt = datetime.fromisoformat(clean_str)
+            if dt.tzinfo is not None:
+                dt = dt.astimezone(jst)
+            return dt.strftime("%Y-%m-%d %H:%M:%S")
+        except Exception:
+            pass
+
+    m = re.search(r"(\d{4})[年/\-](\d{1,2})[月/\-](\d{1,2})(?:日)?(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?", date_str)
+    if m:
+        year, month, day = m.group(1), m.group(2).zfill(2), m.group(3).zfill(2)
+        hour = m.group(4).zfill(2) if m.group(4) else "00"
+        minute = m.group(5).zfill(2) if m.group(5) else "00"
+        second = m.group(6).zfill(2) if m.group(6) else "00"
+        return f"{year}-{month}-{day} {hour}:{minute}:{second}"
+
+    return date_str

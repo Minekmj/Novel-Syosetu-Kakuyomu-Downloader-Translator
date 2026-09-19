@@ -180,9 +180,6 @@ QLabel#lbl_tag {
     |dv_tag||
 }
 
-/* ==========================================================================
-   3. INPUTS & COMBOBOX (사각형 화살표 & 글씨 증발 버그 영구 해결)
-   ========================================================================== */
 QLineEdit,
 QSpinBox {
     background-color: |surface_input||;
@@ -219,7 +216,6 @@ QSpinBox:disabled {
     |dv_input_disabled||
 }
 
-/* 콤보박스 본체: selection 속성 제거로 파란 사각형 아티팩트 박멸 */
 QComboBox {
     background-color: |surface_input||;
     color: |text_input||;
@@ -240,7 +236,6 @@ QComboBox:focus {
     border: 1px solid |border_input_focus||;
 }
 
-/* 드롭다운 영역 */
 QComboBox::drop-down {
     subcontrol-origin: padding;
     subcontrol-position: top right;
@@ -250,7 +245,6 @@ QComboBox::drop-down {
     |dv_combo_dropdown||
 }
 
-/* 네모로 깨지던 CSS 삼각형을 완벽한 Qt 기본 벡터 화살표로 복원 */
 QComboBox::down-arrow {
     width: 10px;
     height: 10px;
@@ -258,7 +252,6 @@ QComboBox::down-arrow {
     |dv_combo_arrow||
 }
 
-/* 콤보박스 팝업 리스트: 선택 시 글자 지워짐 현상 완벽 방지 */
 QComboBox QAbstractItemView {
     background-color: |surface_menu||;
     color: |combo_text||;
@@ -284,9 +277,6 @@ QComboBox QAbstractItemView::item:selected {
     color: |combo_selected_text||;
 }
 
-/* ==========================================================================
-   4. BUTTONS & INTERACTION (손에 잡히는 확실한 입체 버튼!)
-   ========================================================================== */
 QPushButton {
     background-color: |surface_button||;
     color: |text_button||;
@@ -322,7 +312,6 @@ QPushButton:disabled {
     |dv_button_disabled||
 }
 
-/* 메인 강조 버튼: 과도하지 않고 캔버스와 조화로운 하이엔드 펀치력 */
 QPushButton#primaryBtn {
     background-color: |primary_bg||;
     color: |primary_text||;
@@ -350,7 +339,7 @@ QPushButton#primaryBtn:pressed {
 QPushButton#secondaryBtn {
     background-color: |secondary_bg||;
     color: |secondary_text||;
-    border: |border_button||;
+    border: None;
     border-radius: |radius_button||;
     |dv_secondary_btn||
 }
@@ -376,7 +365,6 @@ QPushButton#del:hover {
     |dv_del_btn_hover||
 }
 
-/* 상단 탭 버튼들 */
 QPushButton#btn {
     background-color: |surface_chip||;
     color: |chip_text||;
@@ -430,9 +418,6 @@ QPushButton#detail_tag_btn:pressed {
     |dv_detail_tag_btn_pressed||
 }
 
-/* ==========================================================================
-   5. CARDS & ELEVATION
-   ========================================================================== */
 QGroupBox {
     background-color: transparent;
     border: none;
@@ -455,7 +440,6 @@ QGroupBox::title {
     |dv_groupbox_title||
 }
 
-/* 목록 카드 */
 QFrame#CardFrame,
 QWidget#cardContainer {
     background-color: |surface_card||;
@@ -551,9 +535,6 @@ QTextEdit#t {
     |dv_textedit_transparent||
 }
 
-/* ==========================================================================
-   6. CONTROLS, SCROLLBAR & DICTIONARY
-   ========================================================================== */
 QCheckBox {
     background: transparent;
     color: |checkbox_text||;
@@ -838,4 +819,185 @@ QTabWidget QStackedWidget {
     background: transparent;
     border: none;
     border-top: 1px solid |border_subtle||;
+}
+
+QWidget[objectName^="no_back-"] {
+    background: transparent;
+    background-color: transparent;
+}
+
+QFrame#chunkSepBox {
+    border: 1px solid rgba(77, 166, 255, 0.3);
+    border-radius: 6px;
+    background: rgba(77, 166, 255, 0.06);
+}
+
+QLabel#dropArea {
+    background: transparent;
+    border-radius: 6px;
+    padding: 4px;
+}
+
+QLabel#subLabel {
+    background: transparent;
+    font-size: 11px;
+    font-weight: 600;
+    margin-top: 2px;
+    margin-bottom: 2px;
+}
+
+QLabel#optionLabel {
+    background: transparent;
+    font-size: 11px;
+}
+
+QLabel#secondaryInfo {
+    background: transparent;
+    font-size: 10px;
+}
+
+QPushButton#subtleBtn {
+    min-height: 34px;
+    padding: 0px 11px;
+    border-radius: 5px;
+}
+
+QPushButton#subtleBtn:pressed {
+    padding-top: 1px;
+}
+
+QLineEdit,
+QComboBox,
+QSpinBox,
+QDoubleSpinBox {
+    min-height: 34px;
+    padding: 0px 8px;
+    border-radius: 5px;
+}
+
+QLineEdit#selectedModelDisplay {
+    min-height: 35px;
+}
+
+QScrollArea#no_back-modelScroll {
+    border: none;
+    background: transparent;
+    background-color: transparent;
+}
+
+QScrollArea#no_back-modelScroll > QWidget {
+    border: none;
+    background: transparent;
+    background-color: transparent;
+}
+
+QScrollArea#no_back-modelScroll QWidget#no_back-modelListContainer {
+    border: none;
+    background: transparent;
+    background-color: transparent;
+}
+
+QWidget#no_back-modelRow {
+    background: transparent;
+    background-color: transparent;
+}
+
+QComboBox#modelRowCombo {
+    min-height: 36px;
+    padding: 0px 9px;
+    border-radius: 5px;
+}
+
+QPushButton#modelSelectBtn,
+QPushButton#modelDeleteBtn {
+    min-height: 36px;
+    padding: 0px 10px;
+    border-radius: 5px;
+}
+
+QLabel#modelActiveIndicator {
+    background: transparent;
+    min-width: 12px;
+    max-width: 12px;
+}
+
+QTabWidget#no_back-settingsTab {
+    background: transparent;
+    background-color: transparent;
+    border: none;
+}
+
+QTabWidget#no_back-settingsTab::pane {
+    background: transparent;
+    background-color: transparent;
+    border: none;
+    padding: 0px;
+    margin: 0px;
+}
+
+QTabWidget#no_back-settingsTab::tab-bar {
+    background: transparent;
+    background-color: transparent;
+}
+
+QWidget#no_back-tabParams,
+QWidget#no_back-tabDict,
+QWidget#no_back-tabPre,
+QWidget#no_back-tabApi,
+QWidget#no_back-tabInspect {
+    background: transparent;
+    background-color: transparent;
+    border: none;
+}
+
+QTabWidget#no_back-settingsTab QTabBar {
+    background: transparent;
+    background-color: transparent;
+    color: |text_original||;
+}
+
+QTabWidget#no_back-settingsTab QTabBar::tab {
+    background: transparent;
+    background-color: transparent;
+    border: none;
+    border-radius: 5px;
+    padding: 7px 14px;
+    margin-right: 2px;
+    font-size: 11px;
+    min-height: 34px;
+    color: |text_original||;
+}
+
+QTabWidget#no_back-settingsTab QTabBar::tab:selected {
+    background: transparent;
+    background-color: transparent;
+}
+
+QTabWidget#no_back-settingsTab QTabBar::tab:hover {
+    background: transparent;
+    background-color: transparent;
+}
+
+QTabWidget#no_back-settingsTab QAbstractScrollArea {
+    background: transparent;
+    background-color: transparent;
+    border: none;
+    color: |text_original||;
+}
+
+QProgressBar {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.05);
+    text-align: center;
+}
+
+QProgressBar::chunk {
+    border-radius: 3px;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #3b82f6, stop:1 #60a5fa);
+}
+
+QTextEdit#detail_description {
+    border-radius: 6px;
+    padding: 5px;
 }

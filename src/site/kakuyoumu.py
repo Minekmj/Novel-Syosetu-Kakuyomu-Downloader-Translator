@@ -590,11 +590,8 @@ def download_kakuyomu_async(
     return book_title or novel_code
 
 
-def new_kakuyomu(novel_code):
-    url = (
-        f"https://kakuyomu.jp/works/"
-        f"{novel_code}"
-    )
+def new_kakuyomu(novel_code, have_make=False):
+    url = f"https://kakuyomu.jp/works/{novel_code}"
 
     session = create_session()
     session.headers.update({
@@ -602,38 +599,22 @@ def new_kakuyomu(novel_code):
     })
 
     try:
-        res = session.get(
-            url,
-            timeout=15
-        )
-
+        res = session.get(url, timeout=15)
         if res.status_code != 200:
             return None
 
         html_text = res.text
+        soup = BeautifulSoup(html_text, "html.parser")
 
-        soup = BeautifulSoup(
-            html_text,
-            "html.parser"
-        )
+        count = None
+        latest_date = None
 
-        next_data_script = soup.find(
-            "script",
-            id="__NEXT_DATA__"
-        )
-
-        if (
-            next_data_script
-            and next_data_script.string
-        ):
+        next_data_script = soup.find("script", id="__NEXT_DATA__")
+        if next_data_script and next_data_script.string:
             try:
-                data = json.loads(
-                    next_data_script.string
-                )
-
+                data = json.loads(next_data_script.string)
                 apollo_state = (
-                    data
-                    .get("props", {})
+                    data.get("props", {})
                     .get("pageProps", {})
                     .get("__APOLLO_STATE__", {})
                 )
@@ -654,41 +635,44 @@ def new_kakuyomu(novel_code):
                         for ep in episodes
                         if ep.get("id") is not None
                     }
-
                     if unique_ids:
-                        return len(unique_ids)
+                        count = len(unique_ids)
+
+                    dates = [ep.get("publishedAt") for ep in episodes if ep.get("publishedAt")]
+                    if dates:
+                        latest_date = max(dates)
 
             except Exception:
                 pass
 
-        pattern = (
-            r'\{"__typename":"Episode",'
-            r'"id":"(\d+)"'
-        )
+        if count is None:
+            matches = re.findall(r'\{"__typename":"Episode","id":"(\d+)"', html_text)
+            if matches:
+                count = len(set(matches))
+                date_matches = re.findall(r'"publishedAt":"([^"]+)"', html_text)
+                if date_matches:
+                    latest_date = max(date_matches)
 
-        matches = re.findall(
-            pattern,
-            html_text
-        )
+        if count is None:
+            ep_links = soup.select("a.widget-toc-episode-episodeTitle")
+            if ep_links:
+                count = len(ep_links)
 
-        if matches:
-            return len(set(matches))
+        if count is None:
+            return None
 
-        ep_links = soup.select(
-            "a.widget-toc-episode-episodeTitle"
-        )
+        if not have_make:
+            return count
 
-        return (
-            len(ep_links)
-            if ep_links
-            else None
-        )
+        if not latest_date:
+            time_tags = soup.select("time.widget-toc-episode-datePublished, li.widget-toc-episode time, time[datetime]")
+            if time_tags:
+                latest_date = time_tags[-1].get("datetime") or time_tags[-1].get_text(strip=True)
+
+        return (count, base_data.normalize_date(latest_date))
 
     except Exception as e:
-        print(
-            f"카쿠요무 에피소드 수 확인 오류: {e}"
-        )
-
+        print(f"카쿠요무 에피소드 수 확인 오류: {e}")
         return None
 
     finally:

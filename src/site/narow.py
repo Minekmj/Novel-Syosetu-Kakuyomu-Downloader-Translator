@@ -565,9 +565,9 @@ def download_syosetu_async(
     return book_title
 
 
-def new_syosetu(novel_code):
+def new_syosetu(novel_code, have_make=False):
     url = f"https://ncode.syosetu.com/{novel_code}/"
-    
+
     with create_session() as session:
         try:
             res = session.get(url, timeout=15)
@@ -575,6 +575,7 @@ def new_syosetu(novel_code):
                 return None
 
             soup = BeautifulSoup(res.text, "html.parser")
+            first_soup = soup
 
             next_page = soup.find("a", class_="c-pager__item c-pager__item--last")
             last_page = 1
@@ -591,6 +592,9 @@ def new_syosetu(novel_code):
                     return None
                 soup = BeautifulSoup(res.text, "html.parser")
 
+            last_ep_num = None
+            latest_date = None
+
             body_tag = soup.find("div", class_="p-eplist")
             if body_tag:
                 episodes = body_tag.find_all("a", class_="p-eplist__subtitle")
@@ -598,13 +602,37 @@ def new_syosetu(novel_code):
                     last_href = episodes[-1].get("href", "")
                     match = re.search(r"/(\d+)/", last_href)
                     if match:
-                        return int(match.group(1))
+                        last_ep_num = int(match.group(1))
 
-            check_2_res = session.get(f"{url}2/", timeout=15)
-            if check_2_res.status_code == 404:
-                return 1
+                sublists = body_tag.find_all("div", class_="p-eplist__sublist")
+                if sublists:
+                    update_tag = sublists[-1].find("div", class_="p-eplist__update")
+                    if update_tag:
+                        span_rev = update_tag.find("span", title=True)
+                        if span_rev and "改稿" in span_rev.get("title", ""):
+                            latest_date = span_rev["title"]
+                        else:
+                            latest_date = update_tag.get_text(strip=True)
 
-            return None
+            if last_ep_num is None:
+                check_2_res = session.get(f"{url}2/", timeout=15)
+                if check_2_res.status_code == 404:
+                    last_ep_num = 1
+                    m = re.search(r"掲載日[：:]\s*(\d{4}[年/\-]\s*\d{1,2}[月/\-]\s*\d{1,2}(?:日)?(?:\s+\d{1,2}:\d{2})?)", first_soup.get_text())
+                    if m:
+                        latest_date = m.group(1).strip()
+                    else:
+                        m_fb = re.search(r"\d{4}[年/\-]\s*\d{1,2}[月/\-]\s*\d{1,2}(?:日)?(?:\s+\d{1,2}:\d{2})?", first_soup.get_text())
+                        if m_fb:
+                            latest_date = m_fb.group(0).strip()
+
+            if last_ep_num is None:
+                return None
+
+            if not have_make:
+                return last_ep_num
+
+            return (last_ep_num, base_data.normalize_date(latest_date))
 
         except Exception as e:
             print(f"오류 발생 ({novel_code}): {e}")

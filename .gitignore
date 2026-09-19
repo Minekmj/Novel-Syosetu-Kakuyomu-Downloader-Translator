@@ -12,5 +12,8 @@ src/MINE_DOWNLOADER.egg-info/
 # Files
 data.json
 session_info.json
+tag_user.json
+trans.json
+trans.db
 build.txt
 main.ico~

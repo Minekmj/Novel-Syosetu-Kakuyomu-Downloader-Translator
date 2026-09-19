@@ -8,6 +8,7 @@ import re
 
 import src.system.theme as theme
 import src.system.theme_back as theme_back
+from src.system.load_save import load_data, save_data
 
 THEME_DATA = {**theme_back.THEME_DATA, **theme.THEME_DATA}
 
@@ -72,7 +73,10 @@ def rest():
         
 def return_theme():
     th = "#000000"
-    th = getattr(theme, f"COLORS_{THEME_NAME}", "#000000")
+    if THEME_NAME in theme.THEMES:
+        th = getattr(theme, f"COLORS_{THEME_NAME.replace(' ', '_')}", "#000000")
+    else:
+        th = getattr(theme_back, f"COLORS_{THEME_NAME}", "#000000")
     return th
 
 import platform
@@ -94,19 +98,3 @@ def open_folder(path):
             subprocess.run(["xdg-open", path])
     except Exception as e:
         print(f"폴더 열기 실패: {e}")
-        
-def load_data():
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {"src": "", "list": {}}
-
-def save_data(data):
-    try:
-        with open(DATA_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=4)
-    except Exception as e:
-        print(f"데이터 저장 실패: {e}")

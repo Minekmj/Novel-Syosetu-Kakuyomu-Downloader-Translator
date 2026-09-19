@@ -420,7 +420,7 @@ def download_hameln_async(novel_code, start, end, trs_path, label):
     return book_title or novel_code
 
 
-def new_hameln(novel_code):
+def new_hameln(novel_code, have_make=False):
     nid, is_r18 = parse_novel_code(novel_code)
     base_url = "https://h.syosetu.org" if is_r18 else "https://syosetu.org"
     url = f"{base_url}/novel/{nid}/"
@@ -437,7 +437,51 @@ def new_hameln(novel_code):
         html_text = res.text
         episodes = get_hameln_episodes(nid, session, html_text, is_r18=is_r18)
 
-        return len(episodes) if episodes else None
+        count = len(episodes) if episodes else None
+        if count is None:
+            return None
+
+        if not have_make:
+            return count
+
+        latest_date = None
+        soup = BeautifulSoup(html_text, "html.parser")
+
+        ep_items = soup.select("li.episode-list__item")
+        if ep_items:
+            last_item = ep_items[-1]
+
+            revision_tag = last_item.select_one(".episode-list__revision[title]")
+            time_tag = last_item.select_one("time.episode-list__date, time")
+
+            if revision_tag and revision_tag.get("title"):
+                latest_date = revision_tag["title"]
+            elif time_tag:
+                latest_date = time_tag.get("datetime") or time_tag.get_text(strip=True)
+
+        if not latest_date:
+            ep_rows = [
+                tr for tr in soup.find_all("tr")
+                if tr.find("a", href=re.compile(rf"(?:/novel/{nid}/|\./)?\d+\.html"))
+            ]
+            if ep_rows:
+                last_row = ep_rows[-1]
+                time_tag = last_row.find("time")
+                nobr = last_row.find("nobr")
+                if time_tag:
+                    latest_date = time_tag.get("datetime") or time_tag.get_text(strip=True)
+                elif nobr:
+                    latest_date = nobr.get_text(strip=True)
+
+        if not latest_date:
+            for th in soup.find_all(["th", "td"]):
+                if any(k in th.get_text() for k in ("最新話掲載日", "更新日時", "初回公開日時")):
+                    sibling = th.find_next_sibling(["td", "th"])
+                    if sibling:
+                        latest_date = sibling.get_text(strip=True)
+                        break
+
+        return (count, base_data.normalize_date(latest_date))
 
     except Exception as e:
         print(f"하멜른 에피소드 수 확인 오류: {e}")

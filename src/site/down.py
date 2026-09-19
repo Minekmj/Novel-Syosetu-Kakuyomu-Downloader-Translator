@@ -66,7 +66,7 @@ def CheckTitle(site):
     else:
         title = Fs(naru.syosetu_title(clean_site))
 
-    title_ko = Translator(title)
+    title_ko = Translator(title, True)
     return title_ko
 
 
@@ -142,14 +142,14 @@ def Download(
     )
 
 
-def new_number(site):
+def new_number(site, have=False):
     clean_site, site_type = parse_site_info(site)
 
     if site_type == "hameln":
-        new = Fs(hame.new_hameln(clean_site))
+        new = Fs(hame.new_hameln(clean_site, have))
     elif site_type == "kakuyomu":
-        new = Fs(kaku.new_kakuyomu(clean_site))
+        new = Fs(kaku.new_kakuyomu(clean_site, have))
     else:
-        new = Fs(naru.new_syosetu(clean_site))
+        new = Fs(naru.new_syosetu(clean_site, have))
 
     return new

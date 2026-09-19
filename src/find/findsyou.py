@@ -6,16 +6,26 @@ from PySide6.QtWidgets import (
     QPushButton, QListWidget, QListWidgetItem, QTextEdit,
     QComboBox, QCheckBox, QSpinBox, QGroupBox, QDialog,
     QScrollArea, QSizePolicy, QFormLayout, QSplitter,
-    QLayout, QFrame, QApplication
+    QLayout, QFrame, QApplication, QTabWidget, QMenu,
+    QMessageBox, QInputDialog
 )
-from PySide6.QtGui import QCursor, QDesktopServices
+from PySide6.QtGui import QCursor, QDesktopServices, QAction
 from src.trans.trans import Translator
 from src.system.data import TAG_CATEGORIES, NaroSearch, KakuyomuSearch, MidnightSearch, NocturneSearch, SyosetuSearch, SyosetuSearch18
 import src.system.data as data_iteam
+from src.system.data import load_data, save_data
+
+USER_TAGS_SRC = "./tag_user.json"
 
 click = False
 click_plus_url = ''
 istaiain = []
+
+
+def normalize_url(url):
+    if not url:
+        return ''
+    return url.strip().rstrip('/')
 
 
 class Sites(IntEnum):
@@ -129,101 +139,98 @@ def na_set_ui(window, layout):
     )
     
 def ha_set_ui(window, layout):
-    ha_set_ui_main(window,layout,SyosetuSearch)
+    ha_set_ui_main(window, layout, SyosetuSearch)
     
 def ha18_set_ui(window, layout):
-    ha_set_ui_main(window,layout,SyosetuSearch18)
+    ha_set_ui_main(window, layout, SyosetuSearch18)
 
 def ha_set_ui_main(window, layout, l):
+    cache_key = 'hameln_flags_main' if l == SyosetuSearch else 'hameln18_flags_main'
     l.set_flag()
-    
+    saved_data = load_data()
+    cached_flags = saved_data.get(cache_key)
+    if cached_flags and isinstance(cached_flags, dict):
+        l.FLAGS_MAIN = cached_flags
+    elif not getattr(l, 'FLAGS_MAIN', None):
+        try:
+            l.set_flag()
+        except Exception:
+            pass
+
     window.naro_exclude_values = []
     window.naro_find_area_values = []
     window.ha_selected_origin = ''
 
-    flags_main = l.FLAGS_MAIN
+    origin_header = QHBoxLayout()
+    origin_label = QLabel('주요 원작')
+    origin_label.setObjectName('cat_label')
+    origin_header.addWidget(origin_label)
+    origin_header.addStretch()
 
-    if flags_main:
-        origin_label = QLabel('주요 원작')
-        origin_label.setObjectName('cat_label')
-        layout.addWidget(origin_label)
+    btn_load_origin = QPushButton('최신 주요 원작 불러오기')
+    btn_load_origin.setObjectName('secondaryBtn')
+    origin_header.addWidget(btn_load_origin)
+    layout.addLayout(origin_header)
 
-        window.combo_ha_origin = QComboBox()
-        window.combo_ha_origin.setSizeAdjustPolicy(
-            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
-        )
-        window.combo_ha_origin.setMinimumContentsLength(10)
-        window.combo_ha_origin.setSizePolicy(
-            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed
-        )
-        if window.combo_ha_origin.view():
-            window.combo_ha_origin.view().setTextElideMode(Qt.TextElideMode.ElideRight)
+    window.combo_ha_origin = QComboBox()
+    window.combo_ha_origin.setSizeAdjustPolicy(
+        QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+    )
+    window.combo_ha_origin.setMinimumContentsLength(10)
+    window.combo_ha_origin.setSizePolicy(
+        QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed
+    )
+    if window.combo_ha_origin.view():
+        window.combo_ha_origin.view().setTextElideMode(Qt.TextElideMode.ElideRight)
 
-        window.combo_ha_origin.addItem('전체 (선택 안 함)', '')
-        for ko_name, jp_name in flags_main.items():
-            window.combo_ha_origin.addItem(ko_name, jp_name)
+    layout.addWidget(window.combo_ha_origin)
 
-            btn_text = ko_name if len(ko_name) <= 14 else ko_name[:13] + '…'
-            btn = QPushButton(btn_text)
-            btn.setToolTip(f"{ko_name}\n({jp_name})")
-        layout.addWidget(window.combo_ha_origin)
+    window.input_ha_origin = QLineEdit()
+    window.input_ha_origin.setPlaceholderText('원작 직접 입력')
+    layout.addWidget(window.input_ha_origin)
 
-        scroll_origin = QScrollArea()
-        scroll_origin.hide()
-        scroll_origin.setWidgetResizable(True)
-        scroll_origin.setFixedHeight(130)
-        scroll_origin.setFrameShape(QFrame.Shape.NoFrame)
-        scroll_origin.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll_origin.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+    def populate_origin_combo(flags_dict):
+        window.combo_ha_origin.blockSignals(True)
+        window.combo_ha_origin.clear()
+        window.combo_ha_origin.addItem('전체', '')
+        if flags_dict:
+            for ko_name, jp_name in flags_dict.items():
+                window.combo_ha_origin.addItem(ko_name, jp_name)
+        window.combo_ha_origin.blockSignals(False)
 
-        container_origin = QWidget()
-        container_origin.setObjectName('tag_container')
-        container_origin.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
-        flow_origin = FlowLayout(container_origin, margin=0, spacing=5)
+    populate_origin_combo(l.FLAGS_MAIN if getattr(l, 'FLAGS_MAIN', None) else {})
 
-        window.ha_origin_buttons = {}
+    def on_origin_combo_changed(index):
+        chosen = window.combo_ha_origin.currentData() or ''
+        window.ha_selected_origin = chosen
+        window.input_ha_origin.setText(chosen)
 
-        def on_origin_btn_clicked(checked, name):
-            if checked:
-                for btn_name, btn in window.ha_origin_buttons.items():
-                    if btn_name != name:
-                        btn.setChecked(False)
-                window.ha_selected_origin = name
-                idx = window.combo_ha_origin.findData(name)
-                if idx >= 0:
-                    window.combo_ha_origin.blockSignals(True)
-                    window.combo_ha_origin.setCurrentIndex(idx)
-                    window.combo_ha_origin.blockSignals(False)
+    window.combo_ha_origin.currentIndexChanged.connect(on_origin_combo_changed)
+
+    def reload_flags_main():
+        btn_load_origin.setEnabled(False)
+        btn_load_origin.setText('불러오는 중...')
+        try:
+            new_flags = l.load_flags_main()
+            if new_flags and isinstance(new_flags, dict):
+                l.FLAGS_MAIN = new_flags
+                cur_data = load_data()
+                cur_data[cache_key] = new_flags
+                save_data(cur_data)
+                populate_origin_combo(new_flags)
+                btn_load_origin.setText('불러오기 완료')
             else:
-                window.ha_selected_origin = ''
-                window.combo_ha_origin.blockSignals(True)
-                window.combo_ha_origin.setCurrentIndex(0)
-                window.combo_ha_origin.blockSignals(False)
+                btn_load_origin.setText('불러오기 실패')
+        except Exception as e:
+            print(f'주요 원작 불러오기 오류: {e}')
+            btn_load_origin.setText('불러오기 실패')
+        finally:
+            QTimer.singleShot(1500, lambda: (
+                btn_load_origin.setEnabled(True),
+                btn_load_origin.setText('최신 주요 원작 불러오기')
+            ))
 
-        def on_origin_combo_changed(index):
-            chosen = window.combo_ha_origin.currentData() or ''
-            window.ha_selected_origin = chosen
-            for btn_name, btn in window.ha_origin_buttons.items():
-                btn.setChecked(btn_name == chosen)
-
-        window.combo_ha_origin.currentIndexChanged.connect(on_origin_combo_changed)
-
-        for name in flags_main:
-            btn_text = name if len(name) <= 16 else name[:15] + '…'
-            btn = QPushButton(btn_text)
-            btn.setToolTip(name)
-            btn.setObjectName('btn')
-            btn.setCheckable(True)
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setMaximumWidth(220)
-            btn.clicked.connect(
-                lambda checked, n=name: on_origin_btn_clicked(checked, n)
-            )
-            flow_origin.addWidget(btn)
-            window.ha_origin_buttons[name] = btn
-
-        scroll_origin.setWidget(container_origin)
-        layout.addWidget(scroll_origin)
+    btn_load_origin.clicked.connect(reload_flags_main)
 
     data = {}
     for k, v in l.FLAG_EXCLUSION.items():
@@ -283,6 +290,11 @@ def na_build_params(window):
 
 def ha_build_params(window):
     selected_origin = getattr(window, 'ha_selected_origin', '')
+    if hasattr(window, 'input_ha_origin'):
+        custom = window.input_ha_origin.text().strip()
+        if custom:
+            selected_origin = custom
+
     return {
         'query': window.input_query.text().strip(),
         'genre_val': SyosetuSearch.GENRES.get(
@@ -428,33 +440,35 @@ class TagFlowWidget(QWidget):
     def __init__(self, target_line_edit, categories_data, parent=None):
         super().__init__(parent)
         self.target_line_edit = target_line_edit
-        self.categories_data = categories_data
+        self.categories_data = categories_data or {}
         self.buttons = {}
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.init_ui()
 
     def init_ui(self):
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setContentsMargins(0, 6, 0, 0)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setMinimumHeight(260)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
 
         container = QWidget()
         container.setObjectName('tag_container')
         container_layout = QVBoxLayout(container)
-        container_layout.setSpacing(12)
-        container_layout.setContentsMargins(8, 8, 8, 8)
+        container_layout.setSpacing(10)
+        container_layout.setContentsMargins(4, 4, 4, 4)
 
         for category_name, tag_map in self.categories_data.items():
+            if not isinstance(tag_map, dict):
+                continue
             cat_label = QLabel(category_name)
             cat_label.setObjectName('cat_label')
             container_layout.addWidget(cat_label)
 
             tag_container = QWidget()
             tag_container.setObjectName('tag_container')
-            flow_layout = FlowLayout(tag_container, margin=0, spacing=5)
+            flow_layout = FlowLayout(tag_container, margin=0, spacing=4)
 
             for ko_name, jp_word in tag_map.items():
                 btn = QPushButton(f'+ {ko_name}')
@@ -504,28 +518,334 @@ class TagFlowWidget(QWidget):
                 btn.setText(f'+ {ko_name}')
 
 
+class UserTagWidget(QWidget):
+    def __init__(self, target_line_edit, parent=None):
+        super().__init__(parent)
+        self.target_line_edit = target_line_edit
+        self.buttons = {}
+        self.user_tags = {}
+        self.init_ui()
+        self.load_user_tags()
+
+    def init_ui(self):
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 8, 0, 0)
+        main_layout.setSpacing(8)
+
+        panel = QFrame()
+        panel.setStyleSheet("""
+            QLineEdit, QComboBox {
+                border-radius: 7px;
+                padding: 4px 8px;
+                min-height: 22px;
+                font-size: 12px;
+            }
+            QPushButton {
+                border-radius: 7px;
+                min-height: 22px;
+                font-size: 12px;
+            }
+            QFrame {background: transparent;}
+        """)
+
+        p_layout = QVBoxLayout(panel)
+        p_layout.setContentsMargins(10, 10, 10, 10)
+        p_layout.setSpacing(8)
+
+        row1 = QHBoxLayout()
+        row1.setSpacing(6)
+        cat_title = QLabel('분류')
+        cat_title.setObjectName('cat_label')
+        row1.addWidget(cat_title)
+
+        self.combo_category = QComboBox()
+        self.combo_category.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        row1.addWidget(self.combo_category)
+
+        btn_new_cat = QPushButton('+ 분류 추가')
+        btn_new_cat.setObjectName('secondaryBtn')
+        btn_new_cat.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_new_cat.clicked.connect(self.prompt_add_category)
+        row1.addWidget(btn_new_cat)
+
+        btn_del_cat = QPushButton('분류 삭제')
+        btn_del_cat.setObjectName('secondaryBtn')
+        btn_del_cat.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_del_cat.clicked.connect(self.delete_current_category)
+        row1.addWidget(btn_del_cat)
+
+        p_layout.addLayout(row1)
+
+        row2 = QHBoxLayout()
+        row2.setSpacing(6)
+
+        self.input_jp = QLineEdit()
+        self.input_jp.setPlaceholderText('일본어(입력 용)')
+        row2.addWidget(self.input_jp)
+
+        self.input_ko = QLineEdit()
+        self.input_ko.setPlaceholderText('한국어(보이는 용)')
+        row2.addWidget(self.input_ko)
+        p_layout.addLayout(row2)
+        
+        p_layout.addStretch(1)
+        
+        row3 = QHBoxLayout()
+        row3.setSpacing(6)
+
+        self.btn_add_tag = QPushButton('태그 추가')
+        self.btn_add_tag.setObjectName('secondaryBtn')
+        self.btn_add_tag.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_add_tag.clicked.connect(self.add_tag)
+        row2.addWidget(self.btn_add_tag)
+
+        p_layout.addLayout(row3)
+        main_layout.addWidget(panel)
+
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setFrameShape(QFrame.Shape.NoFrame)
+
+        self.container = QWidget()
+        self.container.setObjectName('tag_container')
+        self.container_layout = QVBoxLayout(self.container)
+        self.container_layout.setSpacing(10)
+        self.container_layout.setContentsMargins(4, 4, 4, 4)
+
+        self.scroll.setWidget(self.container)
+        main_layout.addWidget(self.scroll, stretch=1)
+
+        self.target_line_edit.textChanged.connect(self.sync_buttons_from_text)
+
+    def load_user_tags(self):
+        try:
+            loaded = load_data(USER_TAGS_SRC)
+            if isinstance(loaded, dict):
+                self.user_tags = loaded
+            else:
+                self.user_tags = {}
+        except Exception:
+            self.user_tags = {}
+
+        self.refresh_ui()
+
+    def save_user_tags(self):
+        try:
+            save_data(self.user_tags, USER_TAGS_SRC)
+        except Exception as e:
+            print(f'사용자 태그 저장 실패: {e}')
+
+    def prompt_add_category(self):
+        cat_name, ok = QInputDialog.getText(self, '분류 추가', '새로운 분류(카테고리) 이름을 입력하세요:')
+        if ok and cat_name.strip():
+            c = cat_name.strip()
+            if c not in self.user_tags:
+                self.user_tags[c] = {}
+                self.save_user_tags()
+                self.refresh_ui()
+                self.combo_category.setCurrentText(c)
+            else:
+                self.combo_category.setCurrentText(c)
+
+    def delete_current_category(self):
+        cur_cat = self.combo_category.currentText().strip()
+        if not cur_cat:
+            return
+
+        confirm = QMessageBox.question(
+            self, '분류 삭제',
+            f"'{cur_cat}' 분류와 그 안의 모든 태그를 삭제하시겠습니까?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if confirm == QMessageBox.StandardButton.Yes:
+            if cur_cat in self.user_tags:
+                del self.user_tags[cur_cat]
+                self.save_user_tags()
+                self.refresh_ui()
+
+    def refresh_ui(self):
+        cur_selected = self.combo_category.currentText().strip()
+        self.combo_category.blockSignals(True)
+        self.combo_category.clear()
+
+        categories = list(self.user_tags.keys())
+        if categories:
+            self.combo_category.addItems(categories)
+            if cur_selected in categories:
+                self.combo_category.setCurrentText(cur_selected)
+        self.combo_category.blockSignals(False)
+
+        self.buttons.clear()
+        while self.container_layout.count():
+            item = self.container_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+
+        if not self.user_tags:
+            no_tag = QLabel('등록된 사용자 태그가 없습니다.\n위에서 분류를 추가하고 원하는 태그를 등록해보세요.')
+            no_tag.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            no_tag.setObjectName('new_and_now')
+            self.container_layout.addWidget(no_tag)
+            self.container_layout.addStretch()
+            return
+
+        for category_name, tag_map in self.user_tags.items():
+            cat_label = QLabel(category_name)
+            cat_label.setObjectName('cat_label')
+            self.container_layout.addWidget(cat_label)
+
+            tag_container = QWidget()
+            tag_container.setObjectName('tag_container')
+            flow_layout = FlowLayout(tag_container, margin=0, spacing=4)
+
+            if isinstance(tag_map, dict) and tag_map:
+                for ko_name, jp_word in tag_map.items():
+                    btn = QPushButton(f'+ {ko_name}')
+                    btn.setCheckable(True)
+                    btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                    btn.setObjectName('btn')
+                    btn.setToolTip(f'원문: {jp_word}\n(우클릭 시 태그 삭제)')
+
+                    btn.clicked.connect(
+                        lambda checked, j=jp_word, b=btn, k=ko_name:
+                        self.toggle_tag(j, b, k)
+                    )
+
+                    btn.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+                    btn.customContextMenuRequested.connect(
+                        lambda pos, c=category_name, k=ko_name, j=jp_word, b=btn:
+                        self.show_tag_context_menu(pos, c, k, j, b)
+                    )
+
+                    flow_layout.addWidget(btn)
+                    self.buttons[jp_word] = (btn, ko_name)
+            else:
+                hint = QLabel('(비어있는 분류)')
+                hint.setObjectName('new_and_now')
+                flow_layout.addWidget(hint)
+
+            self.container_layout.addWidget(tag_container)
+
+        self.container_layout.addStretch()
+        self.sync_buttons_from_text(self.target_line_edit.text())
+
+    def add_tag(self):
+        category = self.combo_category.currentText().strip()
+        jp_word = self.input_jp.text().strip()
+        ko_name = self.input_ko.text().strip()
+
+        if not category:
+            QMessageBox.warning(self, '경고', '분류를 선택하거나 [+ 분류 추가]를 눌러 분류를 먼저 만들어주세요.')
+            return
+        if not jp_word or not ko_name:
+            QMessageBox.warning(self, '경고', '일본어 원문과 한국어 표기를 모두 입력해주세요.')
+            return
+
+        if category not in self.user_tags:
+            self.user_tags[category] = {}
+
+        self.user_tags[category][ko_name] = jp_word
+        self.save_user_tags()
+
+        self.input_jp.clear()
+        self.input_ko.clear()
+        self.refresh_ui()
+
+    def show_tag_context_menu(self, pos, category, ko_name, jp_word, button):
+        menu = QMenu(self)
+        delete_action = QAction(f"'{ko_name}' 삭제", self)
+        delete_action.triggered.connect(lambda: self.delete_tag(category, ko_name, jp_word))
+        menu.addAction(delete_action)
+        menu.exec(button.mapToGlobal(pos))
+
+    def delete_tag(self, category, ko_name, jp_word):
+        if category in self.user_tags and ko_name in self.user_tags[category]:
+            del self.user_tags[category][ko_name]
+            self.save_user_tags()
+
+            current_text = self.target_line_edit.text().strip()
+            words = current_text.split() if current_text else []
+            if jp_word in words:
+                words.remove(jp_word)
+                self.target_line_edit.setText(' '.join(words))
+
+            self.refresh_ui()
+
+    def toggle_tag(self, jp_word, button, ko_name):
+        current_text = self.target_line_edit.text().strip()
+        words = current_text.split() if current_text else []
+
+        if jp_word in words:
+            words.remove(jp_word)
+            button.setChecked(False)
+            button.setText(f'+ {ko_name}')
+        else:
+            words.append(jp_word)
+            button.setChecked(True)
+            button.setText(f'✓ {ko_name}')
+
+        self.target_line_edit.setText(' '.join(words))
+
+    def sync_buttons_from_text(self, text):
+        words = text.strip().split()
+
+        for jp_word, (btn, ko_name) in self.buttons.items():
+            if jp_word in words:
+                btn.setChecked(True)
+                btn.setText(f'✓ {ko_name}')
+            else:
+                btn.setChecked(False)
+                btn.setText(f'+ {ko_name}')
+
+
 class TagSelectDialog(QDialog):
     def __init__(self, target_line_edit, categories_data, title='태그 선택', parent=None):
         super().__init__(parent)
         self.setWindowTitle(title)
-        self.resize(600, 620)
-        self.setMinimumSize(500, 450)
+        self.resize(540, 520)
+        self.setMinimumSize(480, 440)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setContentsMargins(16, 16, 16, 14)
         layout.setSpacing(8)
 
+        top_row = QHBoxLayout()
         title_label = QLabel(title)
         title_label.setObjectName('detail_dialog_title')
-        layout.addWidget(title_label)
+        top_row.addWidget(title_label)
+        top_row.addStretch()
+        layout.addLayout(top_row)
 
-        desc = QLabel('원하는 태그를 클릭하여 검색 조건에 추가하거나 제거할 수 있습니다.')
-        desc.setObjectName('dialog_description')
-        desc.setWordWrap(True)
+        desc = QLabel('클릭하여 검색어에 반영하고, 사용자 태그는 우클릭하여 삭제할 수 있습니다.')
+        desc.setObjectName('dialog_hint')
         layout.addWidget(desc)
 
+        self.tabs = QTabWidget()
+        self.tabs.setObjectName('no_back-settingsTab')
+        self.tabs.setStyleSheet("""
+            QTabWidget::pane {
+                border: none;
+                background: transparent;
+            }
+            QTabBar {
+                background: transparent;
+            }
+            QTabBar::tab {
+                background: transparent;
+                border: none;
+                padding: 6px 14px;
+                margin-right: 4px;
+                font-weight: 600;
+            }
+        """)
+
         self.tag_panel = TagFlowWidget(target_line_edit, categories_data, self)
-        layout.addWidget(self.tag_panel, 1)
+        self.user_tag_panel = UserTagWidget(target_line_edit, self)
+
+        self.tabs.addTab(self.tag_panel, '기본 태그')
+        self.tabs.addTab(self.user_tag_panel, '사용자 태그')
+        layout.addWidget(self.tabs, 1)
 
         bottom_line = QFrame()
         bottom_line.setObjectName('dialog_separator')
@@ -533,16 +853,15 @@ class TagSelectDialog(QDialog):
         layout.addWidget(bottom_line)
 
         bottom_layout = QHBoxLayout()
-        bottom_layout.setContentsMargins(0, 6, 0, 0)
+        bottom_layout.setContentsMargins(0, 2, 0, 0)
 
-        selected_label = QLabel('선택된 태그는 검색어 입력란에 자동으로 반영됩니다.')
+        selected_label = QLabel('입력란에 태그가 실시간 반영됩니다.')
         selected_label.setObjectName('dialog_hint')
-        selected_label.setWordWrap(True)
         bottom_layout.addWidget(selected_label, 1)
 
         btn_close = QPushButton('완료')
         btn_close.setObjectName('primaryBtn')
-        btn_close.setMinimumWidth(90)
+        btn_close.setMinimumWidth(80)
         btn_close.clicked.connect(self.accept)
         bottom_layout.addWidget(btn_close)
 
@@ -593,7 +912,7 @@ class TranserWorker(QThread):
 
     def run(self):
         try:
-            result = Translator(self.text)
+            result = Translator(self.text, True)
             self.finished.emit(result)
         except Exception as e:
             print(f'번역 오류: {e}')
@@ -616,7 +935,7 @@ class DetailWorker(QThread):
 
             if self.auto_translate and description:
                 try:
-                    translated_desc = Translator(description)
+                    translated_desc = Translator(description, True)
                 except Exception as e:
                     translated_desc = f'[번역 오류: {e}]\n\n{description}'
 
@@ -973,7 +1292,7 @@ class MainWindow_Find(QDialog):
         self.active_search_params = None
         self.is_loading = False
         self.has_searched = False
-        self.is_searching_new = False
+        self.is_searching_new = True
         self.is_end = False
 
         self.init_ui()
@@ -1016,6 +1335,11 @@ class MainWindow_Find(QDialog):
         self.check_translate = QCheckBox('제목 / 줄거리 자동 번역')
         self.check_translate.setChecked(True)
         inner_layout.addWidget(self.check_translate)
+
+        self.check_exclude_existing = QCheckBox('내 작품 목록에 있는 작품 제외')
+        self.check_exclude_existing.setChecked(True)
+        inner_layout.addWidget(self.check_exclude_existing)
+
         inner_layout.addStretch()
 
         scroll.setWidget(inner)
@@ -1285,6 +1609,16 @@ class MainWindow_Find(QDialog):
         items = result.get('items', [])
         is_last_page = result.get('is_last_page', False)
 
+        if self.check_exclude_existing.isChecked():
+            user_data = load_data()
+            saved_list = user_data.get('list', {})
+            e_list = {
+                normalize_url(info.get('src', ''))
+                for info in saved_list.values()
+                if isinstance(info, dict) and info.get('src')
+            }
+            items = [item for item in items if normalize_url(item.get('url', '')) not in e_list]
+
         if self.is_searching_new:
             self.has_searched = True
             self.is_searching_new = False
@@ -1295,8 +1629,9 @@ class MainWindow_Find(QDialog):
                 self.show_panel_message('검색 결과가 없습니다.')
                 return
         elif not items:
-            self.is_end = True
-            self.add_end_message()
+            if is_last_page:
+                self.is_end = True
+                self.add_end_message()
             return
 
         self.search_results.extend(items)

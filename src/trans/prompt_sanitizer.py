@@ -77,7 +77,7 @@ class FastPromptSanitizer:
         if not papago or not text:
             return None
         try:
-            return Translator(text)
+            return Translator(text, True)
         except Exception:
             return None
 
