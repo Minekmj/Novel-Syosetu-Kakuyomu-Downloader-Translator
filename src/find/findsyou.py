@@ -1247,15 +1247,27 @@ class MyListWidget(QListWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+
+        # 0.2초(200ms) 디바운스 타이머 설정
+        self.debounce_timer = QTimer(self)
+        self.debounce_timer.setSingleShot(True)
+        self.debounce_timer.setInterval(200)
+        self.debounce_timer.timeout.connect(self._trigger_bottom)
+
         self.verticalScrollBar().valueChanged.connect(self.check_scroll)
 
-    def check_scroll(self, value):
+    def check_scroll(self, value=None):
         bar = self.verticalScrollBar()
+        cur_val = bar.value() if value is None else value
 
-        if bar.maximum() <= 0:
-            return
+        if bar.maximum() <= 0 or cur_val >= bar.maximum() - 5:
+            self.debounce_timer.start()
+        else:
+            self.debounce_timer.stop()
 
-        if value >= bar.maximum() - 5:
+    def _trigger_bottom(self):
+        bar = self.verticalScrollBar()
+        if bar.maximum() <= 0 or bar.value() >= bar.maximum() - 5:
             self.nearBottom.emit()
 
     def resizeEvent(self, event):
@@ -1264,9 +1276,10 @@ class MyListWidget(QListWidget):
         for index in range(self.count()):
             item = self.item(index)
             widget = self.itemWidget(item)
-
             if widget:
                 item.setSizeHint(widget.sizeHint())
+
+        self.check_scroll()
 
 
 class MainWindow_Find(QDialog):
@@ -1602,6 +1615,12 @@ class MainWindow_Find(QDialog):
         self.search_worker.finished.connect(self.on_search_finished)
         self.search_worker.start()
 
+    def check_fill_screen(self):
+        if self.is_loading or self.is_end or not self.has_searched:
+            return
+        
+        self.list_widget.check_scroll()
+
     def on_search_finished(self, result):
         self.is_loading = False
         self.btn_search.setEnabled(True)
@@ -1624,14 +1643,21 @@ class MainWindow_Find(QDialog):
             self.is_searching_new = False
 
             if not items:
-                self.is_end = True
-                self.result_count_label.setText('0개')
-                self.show_panel_message('검색 결과가 없습니다.')
-                return
+                if is_last_page:
+                    self.is_end = True
+                    self.result_count_label.setText('0개')
+                    self.show_panel_message('검색 결과가 없습니다.')
+                    return
+                else:
+                    QTimer.singleShot(200, self.load_next_page_if_needed)
+                    return
+
         elif not items:
             if is_last_page:
                 self.is_end = True
                 self.add_end_message()
+            else:
+                QTimer.singleShot(200, self.load_next_page_if_needed)
             return
 
         self.search_results.extend(items)
@@ -1661,6 +1687,7 @@ class MainWindow_Find(QDialog):
             self.add_end_message()
         else:
             self.is_end = False
+            QTimer.singleShot(200, self.check_fill_screen)
 
     def add_end_message(self):
         item = QListWidgetItem()
