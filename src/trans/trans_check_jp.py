@@ -1,8 +1,13 @@
 import asyncio
 import concurrent.futures
+import inspect
 import re
+import sys
+import traceback
+import unicodedata
 
 from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtGui import QColor, QSyntaxHighlighter, QTextCharFormat
 from PySide6.QtWidgets import (
     QDialog, QFrame, QHBoxLayout, QLabel, QMessageBox,
     QProgressBar, QPushButton, QScrollArea, QTextEdit,
@@ -13,40 +18,26 @@ from src.trans.trans import Translator
 
 trans_ai = None  # 외부 삽입용
 
-JP_RANGES = r'\u3040-\u309f\u30a0-\u30ff\u31f0-\u31ff\uff65-\uff9f\u4e00-\u9fff\uf900-\ufaff\u3005\u3006'
-
-JP_CHECK_RANGES = r'\u3040-\u309f\u30a0-\u30fb\u30fd-\u30ff\u31f0-\u31ff\uff65-\uff6f\uff71-\uff9f\u4e00-\u9fff\uf900-\ufaff\u3005\u3006'
-
+JP_RANGES = r'\u3040-\u309f\u30a0-\u30ff\u31f0-\u31ff\uff65-\uff9f\u4e00-\u9fff\uf900-\ufaff\u3005\u3006\->'
+JP_CHECK_RANGES = r'\u3040-\u309f\u30a0-\u30fb\u30fd-\u30ff\u31f0-\u31ff\uff66-\uff6f\uff71-\uff9f\u4e00-\u9fff\uf900-\ufaff\u3005\u3006\->'
 KO_RANGES = r'\uac00-\ud7af\u1100-\u11ff\u3130-\u318f'
-PROLONGED_RANGES = r'ー〜~～〰'
-SMALL_KANA_RANGES = r'っッぁぃぅぇぉァィゥェォゎヵヶゃゅょャュョㇰ-ㇿ'
 
-# 일본어 검사/체크는 장음 부호 'ー'가 제외된 패턴을 사용
 JP_PATTERN = re.compile(rf'[{JP_CHECK_RANGES}]')
 KO_PATTERN = re.compile(rf'[{KO_RANGES}]')
 JP_BLOCK_PATTERN = re.compile(rf'[{JP_RANGES}]+')
 
-PROLONGED_PATTERN = re.compile(rf'[{PROLONGED_RANGES}]+')
-SMALL_KANA_PATTERN = re.compile(rf'[{SMALL_KANA_RANGES}]+')
-RESIDUE_PATTERN = re.compile(rf'[{PROLONGED_RANGES}{SMALL_KANA_RANGES}]+')
-
-KO_PROLONGED_KO_PATTERN = re.compile(
-    rf'([{KO_RANGES}])\s*[{PROLONGED_RANGES}]+\s*([{KO_RANGES}])'
-)
-
-KO_YON_KO_PATTERN = re.compile(
-    rf'([{KO_RANGES}])\s*[{SMALL_KANA_RANGES}]+\s*([{KO_RANGES}])'
-)
-
-BRACKET_PATTERN = re.compile(
-    rf'([{JP_RANGES}]+)?\s*[\(（]([^\(\)（）]+)[\)）]'
-)
-
 WORD_TOKEN_PATTERN = re.compile(
-    rf'[{KO_RANGES}{JP_RANGES}{PROLONGED_RANGES}{SMALL_KANA_RANGES}]+'
+    rf'[{KO_RANGES}{JP_RANGES}ー〜~～〰っッぁぃぅぇぉァィゥェォゎヵヶゃゅょャュョㇰ-ㇿｯ]+'
+)
+
+WORD_BRACKET_PATTERN = re.compile(
+    rf'(^|[\s“"\'「\(\[\{{\.,!?…~―—])([{KO_RANGES}{JP_RANGES}]+)\s*[\(（]([^\(\)（）]+)[\)）]'
 )
 
 EXPLANATION_PATTERNS = [
+    re.compile(r'\s*\(Wait[^\)]*\)\s*[-=]>[^\n]+', re.IGNORECASE),
+    re.compile(r'\s*\(Wait[^\)]*\)', re.IGNORECASE),
+    re.compile(r'\(오타[^\)]*\)', re.IGNORECASE),
     re.compile(r'[\'"]?[^\'"]*[\'"]?\s*는\s*일본어의\s*(가나|문자|히라가나|가타카나|발음|요음|촉음)[^\.\n]*[\.\n]?', re.IGNORECASE),
     re.compile(r'주로\s*(발음을\s*변화|감탄사|특수문자|글자\s*꾸미기)[^\.\n]*[\.\n]?', re.IGNORECASE),
     re.compile(r'\d+\.\s*(일본어에서의\s*)?(본래\s*의미|용법|발음)[^\.\n]*', re.IGNORECASE),
@@ -60,13 +51,230 @@ KO_PARTICLES = [
 ]
 PARTICLE_PATTERN = re.compile(rf'({"|".join(KO_PARTICLES)})$')
 
+class SuspiciousPatternHighlighter(QSyntaxHighlighter):
+    def __init__(self, document):
+        super().__init__(document)
+        self.jp_format = QTextCharFormat()
+        self.jp_format.setBackground(QColor("#ffff00"))
+        self.jp_format.setForeground(QColor("#000000"))
+        self.jp_format.setFontWeight(700)
+
+        self.suspicious_format = QTextCharFormat()
+        self.suspicious_format.setBackground(QColor("#ffaa00"))
+        self.suspicious_format.setForeground(QColor("#000000"))
+        self.suspicious_format.setFontWeight(700)
+
+        self.suspicious_regexes = [
+            re.compile(rf'[{KO_RANGES}{JP_RANGES}]+[\(（][^\(\)（）]+[\)）]'),
+            re.compile(r'[-=]>\s*[^\n]+'),
+            re.compile(r'\(Wait[^\)]*\)', re.IGNORECASE),
+            re.compile(r'[-―~]ん'),
+            re.compile(r'[っッｯー]{2,}')
+        ]
+
+    def highlightBlock(self, text):
+        if not text:
+            return
+
+        for r in self.suspicious_regexes:
+            for m in r.finditer(text):
+                self.setFormat(m.start(), m.end() - m.start(), self.suspicious_format)
+
+        for m in JP_PATTERN.finditer(text):
+            self.setFormat(m.start(), m.end() - m.start(), self.jp_format)
+
+CHOSUNG = ['ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ']
+JUNGSUNG = ['ㅏ', 'ㅐ', 'ㅑ', 'ㅒ', 'ㅓ', 'ㅔ', 'ㅕ', 'ㅖ', 'ㅗ', 'ㅘ', 'ㅙ', 'ㅚ', 'ㅛ', 'ㅜ', 'ㅝ', 'ㅞ', 'ㅟ', 'ㅠ', 'ㅡ', 'ㅢ', 'ㅣ']
+JONGSUNG = ['', 'ㄱ', 'ㄲ', 'ㄳ', 'ㄴ', 'ㄵ', 'ㄶ', 'ㄷ', 'ㄹ', 'ㄺ', 'ㄻ', 'ㄼ', 'ㄽ', 'ㄾ', 'ㄿ', 'ㅀ', 'ㅁ', 'ㅂ', 'ㅄ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ']
+
+def decompose_hangul(char):
+    if not ('가' <= char <= '힣'):
+        return None
+    code = ord(char) - ord('가')
+    return (CHOSUNG[code // (21 * 28)], JUNGSUNG[(code % (21 * 28)) // 28], JONGSUNG[code % 28])
+
+def compose_hangul(cho, jung, jong=''):
+    try:
+        return chr(0xAC00 + (CHOSUNG.index(cho) * 21 * 28) + (JUNGSUNG.index(jung) * 28) + JONGSUNG.index(jong))
+    except ValueError:
+        return cho + jung + jong
+
+def attach_jongsung(hangul_char: str, target_jong: str) -> str:
+    decomp = decompose_hangul(hangul_char)
+    if not decomp:
+        return hangul_char + target_jong
+    cho, jung, jong = decomp
+    if jong == '':
+        return compose_hangul(cho, jung, target_jong)
+    return hangul_char + target_jong
+
+FAST_LEXICON_REPLACEMENTS = [
+    (r'([가-힣a-zA-Z0-9]+)\s*[っッ]ち', r'\1치'),
+    (r'[っッ]ち', '치'),
+    (r'([가-힣a-zA-Z0-9]+)殿', r'\1 공'),
+    (r'殿', '공'),
+    (r'壱', '1'), (r'弐', '2'), (r'参', '3'), (r'肆', '4'), (r'伍', '5'),
+    (r'ではない', '가 아니다'),
+    (r'じゃない', '가 아니다'),
+    (r'というか', '아니'),
+    (r'というと', '말하자면'),
+    (r'そのどころか|그どころか', '그는커녕'),
+    (r'どころか', '커녕'),
+    (r'そろそろ', '슬슬'),
+    (r'且つ', '및 '),
+    (r'上物', '일품'),
+    (r'초段', '초단'),
+    (r'백작家', '백작 가'),
+    (r'団長', '단장'),
+    (r'敵', '적'),
+    (r'云々|云운', '운운'),
+    (r'・', '·')
+]
+
+KANA_TO_HANGUL = {
+    'ドー': '도', 'トー': '토', 'コー': '코', 'ロー': '로', 'ソー': '소',
+    'ボー': '보', 'ポー': '포', 'ゴー': '고', 'ゾー': '조', 'ルー': '루',
+    'オー': '오', 'アー': '아', 'イー': '이', 'ウー': '우', 'エー': '에',
+    'ニャ': '냐', 'ニュ': '뉴', 'ニョ': '뇨',
+    'キャ': '캬', 'キュ': '큐', 'キョ': '쿄',
+    'シャ': '샤', 'シュ': '슈', 'ショ': '쇼',
+    'チャ': '차', 'チュ': '추', 'チョ': '초',
+    'ヒャ': '햐', 'ヒュ': '휴', 'ヒョ': '효',
+    'ミャ': '먀', 'ミュ': '뮤', 'ミョ': '묘',
+    'リャ': '랴', 'リュ': '류', 'リョ': '료',
+    'ギャ': '갸', 'ギュ': '규', 'ギョ': '교',
+    'ジャ': '자', 'ジュ': '주', 'ジョ': '조',
+    'ビャ': '뱌', 'ビュ': '뷰', 'ビョ': '뵤',
+    'ピャ': '퍄', 'ピュ': '퓨', 'ピョ': '표',
+    'ア': '아', 'イ': '이', 'ウ': '우', 'エ': '에', 'オ': '오',
+    'カ': '카', 'キ': '키', 'ク': '쿠', 'ケ': '케', 'コ': '코',
+    'サ': '사', 'シ': '시', 'ス': '스', 'セ': '세', 'ソ': '소',
+    'タ': '타', 'チ': '치', 'ツ': '츠', 'テ': '테', 'ト': '토',
+    'ナ': '나', 'ニ': '니', 'ヌ': '누', 'ネ': '네', 'ノ': '노',
+    'ハ': '하', 'ヒ': '히', 'フ': '후', 'ヘ': '헤', 'ホ': '호',
+    'マ': '마', 'ミ': '미', 'ム': '무', 'メ': '메', 'モ': '모',
+    'ヤ': '야', 'ユ': '유', 'ヨ': '요',
+    'ラ': '라', 'リ': '리', 'ル': '루', 'レ': '레', 'ロ': '로',
+    'ワ': '와', 'ヲ': '오',
+    'ガ': '가', 'ギ': '기', 'グ': '구', 'ゲ': '게', 'ゴ': '고',
+    'ザ': '자', 'ジ': '지', 'ズ': '즈', 'ゼ': '제', 'ゾ': '조',
+    'ダ': '다', 'ヂ': '지', 'ヅ': '즈', 'デ': '데', 'ド': '도',
+    'バ': '바', 'ビ': '비', 'ブ': '부', 'ベ': '베', 'ボ': '보',
+    'パ': '파', 'ピ': '피', 'プ': '푸', 'ペ': '페', 'ポ': '포',
+    'っと': '또', 'えっと': '에또', 'と': '토'
+}
+
+def resolve_arrows_and_memos(text: str) -> str:
+    if not text:
+        return text
+
+    text = re.sub(r'\s*\(Wait[^\)]*\)\s*[-=]>[^\n]+', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\s*\(Wait[^\)]*\)', '', text, flags=re.IGNORECASE)
+
+    if '->' not in text and '→' not in text:
+        return text
+
+    lines = text.split('\n')
+    processed_lines = []
+    for line in lines:
+        line_strip = line.strip()
+        m = re.search(r'[-=]>\s*(.+)$', line_strip)
+        if not m:
+            processed_lines.append(line)
+            continue
+
+        after_arrow = m.group(1).strip()
+        before_arrow = line_strip[:m.start()].strip()
+
+        if JP_PATTERN.search(before_arrow) and KO_PATTERN.search(after_arrow) and not JP_PATTERN.search(after_arrow):
+            if len(after_arrow) >= len(before_arrow) * 0.6:
+                processed_lines.append(after_arrow)
+                continue
+
+        if before_arrow.startswith('“') and after_arrow.startswith('“'):
+            processed_lines.append(after_arrow)
+            continue
+
+        processed_lines.append(before_arrow)
+
+    return '\n'.join(processed_lines)
+
+def resolve_brackets_from_raw(text: str) -> str:
+    if not text:
+        return text
+
+    text = re.sub(rf'[{KO_RANGES}{JP_RANGES}]+\([^\)]*오타:\s*([가-힣\s]+)\)', r'\1', text)
+
+    def _resolve_whole_line_bilingual(line_str):
+        clean = line_str.strip()
+        quote_prefix = ''
+        quote_suffix = ''
+        if (clean.startswith('"') and clean.endswith('"')) or (clean.startswith('“') and clean.endswith('”')):
+            quote_prefix = clean[0]
+            quote_suffix = clean[-1]
+            clean = clean[1:-1].strip()
+
+        m = re.fullmatch(r'([^\(\)（）\n]{2,}?)\s*[\(（]([가-힣\s,.!?~…·―\?!]+)[\)）]', clean)
+        if m:
+            front_text = m.group(1).strip()
+            inside_text = m.group(2).strip()
+            if JP_PATTERN.search(front_text) and not JP_PATTERN.search(inside_text):
+                return f"{quote_prefix}{inside_text}{quote_suffix}"
+        return line_str
+
+    text = '\n'.join([_resolve_whole_line_bilingual(l) for l in text.split('\n')])
+
+    text = re.sub(r'『[^』]+』\s*[\(（]([^\(\)（）]+)[\)）]', r'『\1』', text)
+    text = re.sub(r'《[^》]+》\s*[\(（]([^\(\)（）]+)[\)）]', r'《\1》', text)
+    text = re.sub(r'\[[^\]]+\]\s*[\(（]([^\(\)（）]+)[\)）]', r'[\1]', text)
+
+    def _replace_raw_bracket(m):
+        lead = m.group(1)
+        front_word = m.group(2)
+        inside_text = m.group(3).strip()
+
+        has_jp_front = bool(JP_PATTERN.search(front_word))
+        has_ko_front = bool(KO_PATTERN.search(front_word))
+        has_jp_inside = bool(JP_PATTERN.search(inside_text))
+        has_ko_inside = bool(KO_PATTERN.search(inside_text))
+
+        if has_ko_front and not has_jp_front and has_ko_inside and not has_jp_inside:
+            return m.group(0)
+
+        if has_ko_front and not has_jp_front and has_jp_inside and not has_ko_inside:
+            return f"{lead}{front_word}"
+
+        if has_jp_front and has_ko_inside and not has_jp_inside:
+            if front_word in ['에っ', '에ッ', '앗っ', '앗ッ']:
+                return f"{lead}{inside_text}"
+
+            if has_ko_front:
+                ko_stem = ''.join(re.findall(rf'[{KO_RANGES}]+', front_word))
+                if ko_stem in inside_text:
+                    return f"{lead}{inside_text}"
+                else:
+                    jp_part = ''.join(re.findall(rf'[{JP_RANGES}]+', front_word))
+                    stem = front_word[:-len(jp_part)] if jp_part else front_word
+                    return f"{lead}{stem} {inside_text}".strip()
+
+            return f"{lead}{inside_text}"
+
+        return m.group(0)
+
+    text = WORD_BRACKET_PATTERN.sub(_replace_raw_bracket, text)
+
+    text = re.sub(rf'([{KO_RANGES}]+)\s*[\(（][{JP_RANGES}\s]+[\)）]', r'\1', text)
+
+    text = re.sub(r'([가-힣]+)\(\1\)', r'\1', text)
+
+    return text
+
 def clean_explanation_residue(text: str) -> str:
     if not text:
         return text
     for pat in EXPLANATION_PATTERNS:
         text = pat.sub('', text)
     return text.strip()
-
 
 def strip_korean_particles(token: str) -> str:
     if not token:
@@ -78,7 +286,6 @@ def strip_korean_particles(token: str) -> str:
             return stem
     return token
 
-
 def sanitize_dot_addition(orig_text: str, trans_text: str) -> str:
     if not trans_text:
         return ""
@@ -86,153 +293,218 @@ def sanitize_dot_addition(orig_text: str, trans_text: str) -> str:
         trans_text = trans_text.replace('.', '').replace('。', '')
     return trans_text.strip()
 
-
 def sanitize_translated_word(trans_text: str, orig_text: str = "") -> str:
     if not trans_text:
         return ""
     trans_text = clean_explanation_residue(trans_text)
     f = trans_text.find("： ")
-    if (f > -1):
+    if f > -1:
         trans_text = trans_text[f + 1:]
     parts = re.split(r'[,，/／\n]', trans_text)
     first_choice = parts[0].strip()
     res = first_choice if first_choice else trans_text.strip()
-
     if orig_text:
         res = sanitize_dot_addition(orig_text, res)
     return res
 
-def step1_calculate_brackets(text: str) -> str:
+def fix_japanese_interjections(text: str) -> str:
     if not text:
         return text
 
-    def _replace_match(m):
-        before_jp = m.group(1)
-        inside = m.group(2)
+    CLOSING_QUOTES = r'[\s"\'“”‘’「」『』!?！？…….]'
+    text = re.sub(rf'([가-힣])[-―~]ん(?={CLOSING_QUOTES}|$)', r'\1―응', text)
+    text = re.sub(rf'(^|[\s“"\'「])ん\?', r'\1응?', text)
+    text = re.sub(rf'(^|[\s“"\'「])ん(?={CLOSING_QUOTES}|$)', r'\1응', text)
+    text = re.sub(r'후ふ+', '후후', text)
 
-        has_ko = bool(KO_PATTERN.search(inside))
-        has_jp = bool(JP_PATTERN.search(inside))
+    text = re.sub(r'([가-힣])ぇっと', r'\1엣또', text)
+    text = re.sub(r'([가-힣])っと', r'\1또', text)
 
-        if before_jp and has_ko:
-            return inside
+    def lengthen_vowel(match):
+        prev_char = match.group(1)
+        small_kana = match.group(2)
+        kana_map = {
+            'ぁ': '아', 'ぃ': '이', 'ぅ': '우', 'ぇ': '에', 'ぉ': '오',
+            'ァ': '아', 'ィ': '이', 'ゥ': '우', 'ェ': '에', 'ォ': '오'
+        }
+        return prev_char + kana_map.get(small_kana, '')
 
-        if has_jp and not has_ko:
-            return before_jp if before_jp else ""
+    text = re.sub(r'([가-힣])([ぁぃぅぇぉァィゥェォ])', lengthen_vowel, text)
+    text = text.replace('え', '에').replace('゛', '')
 
-        return m.group(0)
+    def replace_tsu(match):
+        prev_char = match.group(1)
+        punct = match.group(2)
+        decomp = decompose_hangul(prev_char)
+        if decomp:
+            cho, jung, jong = decomp
+            if jong == '':
+                if prev_char in ['싸', '이', '앗', '하', '어', '에', '죽']:
+                    return f"{compose_hangul(cho, jung, 'ㅅ')}{punct}"
+                return f"{prev_char}{punct}"
+            else:
+                return f"{prev_char}앗{punct}"
+        return f"{prev_char}{punct}"
 
-    cleaned = BRACKET_PATTERN.sub(_replace_match, text)
-    cleaned = re.sub(r' +', ' ', cleaned)
-    return cleaned.strip()
+    text = re.sub(r'([가-힣])[ッっｯ]+([!?！？…….]+)', replace_tsu, text)
+    text = re.sub(r'([가-힣])[ッっｯ]([가-힣])', r'\1\2', text)
+    text = re.sub(r'[ッっｯ]+(?=[\s\n!?,.]|$)', '!', text)
+    text = re.sub(r'[ッっｯ]', '', text)
+    return text
 
-def step2_calculate_prolonged(text: str) -> str:
-    if not text or not PROLONGED_PATTERN.search(text):
+def fix_embedded_katakana(text: str) -> str:
+    if not text:
         return text
-    prev = ""
-    curr = text
-    while prev != curr:
-        prev = curr
-        curr = KO_PROLONGED_KO_PATTERN.sub(r'\1 \2', curr)
-    return curr
 
+    for k in sorted(KANA_TO_HANGUL.keys(), key=len, reverse=True):
+        if k in text:
+            text = text.replace(k, KANA_TO_HANGUL[k])
 
-def step3_calculate_yon(text: str) -> str:
-    if not text or not SMALL_KANA_PATTERN.search(text):
-        return text
-    prev = ""
-    curr = text
-    while prev != curr:
-        prev = curr
-        curr = KO_YON_KO_PATTERN.sub(r'\1 \2', curr)
-    return curr
+    def _combine_n(m):
+        prev_char = m.group(1)
+        return attach_jongsung(prev_char, 'ㄴ')
+
+    text = re.sub(r'([가-힣])ン', _combine_n, text)
+    text = text.replace('ン', 'ㄴ')
+    return text
 
 def has_japanese(text: str) -> bool:
     return bool(text and JP_PATTERN.search(text))
+
+def call_translator_safely(text_to_translate: str) -> str:
+    try:
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        stripped = text_to_translate.strip()
+        has_curly_quotes = stripped.startswith('“') and stripped.endswith('”')
+        has_straight_quotes = stripped.startswith('"') and stripped.endswith('"')
+
+        if inspect.iscoroutinefunction(Translator):
+            res = loop.run_until_complete(Translator(text_to_translate))
+        else:
+            res = Translator(text_to_translate)
+            if inspect.iscoroutine(res):
+                res = loop.run_until_complete(res)
+
+        res_str = str(res).strip()
+        if has_curly_quotes:
+            if not (res_str.startswith('“') and res_str.endswith('”')):
+                res_str = res_str.strip('“"').strip('”"')
+                res_str = f"“{res_str}”"
+        elif has_straight_quotes:
+            if not (res_str.startswith('"') and res_str.endswith('"')):
+                res_str = res_str.strip('"')
+                res_str = f'"{res_str}"'
+
+        return res_str
+    except Exception as e:
+        print(f"\n[ERROR Translator] 호출 실패! {e}", file=sys.stderr)
+        traceback.print_exc()
+        raise e
 
 def smart_translate(text: str, glossary: dict = None, is_word_mode: bool = False) -> str:
     if not text or not text.strip():
         return text
 
     orig_input = text
+    print(f"\n[DEBUG Pipeline] >>> 입력 [모드={'단어' if is_word_mode else '문장'}]: {orig_input!r}")
+
+    res = resolve_arrows_and_memos(text)
+
+    res = resolve_brackets_from_raw(res)
 
     if glossary:
         sorted_glossary = sorted(glossary.items(), key=lambda x: len(x[0]), reverse=True)
         for jp_word, ko_word in sorted_glossary:
-            if jp_word and ko_word and jp_word != ko_word and jp_word in text:
-                text = text.replace(jp_word, ko_word)
+            if jp_word and ko_word and jp_word != ko_word and jp_word in res:
+                res = res.replace(jp_word, ko_word)
 
-    res = step1_calculate_brackets(text)
-    res = step2_calculate_prolonged(res)
-    res = step3_calculate_yon(res)
+    for pattern, repl in FAST_LEXICON_REPLACEMENTS:
+        res = re.sub(pattern, repl, res)
+
+    res = fix_japanese_interjections(res)
+    res = re.sub(r'([가-힣])ー+', r'\1―', res)
+    res = clean_explanation_residue(res)
+    res = re.sub(r' +', ' ', res).strip()
 
     if not has_japanese(res):
-        res = clean_explanation_residue(res)
-        res = re.sub(r' +', ' ', res).strip()
+        print(f"[DEBUG Pipeline] 규칙/괄호 해석만으로 완료: {res!r}")
         if is_word_mode:
             res = sanitize_dot_addition(orig_input, res)
         return res
 
+    jp_chars_count = len(JP_PATTERN.findall(res))
+    ko_chars_count = len(KO_PATTERN.findall(res))
+
+    if ko_chars_count >= 10 and jp_chars_count <= 4 and not is_word_mode:
+        print(f"[DEBUG Pipeline] [한국어 보호] 문장 전체 API 호출 생략하고 단어만 음차: {res!r}")
+        res = fix_embedded_katakana(res)
+        if not has_japanese(res):
+            return res
+
+    print(f"[DEBUG Pipeline] [API 호출 필요] 잔여 일문 존재 -> Translator 호출: {res!r}")
     try:
-        translated = Translator(res)
+        translated = call_translator_safely(res)
+        print(f"[DEBUG Pipeline] Translator 반환 성공: {translated!r}")
         if is_word_mode:
             translated = sanitize_translated_word(translated, orig_text=res)
         res = translated
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[WARNING Pipeline] 번역기 호출 실패 ({e}), 폴백 진행", file=sys.stderr)
 
+    res = resolve_arrows_and_memos(res)
+    res = resolve_brackets_from_raw(res)
+    res = fix_japanese_interjections(res)
+
+    if has_japanese(res):
+        jp_matches = list(JP_BLOCK_PATTERN.finditer(res))
+        if jp_matches:
+            chars = list(res)
+            for m in reversed(jp_matches):
+                sub_jp = m.group()
+                if not JP_PATTERN.search(sub_jp):
+                    chars[m.start():m.end()] = []
+                    continue
+
+                if len(sub_jp.strip()) >= 3:
+                    try:
+                        print(f"[DEBUG Pipeline] 블록 세부 번역 시도: {sub_jp!r}")
+                        sub_trans = call_translator_safely(sub_jp)
+                        sub_trans = sanitize_translated_word(sub_trans, orig_text=sub_jp)
+                    except Exception:
+                        sub_trans = fix_embedded_katakana(sub_jp)
+                else:
+                    sub_trans = fix_embedded_katakana(sub_jp)
+
+                chars[m.start():m.end()] = list(sub_trans)
+            res = "".join(chars)
+
+    res = fix_embedded_katakana(res)
     res = clean_explanation_residue(res)
-    res = step1_calculate_brackets(res)
-    res = step2_calculate_prolonged(res)
-    res = step3_calculate_yon(res)
-
-    if not has_japanese(res):
-        res = RESIDUE_PATTERN.sub('', res)
-        res = re.sub(r'~{2,}', '~', res)
-        res = re.sub(r' +', ' ', res).strip()
-        if is_word_mode:
-            res = sanitize_dot_addition(orig_input, res)
-        return res
-
-    jp_matches = list(JP_BLOCK_PATTERN.finditer(res))
-    if jp_matches:
-        chars = list(res)
-        for m in reversed(jp_matches):
-            sub_jp = m.group()
-
-            # 실제 일본어 문자가 없는 블록(단순 장음/요음 잔여물)은 제거
-            if not JP_PATTERN.search(sub_jp) or RESIDUE_PATTERN.fullmatch(sub_jp):
-                chars[m.start():m.end()] = []
-                continue
-
-            try:
-                sub_trans = Translator(sub_jp)
-                sub_trans = sanitize_translated_word(sub_trans, orig_text=sub_jp)
-            except Exception:
-                try:
-                    sub_trans = Translator(sub_jp)
-                    sub_trans = sanitize_translated_word(sub_trans, orig_text=sub_jp)
-                except Exception:
-                    sub_trans = sub_jp
-
-            chars[m.start():m.end()] = list(sub_trans)
-        res = "".join(chars)
-
-    res = clean_explanation_residue(res)
-    res = step1_calculate_brackets(res)
-    res = RESIDUE_PATTERN.sub('', res)
     res = re.sub(r'~{2,}', '~', res)
     res = re.sub(r' +', ' ', res).strip()
+
     if is_word_mode:
         res = sanitize_translated_word(res, orig_text=orig_input)
+
+    print(f"[DEBUG Pipeline] <<< 최종 완료 출력: {res!r}")
     return res
 
 class AutoResizingTextEdit(QTextEdit):
-    def __init__(self, parent=None):
+    def __init__(self, is_orig=False, parent=None):
         super().__init__(parent)
+        self.is_orig = is_orig
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.document().documentLayout().documentSizeChanged.connect(self.adjust_height)
         self.textChanged.connect(self.adjust_height)
+
+        if self.is_orig:
+            self.highlighter = SuspiciousPatternHighlighter(self.document())
 
     def adjust_height(self):
         doc_height = self.document().size().height()
@@ -254,32 +526,23 @@ class GlossaryExtractWorker(QThread):
 
     def run(self):
         word_freq = {}
-
         for item in self.items:
             text = item.get('original_text', '').strip()
             if not text:
                 continue
 
             text = clean_explanation_residue(text)
-
             tokens = WORD_TOKEN_PATTERN.findall(text)
             for tok in tokens:
                 tok = tok.strip()
                 if not JP_PATTERN.search(tok):
                     continue
-
                 tok = strip_korean_particles(tok)
-                cleaned = RESIDUE_PATTERN.sub('', tok).strip()
-
-                if len(cleaned) >= 2 and JP_PATTERN.search(cleaned):
+                if len(tok) >= 2 and JP_PATTERN.search(tok):
                     word_freq[tok] = word_freq.get(tok, 0) + 1
 
-        candidates = [
-            word for word, count in word_freq.items()
-            if count >= 2
-        ]
+        candidates = [word for word, count in word_freq.items() if count >= 2]
         candidates.sort(key=lambda k: word_freq[k], reverse=True)
-
         self.extracted_signal.emit(candidates)
 
 
@@ -299,23 +562,25 @@ class JapaneseTranslateWorker(QThread):
         self._is_cancelled = True
 
     def run(self):
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
         total = len(self.tasks)
         done = 0
+        print(f"\n=======================================================")
+        print(f"[DEBUG Thread] 번역 시작: 총 {total}개 작업 (단어모드={self.is_word_mode})")
+        print(f"=======================================================")
 
         def worker_task(task_item):
             if self._is_cancelled:
                 return task_item[0], None
             idx, text = task_item
-            result = smart_translate(text, glossary=self.glossary, is_word_mode=self.is_word_mode)
-            return idx, result
+            try:
+                result = smart_translate(text, glossary=self.glossary, is_word_mode=self.is_word_mode)
+                return idx, result
+            except Exception as e:
+                print(f"[ERROR Thread] 작업 #{idx} 실패! 텍스트={text!r}, 오류={e}", file=sys.stderr)
+                traceback.print_exc()
+                return idx, text
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
             future_to_idx = {
                 executor.submit(worker_task, task): task[0]
                 for task in self.tasks
@@ -327,12 +592,15 @@ class JapaneseTranslateWorker(QThread):
                     idx, res = future.result()
                     if res is not None and not self._is_cancelled:
                         self.item_translated.emit(idx, res)
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"[ERROR Thread] Future 수신 오류: {e}", file=sys.stderr)
+                    traceback.print_exc()
                 done += 1
                 self.progress_changed.emit(done, total)
 
+        print(f"[DEBUG Thread] 모든 번역 작업 완료.")
         self.finished_signal.emit()
+
 
 class JapaneseGlossaryDialog(QDialog):
     def __init__(self, parent_dialog):
@@ -362,7 +630,7 @@ class JapaneseGlossaryDialog(QDialog):
         self.all_trans_btn = QPushButton("전체 번역")
         self.all_trans_btn.setObjectName("semiTransBtn")
         self.all_trans_btn.setFixedHeight(28)
-        self.all_trans_btn.setToolTip("단어집의 모든 단어를 비동기로 동시 스마트 번역합니다.")
+        self.all_trans_btn.setToolTip("단어집의 모든 단어를 비동기로 동시 번역합니다.")
         self.all_trans_btn.clicked.connect(self.translate_all)
         header_layout.addWidget(self.all_trans_btn)
 
@@ -372,7 +640,7 @@ class JapaneseGlossaryDialog(QDialog):
         header_layout.addWidget(count_lbl)
         layout.addLayout(header_layout)
 
-        info_lbl = QLabel("수정하거나 번역한 내용은 자동으로 저장됩니다. [치환] 일괄 치환됩니다.")
+        info_lbl = QLabel("수정하거나 번역한 내용은 자동으로 저장됩니다. [치환]을 누르면 일괄 치환됩니다.")
         info_lbl.setObjectName("secondaryInfo")
         info_lbl.setWordWrap(True)
         layout.addWidget(info_lbl)
@@ -405,7 +673,7 @@ class JapaneseGlossaryDialog(QDialog):
             row_layout.setContentsMargins(4, 1, 4, 1)
             row_layout.setSpacing(8)
 
-            orig_edit = AutoResizingTextEdit()
+            orig_edit = AutoResizingTextEdit(is_orig=True)
             orig_edit.setReadOnly(True)
             orig_edit.setPlainText(word)
             orig_edit.viewport().setStyleSheet('background: transparent;')
@@ -415,7 +683,7 @@ class JapaneseGlossaryDialog(QDialog):
             arrow_lbl.setFixedWidth(16)
             arrow_lbl.setStyleSheet("font-weight: bold; font-size: 13px; color: rgba(255, 255, 255, 0.4);")
 
-            replace_edit = AutoResizingTextEdit()
+            replace_edit = AutoResizingTextEdit(is_orig=False)
             replace_edit.setPlainText(current_val)
             replace_edit.viewport().setStyleSheet('background: transparent;')
 
@@ -553,7 +821,7 @@ class JapaneseGlossaryDialog(QDialog):
     def apply_single_word(self, index: int):
         orig_word, edit, _, _ = self.editors[index]
         ko_word = edit.toPlainText().strip()
-        count = self.parent_dialog.replace_in_all_editors(orig_word, ko_word)
+        self.parent_dialog.replace_in_all_editors(orig_word, ko_word)
 
     def apply_all_words(self):
         items_to_replace = []
@@ -563,16 +831,15 @@ class JapaneseGlossaryDialog(QDialog):
                 items_to_replace.append((orig_word, ko_word))
 
         items_to_replace.sort(key=lambda x: len(x[0]), reverse=True)
-
-        total_count = 0
         for orig_word, ko_word in items_to_replace:
-            total_count += self.parent_dialog.replace_in_all_editors(orig_word, ko_word)
+            self.parent_dialog.replace_in_all_editors(orig_word, ko_word)
 
     def closeEvent(self, event):
         if self.translate_worker and self.translate_worker.isRunning():
             self.translate_worker.cancel()
             self.translate_worker.wait()
         super().closeEvent(event)
+
 
 class JapaneseCheckDialog(QDialog):
     def __init__(self, inspection_data, parent=None):
@@ -581,7 +848,6 @@ class JapaneseCheckDialog(QDialog):
         self.json_path = inspection_data.get('json_path', '')
         self.title = inspection_data.get('title', '작품')
 
-        # 실제 일본어 없이 'ー' 등 장음표만 있는 항목 자동 필터링 제외
         raw_items = inspection_data.get('items', [])
         self.items = [
             item for item in raw_items
@@ -615,11 +881,9 @@ class JapaneseCheckDialog(QDialog):
     def _on_glossary_extracted(self, candidates):
         self.is_extracting_glossary = False
         self.glossary_candidates = candidates
-        
         for word in candidates:
             if word not in self.glossary_dict:
                 self.glossary_dict[word] = word
-
         self.glossary_btn.setText(f"단어집 ({len(candidates)})")
 
     def update_glossary_entry(self, jp_word: str, ko_word: str):
@@ -629,16 +893,13 @@ class JapaneseCheckDialog(QDialog):
         if self.is_extracting_glossary:
             QMessageBox.information(self, "단어집", "단어집을 분석 중입니다. 잠시 후 다시 눌러주세요.")
             return
-
         if not self.glossary_candidates:
             QMessageBox.information(self, "단어집", "2회 이상 반복 검출된 일본어 단어가 없습니다.")
             return
-
         if self.glossary_dialog is not None and self.glossary_dialog.isVisible():
             self.glossary_dialog.raise_()
             self.glossary_dialog.activateWindow()
             return
-
         self.glossary_dialog = JapaneseGlossaryDialog(parent_dialog=self)
         self.glossary_dialog.show()
 
@@ -681,7 +942,7 @@ class JapaneseCheckDialog(QDialog):
         self.all_trans_btn = QPushButton("전체 번역")
         self.all_trans_btn.setObjectName("semiTransBtn")
         self.all_trans_btn.setFixedHeight(28)
-        self.all_trans_btn.setToolTip("검출된 모든 항목을 최대 10개씩 동시 번역합니다.")
+        self.all_trans_btn.setToolTip("검출된 모든 항목을 비동기로 동시 번역합니다.")
         self.all_trans_btn.clicked.connect(self.translate_all)
         header_layout.addWidget(self.all_trans_btn)
 
@@ -691,7 +952,7 @@ class JapaneseCheckDialog(QDialog):
         header_layout.addWidget(count_lbl)
         layout.addLayout(header_layout)
 
-        info_lbl = QLabel("[번역]을 누르면 번역이 실행되며, 직접 수정 후 [바꾸기]를 누르면 저장됩니다.")
+        info_lbl = QLabel("[번역]을 누르면 번역이 실행됩니다. 원문 칸에 의심/검출 구간이 형광펜으로 표시됩니다.")
         info_lbl.setObjectName("secondaryInfo")
         info_lbl.setWordWrap(True)
         layout.addWidget(info_lbl)
@@ -756,7 +1017,7 @@ class JapaneseCheckDialog(QDialog):
             row_layout.setContentsMargins(4, 1, 4, 1)
             row_layout.setSpacing(8)
 
-            orig_edit = AutoResizingTextEdit()
+            orig_edit = AutoResizingTextEdit(is_orig=True)
             orig_edit.setReadOnly(True)
             orig_edit.setPlainText(item.get('original_text', '').rstrip('\n'))
             orig_edit.viewport().setStyleSheet('background: transparent;')
@@ -766,7 +1027,7 @@ class JapaneseCheckDialog(QDialog):
             arrow_lbl.setFixedWidth(16)
             arrow_lbl.setStyleSheet("font-weight: bold; font-size: 13px; color: rgba(255, 255, 255, 0.4);")
 
-            replace_edit = AutoResizingTextEdit()
+            replace_edit = AutoResizingTextEdit(is_orig=False)
             replace_edit.setPlainText(item.get('original_text', '').rstrip('\n'))
             replace_edit.viewport().setStyleSheet('background: transparent;')
 
