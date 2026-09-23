@@ -22,9 +22,6 @@ import src.qr.qr_view as qr_view
 import src.main.setting as setting_ui
 import src.main.update as update_ui
 from src.system.src import resource_path
-import src.find.tag as tag_ui
-
-tag_ui.USER_TAGS_SRC = "./home_tag.json"
 
 import src.system.v as vsc
 
