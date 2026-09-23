@@ -4,7 +4,7 @@ import os
 import re
 import time
 
-import src.glossary_fast_py.glossary_text as glossary_text
+import src.glossary.glossary_text as glossary_text
 extract_glossary = glossary_text.extract_glossary
 
 from google import genai
@@ -25,7 +25,6 @@ from src.trans.prompt_sanitizer import (
 _K = '+---+\n'
 _J = 'gemini-3.5-flash-Lite'
 _I = '[\\\\/:*?"<>|]'
-_H = 'OUTFOLDER'
 _G = '+---+'
 _F = False
 _E = ''
@@ -45,21 +44,6 @@ CENSOR_EXTRACT_MODE = "word"
 CENSOR_PAPAGO = False
 
 IMG_TAG_PATTERN = re.compile(r'-img-:[^\s\r\n]+')
-IMG_PLACEHOLDER = '-+++-'
-IMG_PROMPT_RULE = """
-[이미지 필수 규칙]
-1. 입력문에 포함된 '-+++-'는 글자를 절대 유지 하세요.
-2. '-+++-' 원문에 없는 곳에 새로 만들거나 추가해서는 안 됩니다. (절대 금지!).
-"""
-
-CENSOR_PROMPT_RULE = """
-[특수 규칙 반드시 지킬 것 : 초강력 지침]
-1. 각 줄의 시작 부분에 있는 '<data=id>' 형태의 태그를 절대 지우거나 수정하지 말고, 번역된 줄의 맨 앞에도 그대로 유지하세요.
-2. 본문에 포함된 '{{data=id}}' 형태의 태그는 해당 위치에 그대로 유지하고 번역하거나 삭제하지 마세요.
-3. 임의로 줄을 병합하거나 누락하지 말고 각 태그가 붙은 줄 구조를 원본 그대로 출력하세요.
-4. 모든 문장이 반드시 나오도록 하며 절대로 숫자를 누락하지 마십시오. (절대 규칙!)
-"""
-
 
 def set_api_key(api_key):
     global API, client

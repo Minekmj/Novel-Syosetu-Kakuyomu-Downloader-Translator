@@ -7,7 +7,7 @@ from google.genai import types
 client = None
 get_safety_settings = None
 
-from src.glossary_fast_py.glossary_fast import extract_glossary_sample as _extract_glossary_sample
+from src.glossary.glossary import extract_glossary_sample as _extract_glossary_sample
 
 
 class AsyncRateLimiter:
