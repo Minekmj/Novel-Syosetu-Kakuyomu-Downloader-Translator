@@ -429,33 +429,22 @@ class MainWindow(QMainWindow):
 
         self.main_layout = QVBoxLayout(main_widget)
         self.main_layout.setContentsMargins(24, 22, 24, 24)
-        self.main_layout.setSpacing(14)
+        self.main_layout.setSpacing(12)
 
-        title_layout = QHBoxLayout()
-        title_layout.setSpacing(8)
+        header_layout = QHBoxLayout()
+        header_layout.setSpacing(7)
+        header_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
         app_title = QLabel("목록")
         app_title.setObjectName("app_title")
 
-        title_layout.addWidget(app_title)
-        title_layout.addStretch()
-
-        self.manager_path_btn = QPushButton("환경 설정")
-        self.manager_path_btn.setObjectName("secondaryBtn")
-        self.manager_path_btn.setFixedHeight(34)
-        self.manager_path_btn.clicked.connect(self.open_manager_path_dialog)
-
-        title_layout.addWidget(self.manager_path_btn)
-
-        self.main_layout.addLayout(title_layout)
-
-        action_layout = QHBoxLayout()
-        action_layout.setSpacing(7)
+        header_layout.addWidget(app_title)
+        header_layout.addStretch()
 
         self.gloss_bt = QPushButton("용어집 관리")
         self.gloss_bt.setObjectName("secondaryBtn")
         self.gloss_bt.clicked.connect(self.open_gloss)
-        action_layout.addWidget(self.gloss_bt)
+        header_layout.addWidget(self.gloss_bt)
 
         for i in sl.Sites:
             def open_window(checked=False, site_key=i):
@@ -465,38 +454,41 @@ class MainWindow(QMainWindow):
             plus_bt = QPushButton(f"{sl.SITES.get(i).get('name')} 검색")
             plus_bt.setObjectName("secondaryBtn")
             plus_bt.clicked.connect(open_window)
-            action_layout.addWidget(plus_bt)
-
-        action_layout.addStretch()
+            header_layout.addWidget(plus_bt)
 
         self.epub_btn = QPushButton("EPUB 변환")
         self.epub_btn.setObjectName("secondaryBtn")
         self.epub_btn.clicked.connect(self.convert_txt_to_epub)
-        action_layout.addWidget(self.epub_btn)
+        header_layout.addWidget(self.epub_btn)
 
         self.translate_btn = QPushButton("AI 번역")
         self.translate_btn.setObjectName("secondaryBtn")
         self.translate_btn.clicked.connect(self.open_translate_dialog)
-        action_layout.addWidget(self.translate_btn)
+        header_layout.addWidget(self.translate_btn)
 
         self.qr_btn = QPushButton("번역 목록")
         self.qr_btn.setObjectName("secondaryBtn")
         self.qr_btn.clicked.connect(lambda: qr_view.QRViewDialog(self).show())
-        action_layout.addWidget(self.qr_btn)
+        header_layout.addWidget(self.qr_btn)
 
-        self.main_layout.addLayout(action_layout)
+        self.manager_path_btn = QPushButton("환경 설정")
+        self.manager_path_btn.setObjectName("secondaryBtn")
+        self.manager_path_btn.clicked.connect(self.open_manager_path_dialog)
+        header_layout.addWidget(self.manager_path_btn)
+
+        self.main_layout.addLayout(header_layout)
 
         input_layout = QHBoxLayout()
         input_layout.setSpacing(8)
 
         self.main_address_edit = QLineEdit(self)
         self.main_address_edit.setPlaceholderText("작품 URL을 입력하세요")
-        self.main_address_edit.setFixedHeight(42)
+        self.main_address_edit.setFixedHeight(40)
         self.main_address_edit.returnPressed.connect(self.add_address_row)
 
         self.add_btn = QPushButton("추가")
         self.add_btn.setObjectName("primaryBtn")
-        self.add_btn.setFixedSize(90, 42)
+        self.add_btn.setFixedSize(90, 40)
         self.add_btn.clicked.connect(self.add_address_row)
 
         input_layout.addWidget(self.main_address_edit, 1)
@@ -513,7 +505,7 @@ class MainWindow(QMainWindow):
         self.search_edit.textChanged.connect(self.apply_filter_and_sort)
 
         self.sort_combo = QComboBox(self)
-        self.sort_combo.setFixedSize(180, 36)
+        self.sort_combo.setFixedHeight(36)
         self.sort_combo.addItems([
             "이름순",
             "역이름순",
@@ -545,7 +537,7 @@ class MainWindow(QMainWindow):
 
         self.rows_layout = QVBoxLayout(self.scroll_widget)
         self.rows_layout.setContentsMargins(0, 4, 8, 8)
-        self.rows_layout.setSpacing(7)
+        self.rows_layout.setSpacing(8)
         self.rows_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         self.scroll_area.setWidget(self.scroll_widget)
@@ -597,8 +589,11 @@ class MainWindow(QMainWindow):
     def load_widgets_from_json(self):
         data = load_data()
         items_dict = data.get("list", {})
+        nu = 0
 
         for title, item in items_dict.items():
+            nu += 1
+
             site_url = item.get("src", "")
             last_down = item.get("down", "0")
             down_time = item.get("down_time", "0")
@@ -617,9 +612,10 @@ class MainWindow(QMainWindow):
             self.rows_layout.addWidget(row)
             self.row_widgets.append(row)
 
-        if self.row_widgets:
-            self.is_first_massage.hide()
-        else:
+            if self.row_widgets:
+                self.is_first_massage.hide()
+
+        if nu == 0:
             self.is_first_massage.show()
 
         self.apply_filter_and_sort()
@@ -725,7 +721,8 @@ class MainWindow(QMainWindow):
         self.row_widgets.insert(0, row)
         self.newly_added_widget = row
 
-        self.is_first_massage.hide()
+        if self.row_widgets:
+            self.is_first_massage.hide()
 
         if self.search_edit.text():
             self.search_edit.blockSignals(True)
