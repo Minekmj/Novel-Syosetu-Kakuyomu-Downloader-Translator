@@ -256,3 +256,6 @@ class DetailDialog(QDialog):
         click_plus_url = self.item_data.get('url', '')
         click = True
         self.accept()
+        
+click = False
+click_plus_url = ''

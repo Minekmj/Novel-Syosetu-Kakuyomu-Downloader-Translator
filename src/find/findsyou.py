@@ -15,8 +15,6 @@ import src.find.tag as tag_ui
 import src.find.detail as detail_ui
 import src.find.site_list as sl
 
-click = False
-click_plus_url = ''
 istaiain = []
 
 class SearchWorker(QThread):

@@ -29,9 +29,9 @@ class ClickWatcher(QObject):
         while not self.stop_event.is_set():
             if STOP_CLICK:
                 break
-            if findsyou.click:
-                url = findsyou.click_plus_url
-                findsyou.click = False
+            if findsyou.detail_ui.click:
+                url = findsyou.detail_ui.click_plus_url
+                findsyou.detail_ui.click = False
                 self.update_address.emit(url)
                 self.add_address.emit()
             self.stop_event.wait(0.05)
