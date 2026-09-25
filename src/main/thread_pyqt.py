@@ -45,17 +45,18 @@ class ClickWatcher(QObject):
 class DownloadThread(QThread):
     finished_signal = Signal(bool, str)
 
-    def __init__(self, site_url, start, end, label, title):
+    def __init__(self, site_url, start, end, label, title, act_massage):
         super().__init__()
         self.site_url = site_url
         self.start_num = start
         self.end_num = end
         self.label = label
         self.title = title
+        self.act_massage = act_massage
 
     def run(self):
         try:
-            DOWN.downin.Download(self.site_url, self.start_num, self.end_num, self.label, self.title)
+            DOWN.downin.Download(self.site_url, self.start_num, self.end_num, self.label, self.title, self.act_massage)
             self.finished_signal.emit(True, "")
         except Exception as e:
             self.finished_signal.emit(False, str(e))

@@ -36,6 +36,7 @@ class CollapsibleSection(QWidget):
                 text-align: left;
                 font-weight: bold;
                 padding: 8px;
+                border:None;
             }
         """)
         self.toggle_button.setObjectName("isCo")

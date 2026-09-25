@@ -1,6 +1,8 @@
 import json
 import os
 import re
+import secrets
+import string
 import threading
 import time
 import requests
@@ -13,6 +15,76 @@ base_data = None
 _reset_lock = threading.Lock()
 _last_reset_time = 0
 _request_sem = threading.Semaphore(3)
+
+
+def urljoin(base_url: str, relative_url: str) -> str:
+    relative_url = relative_url.strip()
+
+    if relative_url.startswith("http://") or relative_url.startswith("https://"):
+        return relative_url
+
+    scheme = ""
+    if base_url.startswith("https://"):
+        scheme = "https:"
+        base_without_scheme = base_url[8:]
+    elif base_url.startswith("http://"):
+        scheme = "http:"
+        base_without_scheme = base_url[7:]
+    else:
+        scheme = "https:"
+        base_without_scheme = base_url
+
+    if relative_url.startswith("//"):
+        return f"{scheme}{relative_url}"
+
+    if "/" in base_without_scheme:
+        domain, base_path = base_without_scheme.split("/", 1)
+        base_path = "/" + base_path
+    else:
+        domain = base_without_scheme
+        base_path = "/"
+
+    if relative_url.startswith("/"):
+        return f"{scheme}//{domain}{relative_url}"
+
+    if not base_path.endswith("/"):
+        base_path = base_path.rsplit("/", 1)[0] + "/"
+
+    full_path = base_path + relative_url
+    segments = full_path.split("/")
+    resolved_segments = []
+
+    for seg in segments:
+        if seg in ("", "."):
+            continue
+        elif seg == "..":
+            if resolved_segments:
+                resolved_segments.pop()
+        else:
+            resolved_segments.append(seg)
+
+    normalized_path = "/" + "/".join(resolved_segments)
+
+    if relative_url.endswith("/") and not normalized_path.endswith("/"):
+        normalized_path += "/"
+
+    return f"{scheme}//{domain}{normalized_path}"
+
+
+def generate_random_filename(img_dir, ext=".jpg"):
+    chars = string.ascii_letters + string.digits
+
+    while True:
+        rand_name = "".join(
+            secrets.choice(chars)
+            for _ in range(16)
+        )
+
+        filename = f"{rand_name}{ext}"
+        full_path = os.path.join(img_dir, filename)
+
+        if not os.path.exists(full_path):
+            return filename, full_path
 
 
 def parse_novel_code(novel_code):
@@ -80,11 +152,13 @@ def http_get(url, session=None, is_r18=False, headers=None, timeout=30):
 
     return res
 
+
 def http_cookie(session=None, is_r18=False):
     sf.reset_b()
     if is_r18:
         sf.COOKIES["over18"] = "off"
     session.cookies.update(sf.COOKIES)
+
 
 def hameln_title(novel_code):
     nid, is_r18 = parse_novel_code(novel_code)
@@ -221,6 +295,59 @@ def fetch_hameln_episode(
                 if not content_element:
                     raise Exception("본문 태그(#honbun) 없음")
 
+                has_downloaded_img = False
+                img_targets = []
+
+                for tag in content_element.find_all(["img", "a"]):
+                    if tag.name == "img" and tag.get("src"):
+                        img_targets.append((tag, tag.get("src")))
+                    elif tag.name == "a" and tag.get("href"):
+                        href = tag.get("href")
+                        if (
+                            tag.get("name") == "img"
+                            or tag.get("alt") == "挿絵"
+                            or "挿絵" in tag.get_text()
+                            or "/img/" in href
+                            or re.search(r'\.(png|jpg|jpeg|gif|webp)', href, re.I)
+                        ):
+                            img_targets.append((tag, href))
+
+                if img_targets:
+                    img_dir = os.path.join(base_data.OUTFOLDER, "img")
+                    os.makedirs(img_dir, exist_ok=True)
+
+                    for tag, img_url in img_targets:
+                        full_img_url = urljoin(ep["url"], img_url)
+                        ext = os.path.splitext(full_img_url.split("?")[0])[1]
+                        if not ext or len(ext) > 5:
+                            ext = ".jpg"
+
+                        filename, file_save_path = generate_random_filename(img_dir, ext)
+
+                        try:
+                            img_res = http_get(
+                                full_img_url,
+                                session=session,
+                                is_r18=is_r18,
+                                headers={"Referer": ep["url"]},
+                                timeout=30
+                            )
+
+                            if img_res.status_code == 200:
+                                with open(file_save_path, "wb") as f_img:
+                                    f_img.write(img_res.content)
+
+                                tag.replace_with(f"-img-:{filename}")
+                                has_downloaded_img = True
+                            else:
+                                tag.decompose()
+
+                        except Exception as err:
+                            printcall(
+                                f"하멜른 {current_idx}화 이미지 다운로드 실패 ({full_img_url}): {err}"
+                            )
+                            tag.decompose()
+
                 for tag in content_element.find_all(["rt", "rp"]):
                     tag.decompose()
 
@@ -278,7 +405,8 @@ def fetch_hameln_episode(
                 progress_percent = round((100 / total_count) * done, 1)
                 label_callback(f"{progress_percent}%")
 
-                time.sleep(delay)
+                wait_time = delay * 5 if has_downloaded_img else delay
+                time.sleep(wait_time)
                 return True
 
             except Exception as e:

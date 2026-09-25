@@ -70,11 +70,11 @@ def fetch_kakuyomu_episode(
     label_callback,
     total_count,
     progress_state,
+    act_massage,
     printcall=print,
     max_retries=3
 ):
     with sem:
-        # 1. 백업 폴더(outfolder/list/작품명)에 이미 파일이 있는지 확인
         backup_file = None
         prefix = f"[{current_idx}] "
         if os.path.exists(title_path):
@@ -83,13 +83,11 @@ def fetch_kakuyomu_episode(
                     backup_file = os.path.join(title_path, fname)
                     break
 
-        # 2. 백업 파일이 존재하면 읽어서 trs_path에 복원 후 다운로드 생략
         if backup_file and os.path.exists(backup_file):
             try:
                 with open(backup_file, "r", encoding="utf-8") as f:
                     content = f.read()
 
-                # 포맷: =*30 \n subtitle \n =*30 \n\n\n\n body
                 parts = content.split("=" * 30)
                 if len(parts) >= 3:
                     subtitle = parts[1].strip()
@@ -100,11 +98,15 @@ def fetch_kakuyomu_episode(
 
                 safe_title = re.sub(r'[\\/:*?"<>|]', "_", subtitle)
                 trs_file_path = os.path.join(trs_path, f"{current_idx}번_{safe_title}.txt")
+                
+                if act_massage != "":
+                    a = body.find(act_massage)
+                    if a > 0:
+                        body = body[0:a]
 
                 with open(trs_file_path, "w", encoding="utf-8") as f:
                     f.write(subtitle + "\n\n" + body + "\n\n")
 
-                # 진행률 갱신
                 with progress_state["lock"]:
                     progress_state["done"] += 1
                     done = progress_state["done"]
@@ -118,7 +120,6 @@ def fetch_kakuyomu_episode(
                     f"카쿠요무 {current_idx}화 기존 백업 읽기 실패 ({e}). 웹에서 새로 다운로드합니다."
                 )
 
-        # 3. 백업이 없거나 오류 시 웹에서 직접 다운로드 수행
         delay = base_data.DELAY
 
         for attempt in range(max_retries):
@@ -270,8 +271,12 @@ def fetch_kakuyomu_episode(
                     trs_path,
                     f"{current_idx}번_{safe_title}.txt"
                 )
+                
+                if act_massage != "":
+                    a = body.find(act_massage)
+                    if a > 0:
+                        body = body[0:a]
 
-                # trs_path 저장
                 with open(
                     file_path,
                     "w",
@@ -284,7 +289,6 @@ def fetch_kakuyomu_episode(
                         "\n\n"
                     )
 
-                # outfolder/list/작품명/[current_idx] safe_title.txt 백업 저장
                 with open(
                     os.path.join(title_path, f"[{current_idx}] {safe_title}.txt"),
                     "w",
@@ -300,7 +304,6 @@ def fetch_kakuyomu_episode(
                         body_raw
                     )
 
-                # 진행률
                 with progress_state["lock"]:
                     progress_state["done"] += 1
                     done = progress_state["done"]
@@ -458,7 +461,8 @@ def download_kakuyomu_async(
     start,
     end,
     trs_path,
-    label
+    label,
+    act_massage
 ):
     total_count = end - start + 1
 
@@ -532,7 +536,6 @@ def download_kakuyomu_async(
 
         return book_title or novel_code
 
-    # 백업 폴더 경로 생성 (outfolder/list/작품명)
     r_book_title = re.sub(r"^【.*?】", "", book_title)
     r_book_title = re.sub(r"【.*?】$", "", r_book_title)
     r_book_title = re.sub(r'[\\/:*?"<>|]', "_", r_book_title).strip()
@@ -576,6 +579,7 @@ def download_kakuyomu_async(
                 label_callback,
                 total_count,
                 progress_state,
+                act_massage,
                 print
             ),
             daemon=True

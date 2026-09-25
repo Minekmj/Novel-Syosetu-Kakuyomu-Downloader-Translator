@@ -141,7 +141,6 @@ def fetch_syosetu_episode(
     max_retries=3
 ):
     with sem:
-        # 1. 백업 폴더(outfolder/list/작품명)에 이미 파일이 있는지 확인
         backup_file = None
         prefix = f"[{ep_num}] "
         if os.path.exists(title_path):
@@ -150,13 +149,11 @@ def fetch_syosetu_episode(
                     backup_file = os.path.join(title_path, fname)
                     break
 
-        # 2. 백업 파일이 존재하면 읽어서 trs_path에 복원 후 다운로드 생략
         if backup_file and os.path.exists(backup_file):
             try:
                 with open(backup_file, "r", encoding="utf-8") as f:
                     content = f.read()
 
-                # 포맷: =*30 \n title \n =*30 \n\n\n\n body
                 parts = content.split("=" * 30)
                 if len(parts) >= 3:
                     title = parts[1].strip()
@@ -171,7 +168,6 @@ def fetch_syosetu_episode(
                 with open(trs_file_path, "w", encoding="utf-8") as f:
                     f.write(title + "\n\n" + body + "\n\n")
 
-                # 진행률 갱신
                 with progress_state["lock"]:
                     progress_state["done"] += 1
                     done = progress_state["done"]
@@ -185,7 +181,6 @@ def fetch_syosetu_episode(
                     f"Syosetu {ep_num}화 기존 백업 읽기 실패 ({e}). 웹에서 새로 다운로드합니다."
                 )
 
-        # 3. 백업이 없거나 오류 시 웹에서 직접 다운로드 수행
         delay = getattr(
             base_data,
             "DELAY",
@@ -259,7 +254,6 @@ def fetch_syosetu_episode(
                     strip=True
                 )
 
-                # 이미지 다운로드
                 img_tags = body_tag.find_all("img")
                 has_downloaded_img = False
 
@@ -330,7 +324,6 @@ def fetch_syosetu_episode(
 
                             img.decompose()
 
-                # 루비 제거
                 for tag in body_tag.find_all(
                     ["rp", "rt"]
                 ):
@@ -341,7 +334,6 @@ def fetch_syosetu_episode(
                         ruby.get_text(strip=True)
                     )
 
-                # <br> 처리
                 if base_data.EXPORT_TEXT:
                     for br in body_tag.find_all(
                         ["br", "br/"]
@@ -404,7 +396,6 @@ def fetch_syosetu_episode(
                         "\n\n"
                     )
 
-                # outfolder/list/작품명/[ep_num] safe_title.txt 저장
                 with open(
                     os.path.join(title_path, f"[{ep_num}] {safe_title}.txt"),
                     "w",
@@ -434,7 +425,6 @@ def fetch_syosetu_episode(
                     f"{progress_percent}%"
                 )
 
-                # 이미지가 있으면 서버 부담을 고려해 더 대기
                 wait_time = (
                     delay * 5
                     if has_downloaded_img
@@ -491,7 +481,6 @@ def download_syosetu_async(
 
     label_callback = label.setText
 
-    # 작품 제목 확인
     session = create_session()
 
     try:
@@ -533,7 +522,6 @@ def download_syosetu_async(
 
     r_book_title = r_book_title.strip()
 
-    # outfolder/list/작품명 경로로 변경
     title_path = os.path.join(base_data.OUTFOLDER, "list", r_book_title)
 
     os.makedirs(title_path, exist_ok=True)
@@ -558,7 +546,6 @@ def download_syosetu_async(
         threads.append(thread)
         thread.start()
 
-    # 모든 다운로드 스레드 종료 대기
     for thread in threads:
         thread.join()
 

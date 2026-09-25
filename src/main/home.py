@@ -70,9 +70,51 @@ class EditTitleDialog(QDialog):
 
     def get_new_title(self):
         return self.title_edit.text().strip()
+    
+class EditActDialog(QDialog):
+    def __init__(self, current_massage, parent=None):
+        super().__init__(parent)
+
+        self.setWindowTitle("작가의 말 트리거 수정")
+        self.setFixedSize(630, 180)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+
+        self.massage_edit = QLineEdit(self)
+        self.massage_edit.setText(current_massage)
+        self.massage_edit.setSelection(0, len(current_massage))
+        layout.addWidget(self.massage_edit)
+        
+        label = QLabel("카쿠요무에서 작가의 말을 구분하는 텍스트를 찾아 붙여 넣으세요.\n이는 백업 텍스트에는 반영되지 않으며, 작품 다운로드로 인한 다운로드에서 이 트리거 이후의 글자를 제외합니다.")
+        label.setObjectName("lbl_original_title")
+        layout.addWidget(label)
+
+        layout.addStretch()
+
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(8)
+        btn_layout.addStretch()
+
+        cancel_btn = QPushButton("취소", self)
+        cancel_btn.setObjectName("secondaryBtn")
+        cancel_btn.clicked.connect(self.reject)
+
+        save_btn = QPushButton("저장", self)
+        save_btn.setObjectName("primaryBtn")
+        save_btn.clicked.connect(self.accept)
+
+        btn_layout.addWidget(cancel_btn)
+        btn_layout.addWidget(save_btn)
+
+        layout.addLayout(btn_layout)
+
+    def get_new_massage(self):
+        return self.massage_edit.text().strip()
 
 class DownloadDetailDialog(QDialog):
-    def __init__(self, site_url, title_text, last_down, parent, now_s, row_widget):
+    def __init__(self, site_url, title_text, last_down, parent, now_s, act_massage, row_widget):
         super().__init__(parent)
         self.site_url = site_url
         self.title_text = title_text
@@ -80,6 +122,7 @@ class DownloadDetailDialog(QDialog):
         self.now_state = now_s
         self.row_widget = row_widget
         self.now_res = ""
+        self.act_massage = act_massage
         
         self.setWindowTitle("다운로드")
         self.setFixedSize(360, 220)
@@ -174,7 +217,7 @@ class DownloadDetailDialog(QDialog):
         self.down_btn.setEnabled(False)
         self.down_btn.setText("진행 중...")
 
-        self.thread = thread_pyqt.DownloadThread(self.site_url, start, end, self.prograss, self.title_text)
+        self.thread = thread_pyqt.DownloadThread(self.site_url, start, end, self.prograss, self.title_text, self.act_massage)
         self.thread.finished_signal.connect(
             lambda success, err_msg: self.on_download_finished(success, err_msg, start, end)
         )
@@ -211,13 +254,14 @@ class DownloadDetailDialog(QDialog):
 class AddressRowWidget(QWidget):
     status_updated = Signal()
 
-    def __init__(self, site_url, title_text=None, parent=None, last="0", down_time="0"):
+    def __init__(self, site_url, title_text=None, parent=None, last="0", down_time="0", act_massage = ""):
         super().__init__(parent)
         self.site_url = site_url
         self.last = "0" if last == "" else last
         self.down_time = "0" if not down_time else down_time
         self.now = "-"
         self.time = ""
+        self.act_massage = act_massage
 
         self.is_empty = not site_url
 
@@ -351,16 +395,20 @@ class AddressRowWidget(QWidget):
         menu = QMenu(self)
 
         edit_title_action = QAction("제목 수정", self)
+        act_massege_action = QAction("작가의 말 트리거 수정", self)
         copy_action = QAction("URL 복사", self)
         visit_action = QAction("브라우저 열기", self)
         delete_action = QAction("삭제", self)
 
         edit_title_action.triggered.connect(self.open_edit_title_dialog)
+        act_massege_action.triggered.connect(self.open_edit_act_massege_dialog)
         copy_action.triggered.connect(lambda: QApplication.clipboard().setText(self.site_url))
         visit_action.triggered.connect(self.open_browser)
         delete_action.triggered.connect(self.del_btn.click)
 
         menu.addAction(edit_title_action)
+        if "https://kakuyomu.jp/" in self.site_url:
+            menu.addAction(act_massege_action)
         menu.addSeparator()
         menu.addAction(copy_action)
         menu.addAction(visit_action)
@@ -403,12 +451,27 @@ class AddressRowWidget(QWidget):
 
             self.title_text = new_title
             self.title_lbl.setText(new_title)
+            
+    def open_edit_act_massege_dialog(self):
+        dialog = EditActDialog(self.act_massage, self)
+
+        if dialog.exec():
+            new_massage = dialog.get_new_massage()
+
+            data = load_data()
+
+            if "list" in data and self.title_text in data["list"]:
+                data["list"][self.title_text]["act_masseage"] = new_massage
+
+            save_data(data)
+
+            self.act_massage = new_massage
 
     def open_browser(self):
         webbrowser.open(self.site_url)
 
     def open_detail_dialog(self):
-        dialog = DownloadDetailDialog(self.site_url, self.title_text, self.last, self, self.now, self)
+        dialog = DownloadDetailDialog(self.site_url, self.title_text, self.last, self, self.now, self.act_massage, self)
         dialog.show()
     
 
@@ -597,13 +660,15 @@ class MainWindow(QMainWindow):
             site_url = item.get("src", "")
             last_down = item.get("down", "0")
             down_time = item.get("down_time", "0")
+            act_masseage = item.get("act_masseage", "")
 
             row = AddressRowWidget(
                 site_url,
                 title_text=title,
                 parent=self,
                 last=last_down,
-                down_time=down_time
+                down_time=down_time,
+                act_massage=act_masseage
             )
 
             row.del_btn.clicked.connect(lambda _, r=row: self.delete_row(r))
@@ -754,54 +819,54 @@ class MainWindow(QMainWindow):
 
     def open_manager_path_dialog(self):
         data = load_data()
-
+        
         if data.get("theme"):
             data_iteam.THEME_NAME = data["theme"]
-
         dialog = setting_ui.PathSettingsDialog(self)
-
+        
         if data.get("src"):
             dialog.path_edit.setText(data["src"])
         elif down.downin.base_data.OUTFOLDER:
             dialog.path_edit.setText(down.downin.base_data.OUTFOLDER)
-
+            
         dialog.raw_text_toggle.setChecked(data.get("RAW_TEXT", False))
         dialog.origin_name_toggle.setChecked(data.get("origin_name", False))
         dialog.ai_prompt_edit.setPlainText(data.get("AI_PROMPT", ""))
-
         censor_adv = data.get("CENSOR_ADVANCED", False)
         dialog.censor_toggle.setChecked(censor_adv)
         dialog.censor_sub_widget.setVisible(censor_adv)
         dialog.shuffle_toggle.setChecked(data.get("CENSOR_SHUFFLE", True))
-
         saved_mode = data.get("CENSOR_MODE", "word")
         idx = dialog.mode_combo.findData(saved_mode)
-
+        
         if idx >= 0:
             dialog.mode_combo.setCurrentIndex(idx)
-
         dialog.papago_toggle.setChecked(data.get("CENSOR_PAPAGO", False))
-
+        
+        if "epub_data" in data:
+            dialog.set_epub_data(data["epub_data"])
+            
         if dialog.exec():
             selected_path = dialog.path_edit.text().strip()
             selected_theme = data_iteam.THEME_DATA.get(dialog.theme_combo.currentText(), "DARK")
+            
             raw_text = dialog.get_raw_text()
             origin_name = dialog.get_origin_name()
             ai_prompt = dialog.get_ai_prompt()
-
             censor_advanced = dialog.get_censor_advanced()
             censor_shuffle = dialog.get_censor_shuffle()
             censor_mode = dialog.get_censor_mode()
             censor_papago = dialog.get_censor_papago()
-
+            epub_data = dialog.get_epub_data()
+            
             if selected_path:
                 down.downin.base_data.OUTFOLDER = selected_path
                 trans_view.OUT = selected_path
                 data["src"] = selected_path
-
+                
             down.downin.base_data.EXPORT_TEXT = raw_text
             down.downin.base_data.ORIGIN_NAME = origin_name
-
+            
             data["theme"] = selected_theme
             data["RAW_TEXT"] = raw_text
             data["origin_name"] = origin_name
@@ -810,15 +875,17 @@ class MainWindow(QMainWindow):
             data["CENSOR_SHUFFLE"] = censor_shuffle
             data["CENSOR_MODE"] = censor_mode
             data["CENSOR_PAPAGO"] = censor_papago
-
+            if not epub_data is None:
+                data["epub_data"] = epub_data
+            
             save_data(data)
-
+            
             trans_view.trans_ai.CUSTOM_AI_PROMPT = ai_prompt
             trans_view.trans_ai.USE_ADVANCED_CENSOR = censor_advanced
             trans_view.trans_ai.CENSOR_SHUFFLE = censor_shuffle
             trans_view.trans_ai.CENSOR_EXTRACT_MODE = censor_mode
             trans_view.trans_ai.CENSOR_PAPAGO = censor_papago
-
+            
             if data["theme"] != data_iteam.THEME_NAME:
                 data_iteam.THEME_NAME = data["theme"]
                 data_iteam.rest()

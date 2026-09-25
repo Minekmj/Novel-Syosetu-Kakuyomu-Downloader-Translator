@@ -75,7 +75,8 @@ def Download(
     start,
     end,
     label,
-    title
+    title,
+    act_massage = ""
 ):
     start = int(start)
     end = int(end)
@@ -101,7 +102,8 @@ def Download(
             start,
             end,
             trs_path,
-            label
+            label,
+            act_massage
         ))
     else:
         book_title = Fs(naru.download_syosetu_async(
