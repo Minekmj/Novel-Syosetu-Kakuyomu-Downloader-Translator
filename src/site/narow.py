@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 import os
 import re
 import secrets
@@ -620,6 +621,121 @@ def new_syosetu(novel_code, have_make=False):
                 return last_ep_num
 
             return (last_ep_num, base_data.normalize_date(latest_date))
+
+        except Exception as e:
+            print(f"오류 발생 ({novel_code}): {e}")
+            return None
+        
+def find_ep_syosetu_average(novel_code, date_or_index):
+    url = f"https://ncode.syosetu.com/{novel_code}/"
+
+    with create_session() as session:
+        try:
+            res = session.get(url, timeout=15)
+            if res.status_code != 200:
+                return None
+
+            soup = BeautifulSoup(res.text, "html.parser")
+            episodes_data = []
+
+            next_page = soup.find("a", class_="c-pager__item c-pager__item--last")
+            last_page = 1
+
+            if next_page:
+                href = next_page.get("href", "")
+                match = re.search(r"[?&]p=(\d+)", href)
+                if match:
+                    last_page = int(match.group(1))
+
+            for page in range(1, last_page + 1):
+                if page == 1:
+                    page_soup = soup
+                else:
+                    page_res = session.get(f"{url}?p={page}", timeout=15)
+                    if page_res.status_code != 200:
+                        continue
+                    page_soup = BeautifulSoup(page_res.text, "html.parser")
+
+                body_tag = page_soup.find("div", class_="p-eplist")
+                if not body_tag:
+                    continue
+
+                sublists = body_tag.find_all("div", class_="p-eplist__sublist")
+                for sublist in sublists:
+                    ep_tag = sublist.find("a", class_="p-eplist__subtitle")
+                    if not ep_tag:
+                        continue
+
+                    href = ep_tag.get("href", "")
+                    ep_match = re.search(r"/(\d+)/", href)
+                    if not ep_match:
+                        continue
+
+                    ep_num = int(ep_match.group(1))
+                    update_tag = sublist.find("div", class_="p-eplist__update")
+                    if not update_tag:
+                        continue
+
+                    span_rev = update_tag.find("span", title=True)
+                    if span_rev and "改稿" in span_rev.get("title", ""):
+                        date_text = span_rev["title"]
+                    else:
+                        date_text = update_tag.get_text(" ", strip=True)
+
+                    date_match = re.search(r"(\d{4})[年/\-.]\s*(\d{1,2})[月/\-.]\s*(\d{1,2})(?:日)?(?:\s+(\d{1,2}):(\d{2}))?", date_text)
+                    if not date_match:
+                        continue
+
+                    year, month, day, hour, minute = date_match.groups()
+                    try:
+                        dt = datetime(int(year), int(month), int(day), int(hour or 0), int(minute or 0))
+                    except ValueError:
+                        continue
+
+                    episodes_data.append((ep_num, dt))
+
+            if not episodes_data:
+                return None
+
+            episodes_data = sorted(set(episodes_data), key=lambda x: x[0], reverse=True)
+
+            if isinstance(date_or_index, int):
+                if date_or_index == -1:
+                    selected = episodes_data
+                elif date_or_index <= 0:
+                    return None
+                else:
+                    selected = episodes_data[:date_or_index]
+            else:
+                try:
+                    if isinstance(date_or_index, datetime):
+                        target_date = date_or_index
+                    else:
+                        date_text = str(date_or_index).strip()
+                        parsed = re.search(r"(\d{4})[年/\-.]\s*(\d{1,2})[月/\-.]\s*(\d{1,2})(?:日)?", date_text)
+                        if not parsed:
+                            return None
+                        target_date = datetime(int(parsed.group(1)), int(parsed.group(2)), int(parsed.group(3)))
+                except (ValueError, TypeError):
+                    return None
+
+                selected = [item for item in episodes_data if target_date - timedelta(days=30) <= item[1] <= target_date]
+
+            if len(selected) < 2:
+                return None
+
+            selected = sorted(selected, key=lambda x: x[1])
+
+            intervals = []
+            for (_, prev_dt), (_, curr_dt) in zip(selected, selected[1:]):
+                diff = (curr_dt - prev_dt).total_seconds() / 86400
+                if diff >= 0:
+                    intervals.append(diff)
+
+            if not intervals:
+                return None
+
+            return sum(intervals) / len(intervals)
 
         except Exception as e:
             print(f"오류 발생 ({novel_code}): {e}")

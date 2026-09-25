@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 import json
 import os
 import re
@@ -613,6 +614,187 @@ def new_hameln(novel_code, have_make=False):
 
     except Exception as e:
         print(f"하멜른 에피소드 수 확인 오류: {e}")
+        return None
+
+    finally:
+        session.close()
+        
+def find_ep_hameln_average(novel_code, date_or_index):
+    nid, is_r18 = parse_novel_code(novel_code)
+    base_url = "https://h.syosetu.org" if is_r18 else "https://syosetu.org"
+    url = f"{base_url}/novel/{nid}/"
+
+    session = create_session(is_r18=is_r18)
+    http_cookie(session, is_r18=is_r18)
+
+    try:
+        res = http_get(url, session=session, is_r18=is_r18, headers={"Referer": url}, timeout=15)
+        if res.status_code != 200:
+            return None
+
+        html_text = res.text
+        episodes = get_hameln_episodes(nid, session, html_text, is_r18=is_r18)
+
+        if not episodes:
+            return None
+
+        def parse_date(value):
+            if value is None:
+                return None
+            value = str(value).strip()
+            if not value:
+                return None
+            try:
+                dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                return dt.replace(tzinfo=None)
+            except (ValueError, TypeError):
+                pass
+            match = re.search(
+                r"(\d{4})[年/\-.]\s*(\d{1,2})[月/\-.]\s*(\d{1,2})(?:日)?"
+                r"(?:\s+(\d{1,2}):(\d{2}))?",
+                value
+            )
+            if not match:
+                return None
+            try:
+                return datetime(
+                    int(match.group(1)),
+                    int(match.group(2)),
+                    int(match.group(3)),
+                    int(match.group(4) or 0),
+                    int(match.group(5) or 0)
+                )
+            except ValueError:
+                return None
+
+        date_values = []
+        soup = BeautifulSoup(html_text, "html.parser")
+        ep_items = soup.select("li.episode-list__item")
+
+        for item in ep_items:
+            dt = None
+
+            revision_tag = item.select_one(".episode-list__revision[title]")
+            if revision_tag and revision_tag.get("title"):
+                dt = parse_date(revision_tag.get("title"))
+
+            if dt is None:
+                time_tag = item.select_one("time.episode-list__date, time")
+                if time_tag:
+                    dt = parse_date(
+                        time_tag.get("datetime") or time_tag.get_text(strip=True)
+                    )
+
+            if dt is not None:
+                date_values.append(dt)
+
+        if len(date_values) < 2:
+            date_values = []
+
+            for episode in episodes:
+                dt = None
+
+                if isinstance(episode, dict):
+                    for key in (
+                        "publishedAt",
+                        "published_at",
+                        "updatedAt",
+                        "updated_at",
+                        "date",
+                        "datetime",
+                        "createdAt",
+                        "created_at"
+                    ):
+                        if episode.get(key):
+                            dt = parse_date(episode.get(key))
+                            if dt:
+                                break
+
+                elif isinstance(episode, (list, tuple)):
+                    for value in episode:
+                        dt = parse_date(value)
+                        if dt:
+                            break
+
+                elif isinstance(episode, str):
+                    dt = parse_date(episode)
+
+                if dt:
+                    date_values.append(dt)
+
+        if len(date_values) < 2:
+            date_values = []
+
+            ep_rows = [
+                tr for tr in soup.find_all("tr")
+                if tr.find(
+                    "a",
+                    href=re.compile(rf"(?:/novel/{nid}/|\./)?\d+\.html")
+                )
+            ]
+
+            for row in ep_rows:
+                dt = None
+
+                time_tag = row.find("time")
+                if time_tag:
+                    dt = parse_date(
+                        time_tag.get("datetime") or time_tag.get_text(strip=True)
+                    )
+
+                if dt is None:
+                    nobr = row.find("nobr")
+                    if nobr:
+                        dt = parse_date(nobr.get_text(strip=True))
+
+                if dt:
+                    date_values.append(dt)
+
+        if len(date_values) < 2:
+            return None
+
+        date_values.sort(reverse=True)
+
+        if isinstance(date_or_index, int):
+            if date_or_index == -1:
+                selected = date_values
+            elif date_or_index <= 0:
+                return None
+            else:
+                selected = date_values[:date_or_index]
+        else:
+            target_date = parse_date(date_or_index)
+
+            if target_date is None:
+                return None
+
+            start_date = target_date - timedelta(days=30)
+
+            selected = [
+                dt for dt in date_values
+                if start_date <= dt <= target_date
+            ]
+
+        if len(selected) < 2:
+            return None
+
+        selected.sort()
+
+        intervals = []
+
+        for prev_dt, curr_dt in zip(selected, selected[1:]):
+            diff = (curr_dt - prev_dt).total_seconds() / 86400
+
+            if diff >= 0:
+                intervals.append(diff)
+
+        if not intervals:
+            return None
+
+        return sum(intervals) / len(intervals)
+
+    except Exception as e:
+        print(f"하멜른 연재 간격 계산 오류: {e}")
         return None
 
     finally:

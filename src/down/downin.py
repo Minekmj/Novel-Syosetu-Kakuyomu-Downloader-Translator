@@ -122,3 +122,4 @@ down.set_base_data(base_data, create_merged_txt)
 CheckTitle = down.CheckTitle
 Download = down.Download
 new_number = down.new_number
+number_average = down.number_average

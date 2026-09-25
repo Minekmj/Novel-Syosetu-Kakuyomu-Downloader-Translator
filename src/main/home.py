@@ -29,6 +29,8 @@ data_iteam.rest()
 thread_pyqt.DOWN = down
 qr_view.down = down
 
+findsyou.detail_ui.DOWN = down.downin
+
 setting_ui.data_iteam = data_iteam
 
 trans_view.OUT = down.downin.base_data.OUTFOLDER

@@ -1,16 +1,16 @@
+from datetime import datetime
 from PySide6.QtCore import QThread, QUrl, Signal, Qt, QTimer
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QTextEdit,
-    QDialog,
+    QPushButton, QTextEdit, QDialog,
     QFrame, QApplication
 )
 from PySide6.QtGui import QCursor, QDesktopServices
-
 from src.find.site_list import Sites, get_search_class, site_point_text
 from src.trans.trans import Translator
-
 import src.find.tag as tag_ui
+
+DOWN = None
 
 class ClickableUrlLabel(QLabel):
     def __init__(self, url_string, parent=None):
@@ -39,18 +39,34 @@ class DetailWorker(QThread):
             search_class = get_search_class(self.site)
             description = search_class.fetch_detail_description(self.work_url)
             translated_desc = description
-
             if self.auto_translate and description:
                 try:
                     translated_desc = Translator(description, True)
                 except Exception as e:
                     translated_desc = f'[번역 오류: {e}]\n\n{description}'
-
             self.finished.emit(description, translated_desc)
         except Exception as e:
             print(f'상세 정보 오류: {e}')
             self.finished.emit('', '')
 
+class AverageWorker(QThread):
+    finished = Signal(object, object)
+
+    def __init__(self, site, target):
+        super().__init__()
+        self.site = site
+        self.target = target
+
+    def run(self):
+        try:
+            if DOWN is None:
+                self.finished.emit(self.target, None)
+                return
+            result = DOWN.number_average(self.site, self.target)
+            self.finished.emit(self.target, result)
+        except Exception as e:
+            print(f'연재 간격 계산 오류: {e}')
+            self.finished.emit(self.target, None)
 
 class CopyTagButton(QPushButton):
     def __init__(self, display_text, original_text, parent=None):
@@ -66,14 +82,13 @@ class CopyTagButton(QPushButton):
         self.setText('✓ 복사됨')
         QTimer.singleShot(800, lambda: self.setText(self.display_text))
 
-
 class DetailDialog(QDialog):
     def __init__(self, item_data, auto_translate, site, parent=None):
         super().__init__(parent)
         self.item_data = item_data
         self.auto_translate = auto_translate
         self.site = site
-
+        self.average_workers = []
         self.setWindowTitle('작품 상세 정보')
         self.resize(760, 760)
         self.setMinimumSize(620, 620)
@@ -82,15 +97,12 @@ class DetailDialog(QDialog):
         layout.setContentsMargins(22, 22, 22, 20)
         layout.setSpacing(12)
 
-        title = self.item_data.get(
-            'title_ko',
-            self.item_data.get('title', '')
-        )
+        title = self.item_data.get('title_ko', self.item_data.get('title', ''))
         original_title = self.item_data.get('title', '')
         stars_value = self.item_data.get('stars', '')
         status_value = self.item_data.get('status_episodes', '')
         updated_value = self.item_data.get('updated_at', '')
-        url = self.item_data.get('url', '')
+        self.url = self.item_data.get('url', '')
 
         title_label = QLabel(title)
         title_label.setObjectName('detail_dialog_title')
@@ -105,7 +117,6 @@ class DetailDialog(QDialog):
 
         meta_frame = QFrame()
         meta_frame.setObjectName('detail_meta')
-
         meta_layout = QHBoxLayout(meta_frame)
         meta_layout.setContentsMargins(13, 10, 13, 10)
         meta_layout.setSpacing(18)
@@ -127,12 +138,56 @@ class DetailDialog(QDialog):
         meta_layout.addStretch()
         layout.addWidget(meta_frame)
 
-        if url:
+        self.average_frame = QFrame()
+        self.average_frame.setObjectName('detail_meta')
+        average_layout = QHBoxLayout(self.average_frame)
+        average_layout.setContentsMargins(13, 4, 13, 4)
+        average_layout.setSpacing(10)
+        self.average_labels = {}
+        self.average_buttons = {}
+        average_items = [
+            ('10', '최근 10화', 10),
+            ('30', '최근 30일', datetime.now()),
+            ('all', '전체', -1)
+        ]
+        for key, text, target in average_items:
+            label = QLabel(text)
+            label.setObjectName('detail_meta_text')
+            average_layout.addWidget(label)
+
+            result_label = QLabel('')
+            result_label.setObjectName('detail_average_value')
+            result_label.setMinimumWidth(52)
+            result_label.setAlignment(Qt.AlignCenter)
+            result_label.hide()
+            average_layout.addWidget(result_label)
+
+            button = QPushButton('보기')
+            button.setObjectName('secondaryBtn')
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.setToolTip("보기를 눌르시면 평균 연재 간격이 나옵니다.")
+            button.setFixedHeight(19)
+            button.setFixedHeight(30)
+            button.clicked.connect(lambda checked=False, k=key, t=target: self.load_average(k, t))
+            average_layout.addWidget(button)
+
+            self.average_labels[key] = result_label
+            self.average_buttons[key] = button
+
+            if key != 'all':
+                separator = QFrame()
+                separator.setFrameShape(QFrame.VLine)
+                separator.setObjectName('dialog_separator')
+                average_layout.addWidget(separator)
+
+        layout.addWidget(self.average_frame)
+
+        if self.url:
             url_title = QLabel('작품 주소')
             url_title.setObjectName('detail_section_title')
             layout.addWidget(url_title)
 
-            url_label = ClickableUrlLabel(str(url))
+            url_label = ClickableUrlLabel(str(self.url))
             url_label.setObjectName('detail_url')
             layout.addWidget(url_label)
 
@@ -173,9 +228,7 @@ class DetailDialog(QDialog):
         close_button = QPushButton('닫기')
         close_button.setObjectName('secondaryBtn')
         close_button.setMinimumWidth(100)
-        close_button.setStyleSheet(
-            'QPushButton#secondaryBtn { min-height: 22px; padding: 8px 16px; font-weight: 650; }'
-        )
+        close_button.setStyleSheet('QPushButton#secondaryBtn { min-height: 22px; padding: 8px 16px; font-weight: 650; }')
         close_button.clicked.connect(self.accept)
         bottom.addWidget(close_button)
 
@@ -186,47 +239,71 @@ class DetailDialog(QDialog):
         bottom.addWidget(add_button)
 
         layout.addLayout(bottom)
+
         self.load_detail()
 
+    def load_average(self, key, target):
+        button = self.average_buttons[key]
+        button.setEnabled(False)
+        button.setText('계산 중')
+        self.average_labels[key].setText('…')
+        worker = AverageWorker(self.url, target)
+        worker.finished.connect(lambda result_key, result: self.on_average_finished(result_key, result, key))
+        worker.finished.connect(lambda: self.cleanup_average_worker(worker))
+        self.average_workers.append(worker)
+        worker.start()
+
+    def on_average_finished(self, target, result, key):
+        key = None
+        for k, button in self.average_buttons.items():
+            if (k == '10' and target == 10) or (k == '30' and isinstance(target, datetime)) or (k == 'all' and target == -1):
+                key = k
+                break
+        if key is None:
+            return
+        
+        if result is None:
+            self.average_labels[key].setText('—')
+        else:
+            try:
+                value = float(result)
+                if value < 1:
+                    text = f'{value:.2f}일'
+                elif value == int(value):
+                    text = f'{int(value)}일'
+                else:
+                    text = f'{value:.1f}일'
+                self.average_labels[key].setText(text)
+            except (TypeError, ValueError):
+                self.average_labels[key].setText(str(result))
+        self.average_labels[key].show()
+        self.average_buttons[key].hide()
+
+    def cleanup_average_worker(self, worker):
+        if worker in self.average_workers:
+            self.average_workers.remove(worker)
+        worker.deleteLater()
+
     def load_detail(self):
-        target_url = self.item_data.get(
-            'url' if (self.site == Sites.KAKUYOMU or self.site == Sites.HAMELLEUN or self.site == Sites.HAMELLEUN18) else 'story',
-            ''
-        )
-
-        self.worker = DetailWorker(
-            target_url,
-            self.auto_translate,
-            self.site
-        )
-
+        target_url = self.item_data.get('url' if (self.site == Sites.KAKUYOMU or self.site == Sites.HAMELLEUN or self.site == Sites.HAMELLEUN18) else 'story', '')
+        self.worker = DetailWorker(target_url, self.auto_translate, self.site)
         self.worker.finished.connect(self.on_finished)
         self.worker.start()
 
     def on_finished(self, raw_desc, translated_desc):
         raw_data = str(raw_desc).split('_____1234_____')
         translated_data = str(translated_desc).split('_____1234_____')
-
         description = translated_data[0].strip()
-
-        self.text_detail.setText(
-            description if (description and description != "error") else '작품 소개가 없습니다.'
-        )
+        self.text_detail.setText(description if (description and description != "error") else '작품 소개가 없습니다.')
 
         original_tags = []
         translated_tags = []
 
         if len(raw_data) > 1 and raw_data[1].strip():
-            original_tags = [
-                tag.strip() for tag in raw_data[1].strip().split(',')
-                if tag.strip()
-            ]
+            original_tags = [tag.strip() for tag in raw_data[1].strip().split(',') if tag.strip()]
 
         if len(translated_data) > 1 and translated_data[1].strip():
-            translated_tags = [
-                tag.strip() for tag in translated_data[1].strip().split(',')
-                if tag.strip()
-            ]
+            translated_tags = [tag.strip() for tag in translated_data[1].strip().split(',') if tag.strip()]
 
         if original_tags:
             self.display_tags(original_tags, translated_tags)
@@ -240,22 +317,16 @@ class DetailDialog(QDialog):
         translated_tags = translated_tags or []
 
         for index, original_tag in enumerate(original_tags):
-            display_text = (
-                translated_tags[index]
-                if index < len(translated_tags)
-                else original_tag
-            )
-
+            display_text = translated_tags[index] if index < len(translated_tags) else original_tag
             button = CopyTagButton(display_text, original_tag)
             button.setObjectName('detail_tag_btn')
             self.tags_layout.addWidget(button)
 
     def on_add_clicked(self):
         global click_plus_url, click
-
         click_plus_url = self.item_data.get('url', '')
         click = True
         self.accept()
-        
+
 click = False
 click_plus_url = ''

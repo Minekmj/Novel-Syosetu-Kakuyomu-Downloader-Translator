@@ -155,3 +155,17 @@ def new_number(site, have=False):
         new = Fs(naru.new_syosetu(clean_site, have))
 
     return new
+
+def number_average(site, data):
+    clean_site, site_type = parse_site_info(site)
+
+    if site_type == "hameln":
+        new = Fs(hame.find_ep_hameln_average(clean_site, data))
+    elif site_type == "kakuyomu":
+        new = Fs(kaku.find_ep_kakuyomu_average(clean_site, data))
+    else:
+        new = Fs(naru.find_ep_syosetu_average(clean_site, data))
+    if not new is None:
+        return float(f"{new:.1f}")
+    else:
+        return None

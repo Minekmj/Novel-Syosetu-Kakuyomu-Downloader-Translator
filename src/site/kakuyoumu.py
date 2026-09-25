@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 import json
 import os
 import re
@@ -679,5 +680,125 @@ def new_kakuyomu(novel_code, have_make=False):
         print(f"카쿠요무 에피소드 수 확인 오류: {e}")
         return None
 
+    finally:
+        session.close()
+        
+def find_ep_kakuyomu_average(novel_code, date_or_index):
+    url = f"https://kakuyomu.jp/works/{novel_code}"
+    session = create_session()
+    session.headers.update({"Referer": url})
+
+    try:
+        res = session.get(url, timeout=15)
+        if res.status_code != 200:
+            return None
+
+        soup = BeautifulSoup(res.text, "html.parser")
+        html_text = res.text
+        episodes_data = []
+
+        next_data_script = soup.find("script", id="__NEXT_DATA__")
+        if next_data_script and next_data_script.string:
+            try:
+                data = json.loads(next_data_script.string)
+                apollo_state = data.get("props", {}).get("pageProps", {}).get("__APOLLO_STATE__", {})
+                episodes = [
+                    value for key, value in apollo_state.items()
+                    if isinstance(value, dict) and (key.startswith("Episode:") or value.get("__typename") == "Episode")
+                ]
+                seen = set()
+                for ep in episodes:
+                    ep_id = ep.get("id")
+                    published_at = ep.get("publishedAt")
+                    if ep_id is None or not published_at or str(ep_id) in seen:
+                        continue
+                    seen.add(str(ep_id))
+                    try:
+                        dt = datetime.fromisoformat(str(published_at).replace("Z", "+00:00"))
+                    except (ValueError, TypeError):
+                        continue
+                    episodes_data.append((str(ep_id), dt))
+            except Exception:
+                pass
+
+        if not episodes_data:
+            ep_matches = re.findall(r'"__typename"\s*:\s*"Episode"[\s\S]{0,3000}?"id"\s*:\s*"([^"]+)"[\s\S]{0,3000}?"publishedAt"\s*:\s*"([^"]+)"', html_text)
+            if ep_matches:
+                seen = set()
+                for ep_id, published_at in ep_matches:
+                    if ep_id in seen:
+                        continue
+                    try:
+                        dt = datetime.fromisoformat(published_at.replace("Z", "+00:00"))
+                    except (ValueError, TypeError):
+                        continue
+                    seen.add(ep_id)
+                    episodes_data.append((ep_id, dt))
+
+        if not episodes_data:
+            time_tags = soup.select("time.widget-toc-episode-datePublished, li.widget-toc-episode time, time[datetime]")
+            for index, time_tag in enumerate(time_tags):
+                published_at = time_tag.get("datetime") or time_tag.get_text(strip=True)
+                try:
+                    dt = datetime.fromisoformat(str(published_at).replace("Z", "+00:00"))
+                except (ValueError, TypeError):
+                    continue
+                episodes_data.append((str(index), dt))
+
+        if not episodes_data:
+            return None
+
+        unique = {}
+        for ep_id, dt in episodes_data:
+            unique[ep_id] = dt
+        episodes_data = list(unique.items())
+
+        episodes_data.sort(key=lambda x: x[1], reverse=True)
+
+        if isinstance(date_or_index, int):
+            if date_or_index == -1:
+                selected = episodes_data
+            elif date_or_index <= 0:
+                return None
+            else:
+                selected = episodes_data[:date_or_index]
+        else:
+            try:
+                if isinstance(date_or_index, datetime):
+                    target_date = date_or_index
+                else:
+                    date_text = str(date_or_index).strip()
+                    parsed = re.search(r"(\d{4})[年/\-.]\s*(\d{1,2})[月/\-.]\s*(\d{1,2})(?:日)?", date_text)
+                    if not parsed:
+                        return None
+                    target_date = datetime(int(parsed.group(1)), int(parsed.group(2)), int(parsed.group(3)))
+
+                if target_date.tzinfo is None and episodes_data and episodes_data[0][1].tzinfo is not None:
+                    target_date = target_date.replace(tzinfo=episodes_data[0][1].tzinfo)
+
+                start_date = target_date - timedelta(days=30)
+                selected = [item for item in episodes_data if start_date <= item[1] <= target_date]
+            except (ValueError, TypeError):
+                return None
+
+        if len(selected) < 2:
+            return None
+
+        selected.sort(key=lambda x: x[1])
+
+        intervals = []
+        for (_, prev_dt), (_, curr_dt) in zip(selected, selected[1:]):
+            diff = (curr_dt - prev_dt).total_seconds() / 86400
+            if diff >= 0:
+                intervals.append(diff)
+
+        if not intervals:
+            return None
+
+        return sum(intervals) / len(intervals)
+
+    except Exception as e:
+        print(f"카쿠요무 연재 간격 계산 오류: {e}")
+        return None
     finally:
         session.close()
