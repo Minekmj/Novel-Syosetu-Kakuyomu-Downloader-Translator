@@ -1119,19 +1119,19 @@ class TranslateDialog(QDialog):
                 return
 
             name = dialog.selected_name
-            preset = presets.get(name)
-            if not isinstance(preset, dict):
+            presetq = presets.get(name)
+            if not isinstance(presetq, dict):
                 QMessageBox.warning(self, '알림', '프리셋 데이터가 올바르지 않습니다.')
                 return
 
-            models = preset.get('models', [])
+            models = presetq.get('models', [])
             if not isinstance(models, list) or not models:
                 QMessageBox.warning(self, '알림', '프리셋에 모델이 없습니다.')
                 return
 
-            default_br = int(preset.get('br_start', 0))
-            default_isno_x = bool(preset.get('isno_x', False))
-            default_thinking = str(preset.get('thinking_budget', '기본값'))
+            default_br = int(presetq.get('br_start', 0))
+            default_isno_x = bool(presetq.get('isno_x', False))
+            default_thinking = str(presetq.get('thinking_budget', '기본값'))
 
             new_models = []
             used_names = set()
@@ -1178,12 +1178,12 @@ class TranslateDialog(QDialog):
             self.selected_models = new_models
             self.active_model_index = -1
 
-            max_chars = str(preset.get('max_chars', 5000))
+            max_chars = str(presetq.get('max_chars', 5000))
             if self.chars_combo.findText(max_chars) < 0:
                 self.chars_combo.addItem(max_chars)
             self.chars_combo.setCurrentText(max_chars)
 
-            self.glossary_enabled = bool(preset.get('glossary_enabled', True))
+            self.glossary_enabled = bool(presetq.get('glossary_enabled', True))
             self.glossary_toggle_btn.setChecked(self.glossary_enabled)
             self.update_glossary_button()
 
