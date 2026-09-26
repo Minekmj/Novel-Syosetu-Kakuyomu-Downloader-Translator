@@ -27,6 +27,7 @@ class TranslateDialog(QDialog):
         super().__init__(parent)
         self.is_trans = False
         self.is_stop = False
+        self.is_stop_i = False
         self.file_path = ''
         self.file_title = ''
         self.current_dictionary = {}
@@ -140,7 +141,7 @@ class TranslateDialog(QDialog):
         left_layout.addWidget(self.model_scroll)
 
         self.settings_tab = QTabWidget()
-        self.settings_tab.setObjectName('no_back-settingsTab')
+        self.settings_tab.setObjectName('settingsTab')
         self.settings_tab.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.settings_tab.setAutoFillBackground(False)
         tab_params = QWidget()
@@ -1337,8 +1338,11 @@ class TranslateDialog(QDialog):
             self.add_log('해당 작품에 등록된 용어집이 없습니다.')
 
     def start_translate(self):
-        if self.is_trans:
+        if self.is_trans and not self.is_stop:
             self.stop_trans()
+            return
+        elif self.is_trans and not self.is_stop_i:
+            self.stop_trans_i()
             return
 
         if not self.file_path:
@@ -1377,6 +1381,7 @@ class TranslateDialog(QDialog):
 
         self.is_trans = True
         self.is_stop = False
+        self.is_stop_i = False
         self.start_btn.setText('번역 중지')
         self.progress_bar.setValue(0)
         self.percent_label.setText('0%')
@@ -1385,7 +1390,7 @@ class TranslateDialog(QDialog):
         self.add_log('=' * 55)
         self.add_log('번역 시작')
         for i, config in enumerate(model_configs, 1):
-            censor_state = "건너뜀(isno_x)" if config['isno_x'] else "적용"
+            censor_state = "건너뜀" if config['isno_x'] else "적용"
             self.add_log(
                 f"모델 {i}: {config['model']} / RPM {config['rpm']} / Temp {config['temperature']} / "
                 f"동시 {config['concurrency']} / 분할시작 {config['br_start']} / 검열: {censor_state} / 추론: {config.get('thinking_budget', '기본값')}"
@@ -1405,6 +1410,7 @@ class TranslateDialog(QDialog):
                 max_chars,
                 dicts=dict_data,
                 check=self.get_out,
+                check_i=self.get_out_i,
                 br_start=br_starts,
                 isno_x=isno_xs,
                 thinking_budget=thinking_budgets
@@ -1423,11 +1429,21 @@ class TranslateDialog(QDialog):
             return
         self.is_stop = True
         self.add_log('중지: 번역 중지 요청 중... 작업 종료 후 중지')
+        self.start_btn.setText('중지 중... (다시 눌를 시 강제 번역 종료)')
+
+    def stop_trans_i(self):
+        if not self.is_trans:
+            return
+        self.is_stop_i = True
+        self.add_log('중지: 번역 강제 중지 요청 중...')
         self.start_btn.setEnabled(False)
         self.start_btn.setText('중지 중...')
 
     def get_out(self):
         return self.is_stop
+    
+    def get_out_i(self):
+        return self.is_stop_i
 
     def update_progress(self, done, total, message):
         total = max(int(total), 1)
@@ -1505,6 +1521,7 @@ class TranslateDialog(QDialog):
         self.start_btn.setText('번역 시작')
         self.is_trans = False
         self.is_stop = False
+        self.is_stop_i = False
 
         if success:
             self.progress_bar.setValue(100)

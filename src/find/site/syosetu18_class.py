@@ -2,10 +2,8 @@ from collections import OrderedDict
 from datetime import datetime, timedelta
 import re
 from urllib.parse import urljoin, urlencode, unquote_plus
-
 from bs4 import BeautifulSoup
 import requests
-
 import src.find.site.site_data as sf
 from src.trans.trans import Translator
 
@@ -18,27 +16,49 @@ class SyosetuSearch18:
     BASE_URL = "https://h.syosetu.org"
     SEARCH_URL = "https://h.syosetu.org/search/"
 
-    GENRES = {}
- 
-    NO_POINT = True
+    GENRES = {
+        "전체": "",
+        "모험・배틀": "ジャンル：冒険・バトル",
+        "전기": "ジャンル：戦記",
+        "연애": "ジャンル：恋愛",
+        "스포츠": "ジャンル：スポーツ",
+        "코미디": "ジャンル：コメディ",
+        "공포": "ジャンル：ホラー",
+        "미스터리": "ジャンル：ミステリー",
+        "일상": "ジャンル：日常",
+        "문예": "ジャンル：文芸",
+        "논 장르": "ジャンル：ノンジャンル",
+    }
 
+    NO_POINT = True
     FLAGS_MAIN = OrderedDict()
 
     SORT_ORDERS = {
-        "기본": "0", "신착순": "0", "시착순": "0",
+        "기본": "0",
+        "신착순": "0",
+        "시착순": "0",
         "최종 갱신순": "45",
         "종합 평가순": "28",
-        "평균평가 높은 순": "4", "평균 평가순": "4",
-        "가중 평가 높은 순": "42", "가중평균순": "42",
-        "이야기당 문자 순": "6", "1화 문자수순": "6",
-        "첫 개시일": "8", "첫 게시일": "8",
+        "평균평가 높은 순": "4",
+        "평균 평가순": "4",
+        "가중 평가 높은 순": "42",
+        "가중평균순": "42",
+        "이야기당 문자 순": "6",
+        "1화 문자수순": "6",
+        "첫 개시일": "8",
+        "첫 게시일": "8",
         "총 평가 수(많은 순)": "18",
-        "연간 종합평가": "33", "분기 종합평가": "32",
-        "월간 종합평가": "31", "주간 종합평가": "30",
+        "연간 종합평가": "33",
+        "분기 종합평가": "32",
+        "월간 종합평가": "31",
+        "주간 종합평가": "30",
         "일간 종합평가": "29",
-        "무작위": "37", "랜덤": "37",
-        "이야기 많은 순": "24", "화수순": "24",
-        "감상 많은 순": "22", "감상순": "22",
+        "무작위": "37",
+        "랜덤": "37",
+        "이야기 많은 순": "24",
+        "화수순": "24",
+        "감상 많은 순": "22",
+        "감상순": "22",
         "즐겨찾기순": "10",
         "총 글자수순": "20",
     }
@@ -84,22 +104,16 @@ class SyosetuSearch18:
         req_headers = dict(sf.BASE_HEADERS)
         if headers:
             req_headers.update(headers)
-
         res = http_session.get(url, headers=req_headers, timeout=timeout)
-
         if res.status_code == 403:
             print(f"[하멜른 R18 403 차단 감지] reset(True) 호출 및 재시도: {url}")
             sf.reset(True)
             sf.COOKIES["over18"] = "off"
             http_session.cookies.update(sf.COOKIES)
-            
-            # reset 후 변경되었을 수 있는 BASE_HEADERS를 다시 적용
             req_headers = dict(sf.BASE_HEADERS)
             if headers:
                 req_headers.update(headers)
-
             res = http_session.get(url, headers=req_headers, timeout=timeout)
-
         return res
 
     @staticmethod
@@ -123,10 +137,15 @@ class SyosetuSearch18:
         jp_origins = []
         seen = set()
 
+        for fixed_origin in ("原作：オリジナル", "原作：二次創作"):
+            seen.add(fixed_origin)
+            jp_origins.append(fixed_origin)
+
         for page in (1, 2):
             try:
                 url = f"{cls.SEARCH_URL}?mode=search_gensaku_list&word=&filter=1&page={page}&r18=1"
                 res = cls._get(url, headers={"referer": cls.SEARCH_URL}, timeout=12)
+
                 if res.status_code != 200:
                     continue
 
@@ -137,16 +156,21 @@ class SyosetuSearch18:
                     href = a.get("href", "")
                     decoded_href = unquote_plus(href)
 
-                    if "原作：" in decoded_href or "原作:" in decoded_href:
-                        jp_name = a.get_text(strip=True)
+                    if "原作：" not in decoded_href and "原作:" not in decoded_href:
+                        continue
 
-                        if not jp_name:
-                            match = re.search(r"原作[：:]([^&]+)", decoded_href)
-                            jp_name = match.group(1).strip() if match else ""
+                    jp_name = a.get_text(" ", strip=True)
 
-                        if jp_name and jp_name not in seen:
-                            seen.add(jp_name)
-                            jp_origins.append(jp_name)
+                    if not jp_name:
+                        match = re.search(r"原作[：:]([^&]+)", decoded_href)
+                        jp_name = match.group(1).strip() if match else ""
+
+                    if jp_name in ("オリジナル", "二次創作"):
+                        jp_name = f"原作：{jp_name}"
+
+                    if jp_name and jp_name not in seen:
+                        seen.add(jp_name)
+                        jp_origins.append(jp_name)
 
             except Exception as e:
                 print(f"[하멜른 R18 FLAGS_MAIN 수집 에러 (page {page})] {e}")
@@ -159,31 +183,40 @@ class SyosetuSearch18:
 
         for i in range(0, len(jp_origins), chunk_size):
             chunk = jp_origins[i:i + chunk_size]
+
             try:
                 combined_text = "\n".join(chunk)
                 translated_combined = Translator(combined_text, True)
-                lines = [line.strip() for line in translated_combined.split("\n") if line.strip()]
+                lines = [
+                    line.strip()
+                    for line in translated_combined.split("\n")
+                    if line.strip()
+                ]
 
                 if len(lines) == len(chunk):
                     ko_origins.extend(lines)
                 else:
                     for item in chunk:
                         try:
-                            ko_origins.append(str(Translator(item, True)).strip() or item)
+                            ko_origins.append(
+                                str(Translator(item, True)).strip() or item
+                            )
                         except Exception:
                             ko_origins.append(item)
+
             except Exception as e:
                 print(f"[하멜른 R18 FLAGS_MAIN 번역 에러 (청크 {i})] {e}")
-                for item in chunk:
-                    ko_origins.append(item)
+                ko_origins.extend(chunk)
 
         flags_main = OrderedDict()
         used_keys = set()
 
         for jp, ko in zip(jp_origins, ko_origins):
             display_name = ko if ko else jp
+
             if display_name in used_keys:
                 display_name = f"{display_name} ({jp})"
+
             used_keys.add(display_name)
             flags_main[display_name] = jp
 
@@ -199,9 +232,36 @@ class SyosetuSearch18:
     def fetch_search_results(cls, params):
         try:
             page = max(1, int(params.get("page", 1)))
-
             word = str(params.get("query", "")).strip()
             search_words = []
+
+            genre_input = params.get("genre_val")
+
+            if genre_input:
+                genre_values = (
+                    genre_input
+                    if isinstance(genre_input, (list, tuple, set))
+                    else [genre_input]
+                )
+
+                for genre in genre_values:
+                    genre = str(genre).strip()
+
+                    if not genre:
+                        continue
+
+                    genre = cls.GENRES.get(genre, genre)
+
+                    if not genre:
+                        continue
+
+                    if genre.startswith("ジャンル:"):
+                        genre = f"ジャンル：{genre[4:]}"
+                    elif not genre.startswith("ジャンル："):
+                        genre = f"ジャンル：{genre}"
+
+                    if genre not in search_words:
+                        search_words.append(genre)
 
             if word:
                 search_words.append(word)
@@ -225,15 +285,21 @@ class SyosetuSearch18:
             )
 
             search_type = "0"
-
             gensaku_val = ""
-            origin_input = params.get("flags_main") or params.get("origin") or params.get("gensaku")
+
+            origin_input = (
+                params.get("flags_main")
+                or params.get("origin")
+                or params.get("gensaku")
+            )
+
             if origin_input:
                 origin = str(origin_input).strip()
+
                 if origin in cls.FLAGS_MAIN:
                     origin = cls.FLAGS_MAIN[origin]
 
-                if origin.startswith("原作：") or origin in ("その他原作", "オリジナル", "二次創作"):
+                if origin.startswith("原作："):
                     gensaku_val = origin
                 elif origin.startswith("原作:"):
                     gensaku_val = f"原作：{origin[3:].strip()}"
@@ -242,7 +308,9 @@ class SyosetuSearch18:
 
             d2_val = ""
             d1_val = ""
+
             period = params.get("last_published")
+
             days = cls.LAST_PUBLISHED_PERIODS.get(
                 period,
                 period if isinstance(period, int) else None
@@ -295,17 +363,17 @@ class SyosetuSearch18:
                     if value is not None:
                         query_params[key] = str(value)
 
-            # 연재 형태
             serial_status = params.get("serial_status")
+
             if serial_status:
                 status_field = cls.SERIAL_STATUSES.get(
                     serial_status,
                     str(serial_status)
                 )
+
                 if status_field:
                     query_params[status_field] = "1"
 
-            # 제외 태그
             exclusion_flags = params.get(
                 "exclusion_flags",
                 params.get("exlusion_flags", [])
@@ -313,24 +381,31 @@ class SyosetuSearch18:
 
             for flag in exclusion_flags:
                 tag_field = cls.FLAG_EXCLUSION.get(flag, flag)
+
                 if tag_field:
                     query_params[tag_field] = "1"
 
             query_params["mode"] = "search_r18"
             query_params["page"] = str(page)
+            query_params["r18"] = "1"
 
             url = cls.SEARCH_URL + "?" + urlencode(query_params)
 
-            res = cls._get(url, headers={"referer": cls.SEARCH_URL}, timeout=12)
+            res = cls._get(
+                url,
+                headers={"referer": cls.SEARCH_URL},
+                timeout=12
+            )
+
             res.raise_for_status()
 
             soup = BeautifulSoup(res.text, "html.parser")
             items = []
-
             cards = soup.select(".search-result")
 
             for card in cards:
                 title_a = card.select_one(".blo_title_link")
+
                 if not title_a:
                     continue
 
@@ -354,6 +429,7 @@ class SyosetuSearch18:
 
                 if sak_div:
                     author_a = sak_div.select_one("a[href*='/user/']")
+
                     if author_a:
                         author = author_a.get_text(" ", strip=True)
 
@@ -407,20 +483,24 @@ class SyosetuSearch18:
 
                     if star_match:
                         try:
-                            raw_val = star_match.group(1)
-                            stars = int(raw_val.replace(",", ""))
+                            stars = int(star_match.group(1).replace(",", ""))
                         except ValueError:
                             stars = 0
 
                 date_div = card.select_one(".blo_date")
-                updated_at = cls._date(
-                    date_div.get_text(strip=True)
-                ) if date_div else ""
+
+                updated_at = (
+                    cls._date(date_div.get_text(strip=True))
+                    if date_div
+                    else ""
+                )
 
                 arasuji_div = card.select_one(".blo_inword")
+
                 story = (
                     arasuji_div.get_text(" ", strip=True)
-                    if arasuji_div else ""
+                    if arasuji_div
+                    else ""
                 )
 
                 tags_div = card.select_one(".result-tags")
@@ -443,7 +523,8 @@ class SyosetuSearch18:
                     "total_chars": total_chars,
                     "status_episodes": (
                         f"총 {episode}화 ({status})"
-                        if episode else status
+                        if episode
+                        else status
                     ),
                     "updated_at": updated_at,
                     "story": story,
@@ -467,7 +548,12 @@ class SyosetuSearch18:
     @classmethod
     def fetch_detail_description(cls, work_url):
         try:
-            res = cls._get(work_url, headers={"referer": cls.SEARCH_URL}, timeout=12)
+            res = cls._get(
+                work_url,
+                headers={"referer": cls.SEARCH_URL},
+                timeout=12
+            )
+
             res.raise_for_status()
 
             soup = BeautifulSoup(res.text, "html.parser")
@@ -477,27 +563,33 @@ class SyosetuSearch18:
                 return ""
 
             ss_divs = maind_element.find_all("div", class_="ss")
+
             if not ss_divs:
                 return ""
 
             for br in maind_element.find_all("br"):
                 br.replace_with("\n")
 
-            tag_text = ""
             tag_text_list = []
 
-            for span in (ss_divs[0].find_all("span", itemprop="keywords") + ss_divs[0].find_all("a", class_="alert_color")):
-                tag_text_list.append(span.getText())
+            for span in (
+                ss_divs[0].find_all("span", itemprop="keywords")
+                + ss_divs[0].find_all("a", class_="alert_color")
+            ):
+                tag_text_list.append(span.get_text())
 
             target_div = ss_divs[1]
             story_text = target_div.get_text("\n")
             story_text = re.sub(r"\n{3,}", "\n\n", story_text).strip()
 
             if len(story_text.splitlines()) > 120:
-                story_text = '\n'.join(story_text.splitlines()[1:120]) + "\n......."
+                story_text = (
+                    "\n".join(story_text.splitlines()[1:120])
+                    + "\n......."
+                )
 
             if len(ss_divs) > 1:
-                tag_text = ','.join(tag_text_list)
+                tag_text = ",".join(tag_text_list)
                 return f"{story_text}\n\n_____1234_____\n{tag_text}"
 
             return story_text

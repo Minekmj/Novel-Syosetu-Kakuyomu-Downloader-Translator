@@ -10,9 +10,11 @@ import src.system.theme as theme
 import src.system.theme_back as theme_back
 from src.system.load_save import load_data, save_data
 
+from PySide6.QtGui import QColor
+
 THEME_DATA = {**theme_back.THEME_DATA, **theme.THEME_DATA}
 
-THEME_NAME = "CYAN"
+THEME_NAME = "LAVENDER"
 
 MINIMAL_DARK_THEME = ""
 
@@ -43,7 +45,7 @@ def rest():
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
-                THEME_NAME = json.load(f).get("theme", "CYAN")
+                THEME_NAME = json.load(f).get("theme", "LAVENDER")
         except Exception:
             pass
 
@@ -57,7 +59,7 @@ def rest():
                 if THEME_NAME in theme.THEMES:
                     MINIMAL_DARK_THEME = build_qss(f.read(), theme.THEMES[THEME_NAME])
             except:
-                THEME_NAME = "CYAN"
+                THEME_NAME = "LAVENDER"
                 if THEME_NAME in theme.THEMES:
                     MINIMAL_DARK_THEME = build_qss(f.read(), theme.THEMES[THEME_NAME])
         with open(css_file_path_back, "r", encoding="UTF-8") as f:
@@ -65,9 +67,22 @@ def rest():
                 if THEME_NAME in theme_back.THEMES:
                     MINIMAL_DARK_THEME = build_qss(f.read(), theme_back.THEMES[THEME_NAME])
             except:
-                THEME_NAME = "NEW CYAN"
+                THEME_NAME = "CYAN"
                 if THEME_NAME in theme_back.THEMES:
                     MINIMAL_DARK_THEME = build_qss(f.read(), theme_back.THEMES[THEME_NAME])
+                    
+        raw_color = get_item_background_color("CardFrame_ui", MINIMAL_DARK_THEME)
+                
+        def replace_color_to_rgba(match):
+            hex_code = match.group(0)
+            color = QColor(hex_code)
+            r, g, b = color.red(), color.green(), color.blue()
+            return f"rgba({r}, {g}, {b}, 0.4)"
+
+        transparent_gradient = re.sub(r'#[0-9a-fA-F]{6}', replace_color_to_rgba, raw_color)
+        
+        MINIMAL_DARK_THEME = change_item_background_color("CardFrame_ui", MINIMAL_DARK_THEME, transparent_gradient)
+
     except FileNotFoundError:
         print(f"CSS 파일을 찾을 수 없습니다: {css_file_path}")
         
@@ -78,6 +93,30 @@ def return_theme():
     else:
         th = getattr(theme_back, f"COLORS_{THEME_NAME}", "#000000")
     return th
+
+def get_item_background_color(item, MINIMAL_DARK_THEME):
+    th = str(MINIMAL_DARK_THEME)
+    data = th[th.find(item):]
+    return re.search(r'background-color\s*:\s*([^;]+);', data).group(1).strip()
+
+def change_item_background_color(item, MINIMAL_DARK_THEME, new_color):
+    th = str(MINIMAL_DARK_THEME)
+    
+    item_index = th.find(item)
+    if item_index == -1:
+        return th
+    
+    prefix = th[:item_index]
+    target_data = th[item_index:]
+    
+    updated_data = re.sub(
+        r'(background-color\s*:\s*)[^;]+(;)',
+        rf'\g<1>{new_color}\2',
+        target_data,
+        count=1
+    )
+    
+    return prefix + updated_data
 
 import platform
 import subprocess

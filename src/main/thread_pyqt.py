@@ -105,7 +105,7 @@ class TranslateThread(QThread):
     log_changed = Signal(str)
     finished_signal = Signal(bool, str, str)
 
-    def __init__(self, file_path, model_name, rpm, temperature, max_concurrent, max_chars, dicts, check, br_start, isno_x, thinking_budget=None):
+    def __init__(self, file_path, model_name, rpm, temperature, max_concurrent, max_chars, dicts, check, check_i, br_start, isno_x, thinking_budget=None):
         super().__init__()
 
         self.file_path = file_path
@@ -116,6 +116,7 @@ class TranslateThread(QThread):
         self.max_chars = max_chars
         self.dict = dicts
         self.check = check
+        self.check_i = check_i
         self.br_start = br_start
         self.isno_x = isno_x
         self.thinking_budget = thinking_budget
@@ -150,6 +151,7 @@ class TranslateThread(QThread):
                     log_callback=self.log_changed.emit,
                     dicts=self.dict,
                     check=self.check,
+                    check_i=self.check_i,
                     br_start=self.br_start,
                     isno_x=self.isno_x,
                     thinking_budget=self.thinking_budget
@@ -189,6 +191,7 @@ class TranslateThread(QThread):
                     log_callback=self.log_changed.emit,
                     dicts=self.dict,
                     check=self.check,
+                    check_i=self.check_i,
                     br_start=self.br_start,
                     isno_x=self.isno_x,
                     thinking_budget=self.thinking_budget

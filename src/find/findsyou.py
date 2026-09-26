@@ -1,5 +1,5 @@
 import requests
-from PySide6.QtCore import QThread, Signal, Qt, QSize, QTimer
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QThread, Signal, Qt, QSize, QTimer
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QListWidget, QListWidgetItem,
@@ -163,25 +163,59 @@ class MyListWidget(QListWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
+        self.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
+        self.setHorizontalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
+
+        self.anim = QPropertyAnimation(self.verticalScrollBar(), b"value")
+        self.anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self.anim.setDuration(250)
+        self.target_scroll_value = 0
+
         self.debounce_timer = QTimer(self)
         self.debounce_timer.setSingleShot(True)
-        self.debounce_timer.setInterval(200)
+        self.debounce_timer.setInterval(150)
         self.debounce_timer.timeout.connect(self._trigger_bottom)
 
         self.verticalScrollBar().valueChanged.connect(self.check_scroll)
+
+    def wheelEvent(self, event):
+        num_degrees = event.angleDelta().y()
+        if num_degrees == 0:
+            super().wheelEvent(event)
+            return
+
+        bar = self.verticalScrollBar()
+        step = -int(num_degrees * 0.9)
+
+        if self.anim.state() == QPropertyAnimation.State.Running:
+            start_val = self.anim.currentValue()
+            target_val = self.target_scroll_value + step
+        else:
+            start_val = bar.value()
+            target_val = bar.value() + step
+
+        target_val = max(0, min(bar.maximum(), target_val))
+        self.target_scroll_value = target_val
+
+        self.anim.stop()
+        self.anim.setStartValue(start_val)
+        self.anim.setEndValue(target_val)
+        self.anim.start()
+
+        event.accept()
 
     def check_scroll(self, value=None):
         bar = self.verticalScrollBar()
         cur_val = bar.value() if value is None else value
 
-        if bar.maximum() <= 0 or cur_val >= bar.maximum() - 5:
+        if bar.maximum() <= 0 or cur_val >= bar.maximum() - 1000:
             self.debounce_timer.start()
         else:
             self.debounce_timer.stop()
 
     def _trigger_bottom(self):
         bar = self.verticalScrollBar()
-        if bar.maximum() <= 0 or bar.value() >= bar.maximum() - 5:
+        if bar.maximum() <= 0 or bar.value() >= bar.maximum() - 1000:
             self.nearBottom.emit()
 
     def resizeEvent(self, event):
@@ -423,7 +457,7 @@ class MainWindow_Find(QDialog):
         layout.setSpacing(10)
 
         header = QFrame()
-        header.setObjectName('CardFrame')
+        header.setObjectName('CardFrame_ui')
 
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(16, 10, 16, 10)

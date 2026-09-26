@@ -5,7 +5,7 @@ import re
 from google.genai import types
 
 client = None
-get_safety_settings = None
+from src.trans.prompt_sanitizer import get_safety_settings
 
 from src.glossary.glossary import extract_glossary_sample as _extract_glossary_sample
 

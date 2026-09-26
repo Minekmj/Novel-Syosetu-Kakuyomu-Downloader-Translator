@@ -1,3 +1,4 @@
+import re
 import webbrowser
 from datetime import datetime
 from PySide6.QtWidgets import (
@@ -6,7 +7,7 @@ from PySide6.QtWidgets import (
     QFileDialog, QScrollArea, QFrame, QDialog, QMessageBox,
     QMenu, QCheckBox, QSizePolicy, QComboBox
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve
 from PySide6.QtGui import QAction
 from PySide6.QtGui import QIcon
 
@@ -34,6 +35,40 @@ findsyou.detail_ui.DOWN = down.downin
 setting_ui.data_iteam = data_iteam
 
 trans_view.OUT = down.downin.base_data.OUTFOLDER
+
+class SmoothScrollArea(QScrollArea):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.anim = QPropertyAnimation(self.verticalScrollBar(), b"value")
+        self.anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self.anim.setDuration(250)
+        self.target_scroll_value = 0
+
+    def wheelEvent(self, event):
+        num_degrees = event.angleDelta().y()
+        if num_degrees == 0:
+            super().wheelEvent(event)
+            return
+
+        bar = self.verticalScrollBar()
+        step = -int(num_degrees * 0.9)
+
+        if self.anim.state() == QPropertyAnimation.State.Running:
+            start_val = self.anim.currentValue()
+            target_val = self.target_scroll_value + step
+        else:
+            start_val = bar.value()
+            target_val = bar.value() + step
+
+        target_val = max(0, min(bar.maximum(), target_val))
+        self.target_scroll_value = target_val
+
+        self.anim.stop()
+        self.anim.setStartValue(start_val)
+        self.anim.setEndValue(target_val)
+        self.anim.start()
+
+        event.accept()
 
 class EditTitleDialog(QDialog):
     def __init__(self, current_title, parent=None):
@@ -485,8 +520,8 @@ class MainWindow(QMainWindow):
         self.newly_added_widget = None
 
         self.setWindowTitle(f"MINE DOWNLOADER - Novel(Syosetu, Kakuyomu) Downloader & Translator - {vsc.V}")
-        self.resize(1200, 700)
-        self.setMinimumSize(1200, 550)
+        self.resize(1000, 700)
+        self.setMinimumSize(700, 550)
         self.setWindowIcon(QIcon(resource_path("main.ico")))
 
         main_widget = QWidget()
@@ -510,16 +545,13 @@ class MainWindow(QMainWindow):
         self.gloss_bt.setObjectName("secondaryBtn")
         self.gloss_bt.clicked.connect(self.open_gloss)
         header_layout.addWidget(self.gloss_bt)
-
-        for i in sl.Sites:
-            def open_window(checked=False, site_key=i):
-                dialog = findsyou.MainWindow_Find(site_key, self)
-                dialog.show()
-
-            plus_bt = QPushButton(f"{sl.SITES.get(i).get('name')} 검색")
-            plus_bt.setObjectName("secondaryBtn")
-            plus_bt.clicked.connect(open_window)
-            header_layout.addWidget(plus_bt)
+        
+        def make_lal_spacer_lbl():
+            lal_spacer_lbl = QLabel("‖")
+            lal_spacer_lbl.setObjectName("lbl_original_title")
+            return(lal_spacer_lbl)
+        
+        header_layout.addWidget(make_lal_spacer_lbl())
 
         self.epub_btn = QPushButton("EPUB 변환")
         self.epub_btn.setObjectName("secondaryBtn")
@@ -535,6 +567,8 @@ class MainWindow(QMainWindow):
         self.qr_btn.setObjectName("secondaryBtn")
         self.qr_btn.clicked.connect(lambda: qr_view.QRViewDialog(self).show())
         header_layout.addWidget(self.qr_btn)
+        
+        header_layout.addWidget(make_lal_spacer_lbl())
 
         self.manager_path_btn = QPushButton("환경 설정")
         self.manager_path_btn.setObjectName("secondaryBtn")
@@ -542,7 +576,34 @@ class MainWindow(QMainWindow):
         header_layout.addWidget(self.manager_path_btn)
 
         self.main_layout.addLayout(header_layout)
+        
+        header_layout1_widget = QFrame()
+        header_layout1_widget.setObjectName("CardFrame_ui")
+        
+        header_layout1_widget = QFrame()
+        header_layout1_widget.setObjectName("CardFrame_ui")
+        
+        header_layout1 = QHBoxLayout(header_layout1_widget)
+        header_layout1.setSpacing(8)
+        header_layout1.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        
+        header_layout1.addStretch()
+        
+        for i in sl.Sites:
+            def open_window(checked=False, site_key=i):
+                dialog = findsyou.MainWindow_Find(site_key, self)
+                dialog.show()
 
+            plus_bt = QPushButton(f"{sl.SITES.get(i).get('name')} 검색")
+            plus_bt.setObjectName("secondaryBtn")
+            plus_bt.clicked.connect(open_window)
+            
+            header_layout1.addWidget(plus_bt)
+            
+        header_layout1.addStretch()
+        
+        self.main_layout.addWidget(header_layout1_widget)
+        
         input_layout = QHBoxLayout()
         input_layout.setSpacing(8)
 
@@ -593,7 +654,7 @@ class MainWindow(QMainWindow):
 
         self.main_layout.addLayout(control_layout)
 
-        self.scroll_area = QScrollArea(self)
+        self.scroll_area = SmoothScrollArea(self)
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
@@ -797,6 +858,7 @@ class MainWindow(QMainWindow):
             self.search_edit.blockSignals(False)
 
         self.apply_filter_and_sort()
+        self.scroll_area.target_scroll_value = 0
         self.scroll_area.verticalScrollBar().setValue(0)
 
         QMessageBox.information(self, "완료", "주소가 성공적으로 추가되었습니다.")

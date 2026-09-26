@@ -476,7 +476,7 @@ class TagSelectDialog(QDialog):
         layout.addWidget(desc)
 
         self.tabs = QTabWidget()
-        self.tabs.setObjectName('no_back-settingsTab')
+        self.tabs.setObjectName('settingsTab')
         self.tabs.setStyleSheet("""
             QTabWidget::pane {
                 border: none;
