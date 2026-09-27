@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QComboBox, QSizePolicy
 )
-from src.system.data import NaroSearch, KakuyomuSearch, MidnightSearch, NocturneSearch, SyosetuSearch, SyosetuSearch18
+from src.system.data import NaroSearch, KakuyomuSearch, MidnightSearch, NocturneSearch, SyosetuSearch, SyosetuSearch18, NovelupSearch
 from src.system.data import load_data, save_data
 
 def normalize_url(url):
@@ -19,6 +19,7 @@ class Sites(IntEnum):
     MIDNIGHT = 4
     NOCTURNE = 5
     HAMELLEUN18 = 6
+    NOVELUP = 7
 
 
 SITES = {
@@ -69,7 +70,15 @@ SITES = {
         'has_star': False,
         'ui_setup': lambda window, layout: ha18_set_ui(window, layout),
         'build_params': lambda window: ha_build_params(window),
-    }
+    },
+    Sites.NOVELUP: {
+        'name': '노벨업 플러스',
+        'search_class': NovelupSearch,
+        'point_text': lambda value: f'pt {value}',
+        'has_star': False,
+        'ui_setup': lambda window, layout: novelup_set_ui(window, layout),
+        'build_params': lambda window: novelup_build_params(window),
+    },
 }
 
 def get_site(site):
@@ -227,6 +236,39 @@ def ha_set_ui_main(window, layout, l):
         window.naro_exclude_values
     )
 
+def novelup_set_ui(window, layout):
+    window.novelup_include_values = []
+    window.novelup_exclude_values = []
+    window.novelup_find_area_values = []
+    window.novelup_rating_values = []
+
+    window.novelup_include_buttons = window.create_multi_select_section(
+        layout,
+        '포함 조건',
+        NovelupSearch.FLAG_INCLUSION_AND_EXLUSION,
+        window.novelup_include_values
+    )
+
+    window.novelup_exclude_buttons = window.create_multi_select_section(
+        layout,
+        '제외 조건',
+        NovelupSearch.FLAG_INCLUSION_AND_EXLUSION,
+        window.novelup_exclude_values
+    )
+
+    window.novelup_find_area_buttons = window.create_multi_select_section(
+        layout,
+        '검색 범위',
+        NovelupSearch.FIND_AREA,
+        window.novelup_find_area_values
+    )
+
+    window.novelup_rating_buttons = window.create_multi_select_section(
+        layout,
+        '평가 범위',
+        NovelupSearch.RATING_FLAGS,
+        window.novelup_rating_values
+    )
 
 def kaku_set_ui(window, layout):
     window.kaku_include_values = []
@@ -301,6 +343,29 @@ def ha_build_params(window):
         'find_areas': window.naro_find_area_values.copy()
     }
     
+def novelup_build_params(window):
+    return {
+        'query': window.input_query.text().strip(),
+        'genre_val': NovelupSearch.GENRES.get(
+            window.combo_genre.currentText(), ''
+        ),
+        'exclude_words': window.input_exclude.text().strip().split(),
+        'min_chars': window.spin_min_chars.value(),
+        'min_pt': window.spin_min_start.value(),
+        'last_published': NovelupSearch.LAST_PUBLISHED_PERIODS.get(
+            window.combo_last_published.currentText()
+        ),
+        'serial_status': NovelupSearch.SERIAL_STATUSES.get(
+            window.combo_serial_status.currentText(), ()
+        ),
+        'order': NovelupSearch.SORT_ORDERS.get(
+            window.combo_order.currentText(), '1'
+        ),
+        'inclusion_flags': window.novelup_include_values.copy(),
+        'exclusion_flags': window.novelup_exclude_values.copy(),
+        'find_areas': window.novelup_find_area_values.copy(),
+        'rating_flags': window.novelup_rating_values.copy()
+    }
 
 def kaku_build_params(window):
     return {

@@ -13,3 +13,4 @@ from src.find.site.midnight_class import MidnightSearch
 from src.find.site.nocturne_calss import NocturneSearch
 from src.find.site.syosetu_class import SyosetuSearch
 from src.find.site.syosetu18_class import SyosetuSearch18
+from src.find.site.novelup_class import NovelupSearch
