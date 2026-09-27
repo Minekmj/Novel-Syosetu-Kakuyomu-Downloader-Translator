@@ -5,7 +5,6 @@ import os
 import subprocess
 import sys
 import threading
-import time
 import tkinter as tk
 from tkinter import ttk
 import urllib.request
@@ -23,11 +22,15 @@ THEME_CONFIG = {
     "accent_hover": "#80CBC4",
     "text_primary": "#ECEFF1",
     "text_secondary": "#B0BEC5",
+    "accent_text": "#04161E", 
     "text_muted": "#78909C",
+    "danger_color": "#F43F5E",
+    "badge_bg": "#102B3F",
     "font_family": "맑은 고딕",
     "window_size": (400, 250),
-    "corner_radius": 12,
+    "corner_radius": 14,
 }
+
 
 V = None
 
@@ -36,7 +39,6 @@ try:
     from src.system.v import V
 except Exception:
     pass
-
 
 def format_file_size(size):
     if size < 1024:
@@ -78,6 +80,26 @@ def enable_window_drag(window, widgets=None):
                 widget.bind("<B1-Motion>", drag)
 
 
+def draw_rounded_rect(canvas, x1, y1, x2, y2, radius=14, fill="", outline="", width=1):
+    d = 2 * radius
+    if fill:
+        canvas.create_rectangle(x1 + radius, y1, x2 - radius, y2, fill=fill, outline="")
+        canvas.create_rectangle(x1, y1 + radius, x2, y2 - radius, fill=fill, outline="")
+        canvas.create_arc(x1, y1, x1 + d, y1 + d, start=90, extent=90, fill=fill, outline="")
+        canvas.create_arc(x2 - d, y1, x2, y1 + d, start=0, extent=90, fill=fill, outline="")
+        canvas.create_arc(x2 - d, y2 - d, x2, y2, start=270, extent=90, fill=fill, outline="")
+        canvas.create_arc(x1, y2 - d, x1 + d, y2, start=180, extent=90, fill=fill, outline="")
+    if outline and width > 0:
+        canvas.create_line(x1 + radius, y1, x2 - radius, y1, fill=outline, width=width)
+        canvas.create_line(x1 + radius, y2, x2 - radius, y2, fill=outline, width=width)
+        canvas.create_line(x1, y1 + radius, x1, y2 - radius, fill=outline, width=width)
+        canvas.create_line(x2, y1 + radius, x2, y2 - radius, fill=outline, width=width)
+        canvas.create_arc(x1, y1, x1 + d, y1 + d, start=90, extent=90, style="arc", outline=outline, width=width)
+        canvas.create_arc(x2 - d, y1, x2, y1 + d, start=0, extent=90, style="arc", outline=outline, width=width)
+        canvas.create_arc(x2 - d, y2 - d, x2, y2, start=270, extent=90, style="arc", outline=outline, width=width)
+        canvas.create_arc(x1, y2 - d, x1 + d, y2, start=180, extent=90, style="arc", outline=outline, width=width)
+
+
 def rounded_window(window, width, height):
     transparent_color = "#010101"
 
@@ -109,26 +131,7 @@ def rounded_window(window, width, height):
     canvas.pack(fill="both", expand=True)
 
     r = THEME_CONFIG["corner_radius"]
-
-    def create_rounded_rect(x1, y1, x2, y2, radius, **kwargs):
-        points = [
-            x1 + radius, y1,
-            x2 - radius, y1,
-            x2, y1,
-            x2, y1 + radius,
-            x2, y2 - radius,
-            x2, y2,
-            x2 - radius, y2,
-            x1 + radius, y2,
-            x1, y2,
-            x1, y2 - radius,
-            x1, y1 + radius,
-            x1, y1
-        ]
-        return canvas.create_polygon(points, smooth=True, **kwargs)
-
-    create_rounded_rect(2, 2, width - 2, height - 2, r, fill=THEME_CONFIG["border_color"])
-    create_rounded_rect(3, 3, width - 3, height - 3, r, fill=THEME_CONFIG["bg_color"])
+    draw_rounded_rect(canvas, 1, 1, width - 1, height - 1, radius=r, fill=THEME_CONFIG["bg_color"], outline=THEME_CONFIG["border_color"], width=1)
 
     return canvas
 
@@ -148,25 +151,25 @@ def show_update_dialog(root, release):
     file_size = format_file_size(exe_asset.get("size", 0))
 
     dialog = tk.Toplevel(root)
-    width, height = 420, 270
+    width, height = 440, 290
     canvas = rounded_window(dialog, width, height)
 
     content = tk.Frame(canvas, bg=THEME_CONFIG["bg_color"])
-    canvas.create_window(width // 2, height // 2, window=content, width=width - 16, height=height - 16)
+    canvas.create_window(width // 2, height // 2, window=content, width=width - 24, height=height - 24)
 
-    top_bar = tk.Frame(content, bg=THEME_CONFIG["bg_color"], height=28)
-    top_bar.pack(fill="x", side="top")
+    top_bar = tk.Frame(content, bg=THEME_CONFIG["bg_color"], height=24)
+    top_bar.pack(fill="x", side="top", pady=(2, 0))
 
     close_btn = tk.Label(
         top_bar,
         text="✕",
-        font=(THEME_CONFIG["font_family"], 11, "bold"),
-        fg=THEME_CONFIG["text_secondary"],
+        font=(THEME_CONFIG["font_family"], 9, "bold"),
+        fg=THEME_CONFIG["text_muted"],
         bg=THEME_CONFIG["bg_color"],
         width=3,
         cursor="hand2"
     )
-    close_btn.pack(side="right", padx=2, pady=2)
+    close_btn.pack(side="right")
 
     def cancel():
         result["download"] = False
@@ -182,27 +185,30 @@ def show_update_dialog(root, release):
         except Exception:
             pass
 
-    close_btn.bind("<Enter>", lambda e: close_btn.config(bg="#EF4444", fg="#FFFFFF"))
-    close_btn.bind("<Leave>", lambda e: close_btn.config(bg=THEME_CONFIG["bg_color"], fg=THEME_CONFIG["text_secondary"]))
+    close_btn.bind("<Enter>", lambda e: close_btn.config(bg=THEME_CONFIG["danger_color"], fg="#FFFFFF"))
+    close_btn.bind("<Leave>", lambda e: close_btn.config(bg=THEME_CONFIG["bg_color"], fg=THEME_CONFIG["text_muted"]))
     close_btn.bind("<Button-1>", lambda e: cancel())
 
     title_label = tk.Label(
         content,
-        text="새로운 업데이트가 있습니다",
+        text="업데이트",
         font=(THEME_CONFIG["font_family"], 13, "bold"),
         fg=THEME_CONFIG["text_primary"],
         bg=THEME_CONFIG["bg_color"]
     )
-    title_label.pack(anchor="w", padx=20, pady=(0, 4))
+    title_label.pack(anchor="w", padx=16, pady=(0, 6))
+
+    version_badge = tk.Frame(content, bg=THEME_CONFIG["bg_color"], padx=10, pady=4)
+    version_badge.pack(anchor="w", padx=16, pady=(0, 14))
 
     version_label = tk.Label(
-        content,
-        text=f"현재 버전 {V}  ➔  최신 버전 {latest_version}",
-        font=(THEME_CONFIG["font_family"], 9),
+        version_badge,
+        text=f"현재 {V}   ➔   최신 {latest_version}",
+        font=(THEME_CONFIG["font_family"], 9, "bold"),
         fg=THEME_CONFIG["accent_color"],
         bg=THEME_CONFIG["bg_color"]
     )
-    version_label.pack(anchor="w", padx=20, pady=(0, 14))
+    version_label.pack()
 
     info_frame = tk.Frame(
         content,
@@ -210,7 +216,7 @@ def show_update_dialog(root, release):
         highlightthickness=1,
         highlightbackground=THEME_CONFIG["border_color"]
     )
-    info_frame.pack(fill="x", padx=20, pady=(0, 18))
+    info_frame.pack(fill="x", padx=16, pady=(0, 18))
 
     file_label = tk.Label(
         info_frame,
@@ -218,33 +224,32 @@ def show_update_dialog(root, release):
         font=(THEME_CONFIG["font_family"], 9, "bold"),
         fg=THEME_CONFIG["text_primary"],
         bg=THEME_CONFIG["surface_color"],
-        anchor="w",
-        justify="left"
+        anchor="w"
     )
-    file_label.pack(fill="x", padx=12, pady=(10, 2))
+    file_label.pack(fill="x", padx=14, pady=(10, 2))
 
     size_label = tk.Label(
         info_frame,
-        text=f"다운로드 크기: {file_size}",
+        text=f"다운로드 용량: {file_size}",
         font=(THEME_CONFIG["font_family"], 8),
-        fg=THEME_CONFIG["text_muted"],
+        fg=THEME_CONFIG["text_secondary"],
         bg=THEME_CONFIG["surface_color"],
         anchor="w"
     )
-    size_label.pack(fill="x", padx=12, pady=(0, 10))
+    size_label.pack(fill="x", padx=14, pady=(0, 10))
 
     button_frame = tk.Frame(content, bg=THEME_CONFIG["bg_color"])
-    button_frame.pack(fill="x", padx=20)
+    button_frame.pack(fill="x", padx=16)
 
     download_btn = tk.Button(
         button_frame,
         text="지금 업데이트",
         command=download,
         font=(THEME_CONFIG["font_family"], 9, "bold"),
-        fg="#0F172A",
+        fg=THEME_CONFIG["accent_text"],
         bg=THEME_CONFIG["accent_color"],
         activebackground=THEME_CONFIG["accent_hover"],
-        activeforeground="#FFFFFF",
+        activeforeground=THEME_CONFIG["accent_text"],
         relief="flat",
         bd=0,
         height=2,
@@ -260,7 +265,7 @@ def show_update_dialog(root, release):
         fg=THEME_CONFIG["text_secondary"],
         bg=THEME_CONFIG["surface_color"],
         activebackground=THEME_CONFIG["surface_hover"],
-        activeforeground="#FFFFFF",
+        activeforeground=THEME_CONFIG["text_primary"],
         relief="flat",
         bd=0,
         height=2,
@@ -272,7 +277,7 @@ def show_update_dialog(root, release):
 
     enable_window_drag(
         dialog,
-        [canvas, content, top_bar, title_label, version_label, info_frame, file_label, size_label]
+        [canvas, content, top_bar, title_label, version_badge, version_label, info_frame, file_label, size_label]
     )
 
     dialog.grab_set()
@@ -281,7 +286,6 @@ def show_update_dialog(root, release):
     return result["download"], exe_asset
 
 
-# 네트워크 연결 검사 (스레드 처리로 UI 프리징 방지)
 def check_internet_async(root, callback):
     def worker():
         connected = False
@@ -296,7 +300,6 @@ def check_internet_async(root, callback):
     threading.Thread(target=worker, daemon=True).start()
 
 
-# GitHub 릴리스 최신 정보 조회 (스레드 처리로 안전하게 데이터 수신)
 def get_latest_release_async(root, callback):
     def worker():
         try:
@@ -346,7 +349,7 @@ def download_update(root, sub_label, asset, callback):
     except Exception:
         pass
 
-    update_status(root, sub_label, "새로운 버전 다운로드 준비 중...")
+    update_status(root, sub_label, "새로운 패키지 다운로드 준비 중...")
 
     def worker():
         try:
@@ -393,7 +396,7 @@ def download_update(root, sub_label, asset, callback):
                 return
 
             print("[업데이트 검증 성공] SHA-256 일치")
-            update_status(root, sub_label, "업데이트 파일 검증 완료!")
+            update_status(root, sub_label, "무결성 검증 완료!")
 
             if os.path.exists(save_path):
                 try:
@@ -410,7 +413,7 @@ def download_update(root, sub_label, asset, callback):
                     return
 
             os.replace(temp_path, save_path)
-            update_status(root, sub_label, "다운로드 및 검증 완료! 프로그램을 재시작합니다.")
+            update_status(root, sub_label, "다운로드 완료! 프로그램을 재시작합니다.")
 
             def restart():
                 try:
@@ -428,14 +431,14 @@ def download_update(root, sub_label, asset, callback):
                     os.remove(temp_path)
             except Exception:
                 pass
-            update_status(root, sub_label, "업데이트 다운로드 실패")
+            update_status(root, sub_label, "다운로드 중 오류가 발생했습니다.")
             root.after(1500, lambda: callback(False))
 
     threading.Thread(target=worker, daemon=True).start()
 
 
 def check_and_update(root, sub_label, callback, retry=0):
-    update_status(root, sub_label, "인터넷 연결 확인 중...")
+    update_status(root, sub_label, "네트워크 연결 확인 중...")
 
     def internet_done(connected):
         if connected:
@@ -443,12 +446,11 @@ def check_and_update(root, sub_label, callback, retry=0):
                 callback(True)
                 return
 
-            update_status(root, sub_label, "최신 버전 확인 중...")
+            update_status(root, sub_label, "버전 정보 확인 중...")
 
             def release_done(release, error):
                 if error is not None or release is None:
                     print(f"[업데이트 확인 실패 또는 릴리스 없음] {error}")
-                    # 조회 실패 시 프로그램이 멈추지 않고 그대로 메인 실행으로 진행
                     callback(True)
                     return
 
@@ -477,7 +479,7 @@ def check_and_update(root, sub_label, callback, retry=0):
             root.after(1500, lambda: root.destroy())
             return
 
-        update_status(root, sub_label, f"인터넷 연결 실패. {3 - retry}초 후 재시도...")
+        update_status(root, sub_label, f"네트워크 재시도 중... ({3 - retry})")
         root.after(1000, lambda: check_and_update(root, sub_label, callback, retry + 1))
 
     check_internet_async(root, internet_done)
@@ -492,8 +494,8 @@ def resource_path(relative_path):
 
 
 def start_main_app(root, sub_label, pre_file):
-    def launch():
-        update_status(root, sub_label, "메인 프로그램을 불러오는 중...")
+    def background_task():
+        root.after(0, lambda: update_status(root, sub_label, "메인 모듈을 준비하는 중..."))
 
         if pre_file:
             abs_file_path = os.path.abspath(pre_file)
@@ -502,7 +504,7 @@ def start_main_app(root, sub_label, pre_file):
                 ext = os.path.splitext(abs_file_path)[1].lower()
 
                 if ext in [".bat", ".cmd"]:
-                    update_status(root, sub_label, "사전 작업 실행 중...")
+                    root.after(0, lambda: update_status(root, sub_label, "사전 작업 실행 중..."))
 
                     file_dir = os.path.dirname(abs_file_path)
                     creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
@@ -512,25 +514,32 @@ def start_main_app(root, sub_label, pre_file):
                     except Exception as e:
                         print(f"[사전 작업 실패] {e}")
             else:
-                update_status(root, sub_label, "지정된 경로의 파일을 찾을 수 없습니다.")
-                root.after(1500, lambda: root.destroy())
+                def file_not_found():
+                    update_status(root, sub_label, "지정된 경로의 파일을 찾을 수 없습니다.")
+                    root.after(1500, lambda: root.destroy())
+                
+                root.after(0, file_not_found)
                 return
 
-        update_status(root, sub_label, "메인 프로그램을 불러오는 중...")
+        root.after(0, lambda: update_status(root, sub_label, "메인 프로그램을 로딩하는 중..."))
 
         import src.main.main as main
 
+        root.after(0, lambda: run_main_app(main))
+
+    def run_main_app(main_module):
         def start():
             root.withdraw()
 
-        main.main(start)
+        main_module.main(start)
 
-        print("exit_root?")
         try:
             root.destroy()
         except Exception:
             pass
-        print("exit_root")
+
+    def launch():
+        threading.Thread(target=background_task, daemon=True).start()
 
     check_and_update(root, sub_label, lambda success: launch() if success else None)
 
@@ -549,24 +558,24 @@ def create_splash(pre_file=None):
     canvas = rounded_window(root, width, height)
 
     main_frame = tk.Frame(canvas, bg=THEME_CONFIG["bg_color"])
-    canvas.create_window(width // 2, height // 2, window=main_frame, width=width - 16, height=height - 16)
+    canvas.create_window(width // 2, height // 2, window=main_frame, width=width - 24, height=height - 24)
 
-    top_bar = tk.Frame(main_frame, bg=THEME_CONFIG["bg_color"], height=24)
-    top_bar.pack(fill="x", side="top")
+    top_bar = tk.Frame(main_frame, bg=THEME_CONFIG["bg_color"], height=22)
+    top_bar.pack(fill="x", side="top", pady=(2, 0))
 
     close_btn = tk.Label(
         top_bar,
         text="✕",
-        font=(THEME_CONFIG["font_family"], 10, "bold"),
-        fg=THEME_CONFIG["text_secondary"],
+        font=(THEME_CONFIG["font_family"], 9, "bold"),
+        fg=THEME_CONFIG["text_muted"],
         bg=THEME_CONFIG["bg_color"],
         width=3,
         cursor="hand2"
     )
-    close_btn.pack(side="right", padx=2)
+    close_btn.pack(side="right")
 
-    close_btn.bind("<Enter>", lambda e: close_btn.config(bg="#EF4444", fg="#FFFFFF"))
-    close_btn.bind("<Leave>", lambda e: close_btn.config(bg=THEME_CONFIG["bg_color"], fg=THEME_CONFIG["text_secondary"]))
+    close_btn.bind("<Enter>", lambda e: close_btn.config(bg=THEME_CONFIG["danger_color"], fg="#FFFFFF"))
+    close_btn.bind("<Leave>", lambda e: close_btn.config(bg=THEME_CONFIG["bg_color"], fg=THEME_CONFIG["text_muted"]))
     close_btn.bind("<Button-1>", lambda e: close_app(root))
 
     icon_path = resource_path("main.ico")
@@ -575,12 +584,12 @@ def create_splash(pre_file=None):
     if os.path.exists(icon_path):
         try:
             icon_image = Image.open(icon_path).convert("RGBA")
-            icon_image.thumbnail((52, 52), Image.Resampling.LANCZOS)
+            icon_image.thumbnail((48, 48), Image.Resampling.LANCZOS)
             icon_photo = ImageTk.PhotoImage(icon_image)
 
             icon_label = tk.Label(main_frame, image=icon_photo, bg=THEME_CONFIG["bg_color"])
             icon_label.image = icon_photo
-            icon_label.pack(pady=(4, 8))
+            icon_label.pack(pady=(2, 8))
         except Exception as e:
             print(f"[ICO] 로딩 실패: {e}")
 
@@ -591,7 +600,7 @@ def create_splash(pre_file=None):
         fg=THEME_CONFIG["text_primary"],
         bg=THEME_CONFIG["bg_color"]
     )
-    title_label.pack(pady=(0, 2))
+    title_label.pack(pady=(0, 3))
 
     sub_label = tk.Label(
         main_frame,
@@ -603,7 +612,7 @@ def create_splash(pre_file=None):
     sub_label.pack(pady=(0, 16))
 
     progress_frame = tk.Frame(main_frame, bg=THEME_CONFIG["bg_color"])
-    progress_frame.pack(fill="x", padx=40)
+    progress_frame.pack(fill="x", padx=44)
 
     style = ttk.Style()
     style.theme_use("clam")
@@ -612,16 +621,16 @@ def create_splash(pre_file=None):
         troughcolor=THEME_CONFIG["surface_color"],
         background=THEME_CONFIG["accent_color"],
         bordercolor=THEME_CONFIG["surface_color"],
-        lightcolor=THEME_CONFIG["accent_color"],
+        lightcolor=THEME_CONFIG["accent_hover"],
         darkcolor=THEME_CONFIG["accent_color"],
         thickness=3
     )
 
     progress = ttk.Progressbar(progress_frame, style="Custom.Horizontal.TProgressbar", mode="indeterminate")
     progress.pack(fill="x")
-    progress.start(10)
+    progress.start(12)
 
-    version_text = f"{V}" if V is not None else ""
+    version_text = f"v{V}" if V is not None else ""
 
     version_label = tk.Label(
         main_frame,

@@ -1,4 +1,3 @@
-from datetime import datetime
 from PySide6.QtCore import QThread, QUrl, Signal, Qt, QTimer
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -50,23 +49,19 @@ class DetailWorker(QThread):
             self.finished.emit('', '')
 
 class AverageWorker(QThread):
-    finished = Signal(object, object)
+    finished = Signal(object)
 
-    def __init__(self, site, target):
+    def __init__(self, site):
         super().__init__()
         self.site = site
-        self.target = target
 
     def run(self):
         try:
-            if DOWN is None:
-                self.finished.emit(self.target, None)
-                return
-            result = DOWN.number_average(self.site, self.target)
-            self.finished.emit(self.target, result)
+            result = DOWN.number_average(self.site)
+            self.finished.emit(result)
         except Exception as e:
             print(f'연재 간격 계산 오류: {e}')
-            self.finished.emit(self.target, None)
+            self.finished.emit((None, None, None, None))
 
 class CopyTagButton(QPushButton):
     def __init__(self, display_text, original_text, parent=None):
@@ -88,7 +83,6 @@ class DetailDialog(QDialog):
         self.item_data = item_data
         self.auto_translate = auto_translate
         self.site = site
-        self.average_workers = []
         self.setWindowTitle('작품 상세 정보')
         self.resize(760, 760)
         self.setMinimumSize(620, 620)
@@ -141,40 +135,33 @@ class DetailDialog(QDialog):
         self.average_frame = QFrame()
         self.average_frame.setObjectName('detail_meta')
         average_layout = QHBoxLayout(self.average_frame)
-        average_layout.setContentsMargins(13, 4, 13, 4)
+        average_layout.setContentsMargins(13, 7, 13, 7)
         average_layout.setSpacing(10)
+        
         self.average_labels = {}
-        self.average_buttons = {}
         average_items = [
-            ('10', '최근 10화', 10),
-            ('30', '최근 30일', datetime.now()),
-            ('all', '전체', -1)
+            ('recent', '최근 갱신'),
+            ('10', '최근 10화'),
+            ('30', '최근 30일'),
+            ('all', '전체 평균')
         ]
-        for key, text, target in average_items:
-            label = QLabel(text)
-            label.setObjectName('detail_meta_text')
-            average_layout.addWidget(label)
+        
+        for idx, (key, text) in enumerate(average_items):
+            title_lbl = QLabel(text)
+            title_lbl.setObjectName('detail_meta_text')
+            average_layout.addWidget(title_lbl)
 
-            result_label = QLabel('')
-            result_label.setObjectName('detail_average_value')
-            result_label.setMinimumWidth(52)
-            result_label.setAlignment(Qt.AlignCenter)
-            result_label.hide()
-            average_layout.addWidget(result_label)
+            val_lbl = QLabel('계산 중…')
+            val_lbl.setObjectName('detail_average_value')
+            val_lbl.setMinimumWidth(48)
+            val_lbl.setAlignment(Qt.AlignCenter)
+            average_layout.addWidget(val_lbl)
+            
+            average_layout.addStretch()
 
-            button = QPushButton('보기')
-            button.setObjectName('secondaryBtn')
-            button.setCursor(Qt.CursorShape.PointingHandCursor)
-            button.setToolTip("보기를 눌르시면 평균 연재 간격이 나옵니다.")
-            button.setFixedHeight(19)
-            button.setFixedHeight(30)
-            button.clicked.connect(lambda checked=False, k=key, t=target: self.load_average(k, t))
-            average_layout.addWidget(button)
+            self.average_labels[key] = val_lbl
 
-            self.average_labels[key] = result_label
-            self.average_buttons[key] = button
-
-            if key != 'all':
+            if idx < len(average_items) - 1:
                 separator = QFrame()
                 separator.setFrameShape(QFrame.VLine)
                 separator.setObjectName('dialog_separator')
@@ -241,48 +228,40 @@ class DetailDialog(QDialog):
         layout.addLayout(bottom)
 
         self.load_detail()
+        self.load_average_auto()
 
-    def load_average(self, key, target):
-        button = self.average_buttons[key]
-        button.setEnabled(False)
-        button.setText('계산 중')
-        self.average_labels[key].setText('…')
-        worker = AverageWorker(self.url, target)
-        worker.finished.connect(lambda result_key, result: self.on_average_finished(result_key, result, key))
-        worker.finished.connect(lambda: self.cleanup_average_worker(worker))
-        self.average_workers.append(worker)
-        worker.start()
+    def load_average_auto(self):
+        target_url = self.url
+        self.avg_worker = AverageWorker(target_url)
+        self.avg_worker.finished.connect(self.on_average_finished)
+        self.avg_worker.start()
 
-    def on_average_finished(self, target, result, key):
-        key = None
-        for k, button in self.average_buttons.items():
-            if (k == '10' and target == 10) or (k == '30' and isinstance(target, datetime)) or (k == 'all' and target == -1):
-                key = k
-                break
-        if key is None:
+    def on_average_finished(self, results):
+        if not results or not isinstance(results, (tuple, list)) or len(results) < 4:
+            for lbl in self.average_labels.values():
+                lbl.setText('—')
             return
-        
-        if result is None:
-            self.average_labels[key].setText('—')
-        else:
-            try:
-                value = float(result)
-                if value < 1:
-                    text = f'{value:.2f}일'
-                elif value == int(value):
-                    text = f'{int(value)}일'
-                else:
-                    text = f'{value:.1f}일'
-                self.average_labels[key].setText(text)
-            except (TypeError, ValueError):
-                self.average_labels[key].setText(str(result))
-        self.average_labels[key].show()
-        self.average_buttons[key].hide()
 
-    def cleanup_average_worker(self, worker):
-        if worker in self.average_workers:
-            self.average_workers.remove(worker)
-        worker.deleteLater()
+        def format_day(val):
+            if val is None:
+                return '—'
+            try:
+                num = float(val)
+                if num < 1:
+                    return f'{num:.2f}일'
+                elif num == int(num):
+                    return f'{int(num)}일'
+                else:
+                    return f'{num:.1f}일'
+            except (ValueError, TypeError):
+                return str(val)
+
+        recent_gap, avg_last_10, avg_last_30d, avg_total = results
+
+        self.average_labels['recent'].setText(format_day(recent_gap))
+        self.average_labels['10'].setText(format_day(avg_last_10))
+        self.average_labels['30'].setText(format_day(avg_last_30d))
+        self.average_labels['all'].setText(format_day(avg_total))
 
     def load_detail(self):
         target_url = self.item_data.get('url' if (self.site == Sites.KAKUYOMU or self.site == Sites.HAMELLEUN or self.site == Sites.HAMELLEUN18) else 'story', '')

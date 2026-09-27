@@ -619,7 +619,7 @@ def new_hameln(novel_code, have_make=False):
     finally:
         session.close()
         
-def find_ep_hameln_average(novel_code, date_or_index):
+def find_ep_hameln_average(novel_code):
     nid, is_r18 = parse_novel_code(novel_code)
     base_url = "https://h.syosetu.org" if is_r18 else "https://syosetu.org"
     url = f"{base_url}/novel/{nid}/"
@@ -630,13 +630,13 @@ def find_ep_hameln_average(novel_code, date_or_index):
     try:
         res = http_get(url, session=session, is_r18=is_r18, headers={"Referer": url}, timeout=15)
         if res.status_code != 200:
-            return None
+            return (None, None, None, None)
 
         html_text = res.text
         episodes = get_hameln_episodes(nid, session, html_text, is_r18=is_r18)
 
         if not episodes:
-            return None
+            return (None, None, None, None)
 
         def parse_date(value):
             if value is None:
@@ -673,7 +673,6 @@ def find_ep_hameln_average(novel_code, date_or_index):
 
         for item in ep_items:
             dt = None
-
             revision_tag = item.select_one(".episode-list__revision[title]")
             if revision_tag and revision_tag.get("title"):
                 dt = parse_date(revision_tag.get("title"))
@@ -690,32 +689,22 @@ def find_ep_hameln_average(novel_code, date_or_index):
 
         if len(date_values) < 2:
             date_values = []
-
             for episode in episodes:
                 dt = None
-
                 if isinstance(episode, dict):
                     for key in (
-                        "publishedAt",
-                        "published_at",
-                        "updatedAt",
-                        "updated_at",
-                        "date",
-                        "datetime",
-                        "createdAt",
-                        "created_at"
+                        "publishedAt", "published_at", "updatedAt", "updated_at",
+                        "date", "datetime", "createdAt", "created_at"
                     ):
                         if episode.get(key):
                             dt = parse_date(episode.get(key))
                             if dt:
                                 break
-
                 elif isinstance(episode, (list, tuple)):
                     for value in episode:
                         dt = parse_date(value)
                         if dt:
                             break
-
                 elif isinstance(episode, str):
                     dt = parse_date(episode)
 
@@ -724,23 +713,15 @@ def find_ep_hameln_average(novel_code, date_or_index):
 
         if len(date_values) < 2:
             date_values = []
-
             ep_rows = [
                 tr for tr in soup.find_all("tr")
-                if tr.find(
-                    "a",
-                    href=re.compile(rf"(?:/novel/{nid}/|\./)?\d+\.html")
-                )
+                if tr.find("a", href=re.compile(rf"(?:/novel/{nid}/|\./)?\d+\.html"))
             ]
-
             for row in ep_rows:
                 dt = None
-
                 time_tag = row.find("time")
                 if time_tag:
-                    dt = parse_date(
-                        time_tag.get("datetime") or time_tag.get_text(strip=True)
-                    )
+                    dt = parse_date(time_tag.get("datetime") or time_tag.get_text(strip=True))
 
                 if dt is None:
                     nobr = row.find("nobr")
@@ -751,51 +732,38 @@ def find_ep_hameln_average(novel_code, date_or_index):
                     date_values.append(dt)
 
         if len(date_values) < 2:
-            return None
+            return (None, None, None, None)
 
         date_values.sort(reverse=True)
 
-        if isinstance(date_or_index, int):
-            if date_or_index == -1:
-                selected = date_values
-            elif date_or_index <= 0:
+        def calc_interval_average(dts):
+            if len(dts) < 2:
                 return None
-            else:
-                selected = date_values[:date_or_index]
-        else:
-            target_date = parse_date(date_or_index)
-
-            if target_date is None:
-                return None
-
-            start_date = target_date - timedelta(days=30)
-
-            selected = [
-                dt for dt in date_values
-                if start_date <= dt <= target_date
+            sorted_dts = sorted(dts)
+            intervals = [
+                (curr - prev).total_seconds() / 86400
+                for prev, curr in zip(sorted_dts, sorted_dts[1:])
+                if curr >= prev
             ]
+            return sum(intervals) / len(intervals) if intervals else None
 
-        if len(selected) < 2:
-            return None
+        recent_gap = calc_interval_average(date_values[:2])
 
-        selected.sort()
+        avg_last_10 = calc_interval_average(date_values[:10])
 
-        intervals = []
+        latest_dt = date_values[0]
+        last_30d = [
+            dt for dt in date_values
+            if latest_dt - timedelta(days=30) <= dt <= latest_dt
+        ]
+        avg_last_30d = calc_interval_average(last_30d)
 
-        for prev_dt, curr_dt in zip(selected, selected[1:]):
-            diff = (curr_dt - prev_dt).total_seconds() / 86400
+        avg_total = calc_interval_average(date_values)
 
-            if diff >= 0:
-                intervals.append(diff)
-
-        if not intervals:
-            return None
-
-        return sum(intervals) / len(intervals)
+        return (recent_gap, avg_last_10, avg_last_30d, avg_total)
 
     except Exception as e:
-        print(f"하멜른 연재 간격 계산 오류: {e}")
-        return None
-
+        print(f"하멜른 연재 간격 계산 오류 ({novel_code}): {e}")
+        return (None, None, None, None)
     finally:
         session.close()

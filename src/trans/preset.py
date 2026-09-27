@@ -191,7 +191,7 @@ class PresetLoadDialog(QDialog):
         result = QMessageBox.question(
             self,
             '프리셋 삭제',
-            f"「{name}」 프리셋을 삭제하시겠습니까?\n삭제한 프리셋은 복구할 수 없습니다.",
+            f"[{name}] 프리셋을 삭제하시겠습니까?\n삭제한 프리셋은 복구할 수 없습니다.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
         )

@@ -8,6 +8,7 @@ import src.down.downin as downin
 from src.down.make_image import create_cover_image
 from src.system.config import USE_LOCAL_AI
 from src.down.local_ai import *
+from src.system.load_save import load_data
 
 def print_progress(current, total, prefix="진행", width=30):
     if total <= 0:

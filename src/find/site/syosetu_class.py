@@ -572,7 +572,7 @@ class SyosetuSearch:
 
             target_div = ss_divs[1]
             story_text = target_div.get_text("\n")
-            story_text = re.sub(r"\n{3,}", "\n\n", story_text).strip()
+            story_text = story_text.replace("\n\n", "\n").replace("\n\n", "\n")
 
             if len(story_text.splitlines()) > 120:
                 story_text = (

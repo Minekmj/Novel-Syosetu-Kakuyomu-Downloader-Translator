@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import (
-    QDialog, QWidget, QVBoxLayout, QHBoxLayout,
+    QDialog, QSizePolicy, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QComboBox, QCheckBox,
     QTextEdit, QTabWidget, QGroupBox, QScrollArea, QFrame,
     QFileDialog
@@ -144,7 +144,6 @@ class PathSettingsDialog(QDialog):
         self.ai_prompt_edit = QTextEdit(self)
         self.ai_prompt_edit.setPlaceholderText("AI 번역 시 사용할 추가 프롬프트를 입력하세요.\n비워두면 기본 번역 프롬프트만 사용합니다.")
         self.ai_prompt_edit.setMinimumHeight(70)
-        self.ai_prompt_edit.setMaximumHeight(100)
         self.ai_prompt_edit.setObjectName("detail_description")
         self.ai_prompt_edit.viewport().setStyleSheet("background: transparent;")
         prompt_layout.addWidget(self.ai_prompt_edit)
@@ -168,6 +167,8 @@ class PathSettingsDialog(QDialog):
         censor_main_layout.addStretch()
         censor_layout.addLayout(censor_main_layout)
         self.censor_sub_widget = QWidget(self)
+        self.censor_sub_widget.setMinimumHeight(0)
+        self.censor_sub_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.censor_sub_widget.setStyleSheet("#trans_back{background-color: transparent;}")
         self.censor_sub_widget.setObjectName("trans_back")
         censor_sub_layout = QVBoxLayout(self.censor_sub_widget)
@@ -205,7 +206,6 @@ class PathSettingsDialog(QDialog):
         self.censor_sub_widget.setVisible(False)
         self.censor_toggle.toggled.connect(self.censor_sub_widget.setVisible)
         censor_layout.addWidget(self.censor_sub_widget)
-        censor_layout.addStretch()
 
         censor_desc = QLabel("※ 단어 유지 및 재시도(최대 3회), 셔플을 통해 AI 검열 회피율을 높입니다.\n(단, 셔플 활성화 시 문맥 흐름이 부자연스러울 수 있습니다.)")
         censor_desc.setObjectName("lbl_original_title")
@@ -249,10 +249,13 @@ class PathSettingsDialog(QDialog):
         
         btn_update = create_link_btn("업데이트 내역", "UpdateView")
 
+        link_layout.addStretch(1)
         link_layout.addWidget(btn_opinion)
         link_layout.addWidget(btn_release)
         link_layout.addWidget(btn_github)
         link_layout.addWidget(btn_update)
+        link_layout.addStretch(1)
+        
         layout.addLayout(link_layout)
 
         layout.addStretch()

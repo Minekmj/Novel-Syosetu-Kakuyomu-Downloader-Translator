@@ -683,7 +683,7 @@ def new_kakuyomu(novel_code, have_make=False):
     finally:
         session.close()
         
-def find_ep_kakuyomu_average(novel_code, date_or_index):
+def find_ep_kakuyomu_average(novel_code):
     url = f"https://kakuyomu.jp/works/{novel_code}"
     session = create_session()
     session.headers.update({"Referer": url})
@@ -691,7 +691,7 @@ def find_ep_kakuyomu_average(novel_code, date_or_index):
     try:
         res = session.get(url, timeout=15)
         if res.status_code != 200:
-            return None
+            return (None, None, None, None)
 
         soup = BeautifulSoup(res.text, "html.parser")
         html_text = res.text
@@ -745,8 +745,8 @@ def find_ep_kakuyomu_average(novel_code, date_or_index):
                     continue
                 episodes_data.append((str(index), dt))
 
-        if not episodes_data:
-            return None
+        if len(episodes_data) < 2:
+            return (None, None, None, None)
 
         unique = {}
         for ep_id, dt in episodes_data:
@@ -755,50 +755,34 @@ def find_ep_kakuyomu_average(novel_code, date_or_index):
 
         episodes_data.sort(key=lambda x: x[1], reverse=True)
 
-        if isinstance(date_or_index, int):
-            if date_or_index == -1:
-                selected = episodes_data
-            elif date_or_index <= 0:
+        def calc_interval_average(ep_list):
+            if len(ep_list) < 2:
                 return None
-            else:
-                selected = episodes_data[:date_or_index]
-        else:
-            try:
-                if isinstance(date_or_index, datetime):
-                    target_date = date_or_index
-                else:
-                    date_text = str(date_or_index).strip()
-                    parsed = re.search(r"(\d{4})[年/\-.]\s*(\d{1,2})[月/\-.]\s*(\d{1,2})(?:日)?", date_text)
-                    if not parsed:
-                        return None
-                    target_date = datetime(int(parsed.group(1)), int(parsed.group(2)), int(parsed.group(3)))
+            sorted_eps = sorted(ep_list, key=lambda x: x[1])
+            intervals = [
+                (curr[1] - prev[1]).total_seconds() / 86400
+                for prev, curr in zip(sorted_eps, sorted_eps[1:])
+                if curr[1] >= prev[1]
+            ]
+            return sum(intervals) / len(intervals) if intervals else None
 
-                if target_date.tzinfo is None and episodes_data and episodes_data[0][1].tzinfo is not None:
-                    target_date = target_date.replace(tzinfo=episodes_data[0][1].tzinfo)
+        recent_gap = calc_interval_average(episodes_data[:2])
 
-                start_date = target_date - timedelta(days=30)
-                selected = [item for item in episodes_data if start_date <= item[1] <= target_date]
-            except (ValueError, TypeError):
-                return None
+        avg_last_10 = calc_interval_average(episodes_data[:10])
 
-        if len(selected) < 2:
-            return None
+        latest_dt = episodes_data[0][1]
+        last_30d_eps = [
+            item for item in episodes_data
+            if latest_dt - timedelta(days=30) <= item[1] <= latest_dt
+        ]
+        avg_last_30d = calc_interval_average(last_30d_eps)
 
-        selected.sort(key=lambda x: x[1])
+        avg_total = calc_interval_average(episodes_data)
 
-        intervals = []
-        for (_, prev_dt), (_, curr_dt) in zip(selected, selected[1:]):
-            diff = (curr_dt - prev_dt).total_seconds() / 86400
-            if diff >= 0:
-                intervals.append(diff)
-
-        if not intervals:
-            return None
-
-        return sum(intervals) / len(intervals)
+        return (recent_gap, avg_last_10, avg_last_30d, avg_total)
 
     except Exception as e:
-        print(f"카쿠요무 연재 간격 계산 오류: {e}")
-        return None
+        print(f"카쿠요무 연재 간격 계산 오류 ({novel_code}): {e}")
+        return (None, None, None, None)
     finally:
         session.close()
