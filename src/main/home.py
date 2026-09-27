@@ -519,7 +519,7 @@ class MainWindow(QMainWindow):
         self.row_widgets = []
         self.newly_added_widget = None
 
-        self.setWindowTitle(f"MINE DOWNLOADER - Novel(Syosetu, Kakuyomu) Downloader & Translator - {vsc.V}")
+        self.setWindowTitle(f"MINE DOWNLOADER - {vsc.V}")
         self.resize(1000, 700)
         self.setMinimumSize(820, 550)
         self.setWindowIcon(QIcon(resource_path("main.ico")))
