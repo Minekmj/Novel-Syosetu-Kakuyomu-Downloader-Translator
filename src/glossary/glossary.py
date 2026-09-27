@@ -63,8 +63,6 @@ def _add_substrings(table, text, start, end, min_len, max_len, type_mask, senten
 
     max_len = min(max_len, run_len)
 
-    # 길이별 substring을 직접 slicing.
-    # bytes 변환이나 list/join을 사용하지 않는다.
     for i in range(start, end - min_len + 1):
         last = min(end, i + max_len)
 
@@ -155,8 +153,6 @@ def _extract_candidates(text, sentences, start_time):
     candidates = {}
     sentence_count = len(sentences)
 
-    # sentence별 후보를 별도 객체로 만들지 않고
-    # sentence index -> candidate 문자열 목록만 유지한다.
     sentence_candidates = [[] for _ in range(sentence_count)]
 
     for sid, (ss, se, line) in enumerate(sentences):
@@ -412,7 +408,6 @@ def extract_glossary_sample(all_text, paserent):
     if budget <= 0:
         budget = 1
 
-    # 너무 짧은 경우
     if text_len <= budget:
         return all_text
 
@@ -426,46 +421,37 @@ def extract_glossary_sample(all_text, paserent):
     candidates, sentence_candidates = _extract_candidates(all_text, sentences, start_time)
 
     if candidates is None:
-        # 10초 timeout이면 지금까지 얻은 데이터를 이용해 계속 진행하지 않고
-        # 안전하게 빈 결과를 반환한다.
         return ""
 
     sentence_count = len(sentences)
 
-    # candidate score를 미리 계산
     candidate_scores = {}
 
     for text, item in candidates.items():
         candidate_scores[text] = _candidate_score(item, sentence_count)
 
-    # 문장별 score
     sentence_scores = [0.0] * sentence_count
 
     for sid, (ss, se, line) in enumerate(sentences):
         sentence_scores[sid] = _sentence_score(all_text[ss:se])
 
-    # candidate spread를 이용한 문장 보정값.
-    # 모든 candidate를 다시 순회하지 않고 candidate가 등장한 sentence에 직접 더한다.
     candidate_bonus = [0.0] * sentence_count
 
     for text, item in candidates.items():
         score = candidate_scores[text]
         sentence_ids = item[2]
 
-        # 후보가 여러 문장에 등장할수록 가치가 높음
         bonus = min(score * 0.25, 8.0)
 
         for sid in sentence_ids:
             candidate_bonus[sid] += bonus
 
-    # 최종 정렬 점수
     ranking = []
 
     for sid in range(sentence_count):
         score = sentence_scores[sid] + candidate_bonus[sid]
         ranking.append((score, -sid, sid))
 
-    # 전체 문장을 정렬하지 않고 상위 2001개만 가져온다.
     if sentence_count > TOP_SENTENCE_LIMIT:
         top = heapq.nlargest(TOP_SENTENCE_LIMIT, ranking)
         top.sort(reverse=True)
@@ -533,7 +519,6 @@ def extract_glossary_sample(all_text, paserent):
         if line < len(selected_lines):
             selected_lines[line] = 1
 
-        # 사용된 candidate 기록
         for candidate_text in sentence_candidates[best_sid]:
             if candidate_text in used_candidates:
                 continue

@@ -71,37 +71,31 @@ class NocturneSearch:
             "st": (page - 1) * 20 + 1,
             "word": params.get("query", ""),
             "order": params.get("order", "hyoka"),
-            "nocgenre": 1,  # 1: 녹턴 노벨즈(남성향 R18) 고정
+            "nocgenre": 1,
         }
 
-        # 제외 단어
         exclude_words = params.get("exclude_words", [])
         if exclude_words:
             payload["notword"] = " ".join(
                 str(word).strip() for word in exclude_words if str(word).strip()
             )
 
-        # 장르 (파라미터가 들어올 경우 대비)
         genre_val = params.get("genre_val")
         if genre_val and int(genre_val) != 0:
             payload["genre"] = int(genre_val)
 
-        # 최소 글자수
         min_chars = params.get("min_chars", 0)
         if min_chars and int(min_chars) > 0:
             payload["minlen"] = int(min_chars)
 
-        # 최소 종합 포인트
         min_pt = params.get("min_pt", 0)
         if min_pt and int(min_pt) > 0:
             payload["min_globalpoint"] = int(min_pt)
 
-        # 연재 상태 (단편/연재/완결 등)
         serial_status = params.get("serial_status")
         if serial_status:
             payload["type"] = serial_status
 
-        # 최종 갱신일 필터링
         period_key = params.get("last_published")
         days = NocturneSearch.LAST_PUBLISHED_PERIODS.get(
             period_key, period_key if isinstance(period_key, int) else None
@@ -112,19 +106,16 @@ class NocturneSearch:
             payload["minlastup"] = start_date.strftime("%Y/%m/%d")
             payload["maxlastup"] = today.strftime("%Y/%m/%d")
 
-        # 태그/플래그 포함 설정
         inclusion_flags = params.get("inclusion_flags", [])
         if inclusion_flags:
             for i in inclusion_flags:
                 payload["is" + i] = 1
 
-        # 태그/플래그 제외 설정
         exlusion_flags = params.get("exlusion_flags", [])
         if exlusion_flags:
             for i in exlusion_flags:
                 payload["not" + i if i != "stop" else "stop"] = 1
 
-        # 검색 대상 영역 설정 (제목/줄거리/키워드/저자명)
         find_areas = params.get("find_areas", [])
         if find_areas:
             for i in find_areas:

@@ -97,6 +97,7 @@ class DetailDialog(QDialog):
         status_value = self.item_data.get('status_episodes', '')
         updated_value = self.item_data.get('updated_at', '')
         self.url = self.item_data.get('url', '')
+        self.kewords = self.item_data.get('keywords', '')
 
         title_label = QLabel(title)
         title_label.setObjectName('detail_dialog_title')
@@ -264,7 +265,9 @@ class DetailDialog(QDialog):
         self.average_labels['all'].setText(format_day(avg_total))
 
     def load_detail(self):
-        target_url = self.item_data.get('url' if (self.site == Sites.KAKUYOMU or self.site == Sites.HAMELLEUN or self.site == Sites.HAMELLEUN18) else 'story', '')
+        target_url = self.item_data.get('url' if (self.site == Sites.KAKUYOMU or self.site == Sites.HAMELLEUN or self.site == Sites.HAMELLEUN18 or self.site == Sites.NOVELUP) else 'story', '')
+        if self.site == Sites.NOVELUP:
+            target_url+="!"+", ".join(self.kewords)
         self.worker = DetailWorker(target_url, self.auto_translate, self.site)
         self.worker.finished.connect(self.on_finished)
         self.worker.start()
