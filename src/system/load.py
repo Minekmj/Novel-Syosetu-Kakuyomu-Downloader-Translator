@@ -630,7 +630,7 @@ def create_splash(pre_file=None):
     progress.pack(fill="x")
     progress.start(12)
 
-    version_text = f"v{V}" if V is not None else ""
+    version_text = f"{V}" if V is not None else ""
 
     version_label = tk.Label(
         main_frame,

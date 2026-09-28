@@ -139,17 +139,6 @@ def get_browser_path():
             return path
     return None
 
-def get_bottom_right_position(width=400, height=300):
-    try:
-        user32 = ctypes.windll.user32
-        screen_w = user32.GetSystemMetrics(0)
-        screen_h = user32.GetSystemMetrics(1)
-    except Exception:
-        screen_w, screen_h = 1920, 1080
-    pos_x = max(0, screen_w - width - 20)
-    pos_y = max(0, screen_h - height - 80)
-    return pos_x, pos_y
-
 def get_free_port():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("127.0.0.1", 0))
@@ -323,7 +312,7 @@ def find_cf():
         return
 
     win_w, win_h = 400, 300
-    pos_x, pos_y = get_bottom_right_position(win_w, win_h)
+    pos_x, pos_y = 0, 0
     
     debug_port = get_free_port()
     temp_dir = tempfile.mkdtemp(prefix="cf_bypass_")
@@ -367,7 +356,7 @@ def find_cf():
         "--disable-logging",
     ]
 
-    print("[*] 화면 우측 하단에 작은 크기로 인증 브라우저를 실행합니다...")
+    print("[*] 브라우저를 실행합니다...")
     proc = subprocess.Popen(cmd)
     ws_client = None
 
