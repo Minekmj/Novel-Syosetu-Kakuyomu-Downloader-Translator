@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QComboBox, QSizePolicy
 )
-from src.system.data import NaroSearch, KakuyomuSearch, MidnightSearch, NocturneSearch, SyosetuSearch, SyosetuSearch18, NovelupSearch
+from src.system.data import NaroSearch, KakuyomuSearch, MidnightSearch, NocturneSearch, SyosetuSearch, SyosetuSearch18
 from src.system.data import load_data, save_data
 
 def normalize_url(url):
@@ -16,10 +16,9 @@ class Sites(IntEnum):
     NAROU = 1
     KAKUYOMU = 2
     HAMELLEUN = 3
-    NOVELUP = 4
-    MIDNIGHT = 5
-    NOCTURNE = 6
-    HAMELLEUN18 = 7
+    MIDNIGHT = 4
+    NOCTURNE = 5
+    HAMELLEUN18 = 6
 
 
 SITES = {
@@ -46,14 +45,6 @@ SITES = {
         'has_star': False,
         'ui_setup': lambda window, layout: ha_set_ui(window, layout),
         'build_params': lambda window: ha_build_params(window),
-    },
-    Sites.NOVELUP : {
-        'name': '노벨업+',
-        'search_class': NovelupSearch,
-        'point_text': lambda value: f'pt {value}',
-        'has_star': False,
-        'ui_setup': lambda window, layout: novelup_set_ui(window, layout),
-        'build_params': lambda window: novelup_build_params(window),
     },
     Sites.MIDNIGHT: {
         'name': '미드나이트',
@@ -100,48 +91,6 @@ def site_point_text(site, value):
 
 def site_is_kaku(site):
     return site == Sites.KAKUYOMU
-
-def novelup_set_ui(window, layout):
-    window.novelup_include_values = []
-    window.novelup_find_area_values = []
-
-    # 포함 조건 (레이팅, 서적화, 수상작 등)
-    window.novelup_include_buttons = window.create_multi_select_section(
-        layout, '포함 조건',
-        NovelupSearch.FLAG_INCLUSION_AND_EXLUSION,
-        window.novelup_include_values
-    )
-
-    # 검색 범위 (줄거리, 소개문, 태그, 작가명 등)
-    window.novelup_find_area_buttons = window.create_multi_select_section(
-        layout, '검색 범위',
-        NovelupSearch.FIND_AREA,
-        window.novelup_find_area_values
-    )
-
-
-# 4. 노벨업 검색 파라미터 빌더 함수
-def novelup_build_params(window):
-    return {
-        'query': window.input_query.text().strip(),
-        'genre_val': NovelupSearch.GENRES.get(
-            window.combo_genre.currentText(), 0
-        ),
-        'exclude_words': window.input_exclude.text().strip().split(),
-        'min_chars': window.spin_min_chars.value(),
-        'min_pt': window.spin_min_start.value(),
-        'last_published': NovelupSearch.LAST_PUBLISHED_PERIODS.get(
-            window.combo_last_published.currentText()
-        ),
-        'serial_status': NovelupSearch.SERIAL_STATUSES.get(
-            window.combo_serial_status.currentText(), ''
-        ),
-        'order': NovelupSearch.SORT_ORDERS.get(
-            window.combo_order.currentText(), 1
-        ),
-        'inclusion_flags': getattr(window, 'novelup_include_values', []).copy(),
-        'find_areas': getattr(window, 'novelup_find_area_values', []).copy()
-    }
 
 def na_set_ui(window, layout):
     window.naro_include_values = []

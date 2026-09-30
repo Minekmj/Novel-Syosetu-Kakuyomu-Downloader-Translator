@@ -265,9 +265,7 @@ class DetailDialog(QDialog):
         self.average_labels['all'].setText(format_day(avg_total))
 
     def load_detail(self):
-        target_url = self.item_data.get('url' if (self.site == Sites.KAKUYOMU or self.site == Sites.HAMELLEUN or self.site == Sites.HAMELLEUN18 or self.site == Sites.NOVELUP) else 'story', '')
-        if self.site == Sites.NOVELUP:
-            target_url+="!"+", ".join(self.kewords)
+        target_url = self.item_data.get('url' if (self.site == Sites.KAKUYOMU or self.site == Sites.HAMELLEUN or self.site == Sites.HAMELLEUN18) else 'story', '')
         self.worker = DetailWorker(target_url, self.auto_translate, self.site)
         self.worker.finished.connect(self.on_finished)
         self.worker.start()

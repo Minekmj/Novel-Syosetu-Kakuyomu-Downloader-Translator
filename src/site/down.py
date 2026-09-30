@@ -9,9 +9,8 @@ def Fs(f):
 import src.site.kakuyoumu as kaku
 import src.site.narow as naru
 import src.site.hameln as hame
-import src.site.novelup as novelup
 
-site_list = [kaku, naru, hame, novelup]
+site_list = [kaku, naru, hame]
 
 from src.trans.trans import Translator
 
@@ -43,14 +42,6 @@ def parse_site_info(site):
     elif site_str.startswith("h.") or site_str.startswith("h_"):
         return site_str, "hameln"
 
-    elif "novelup.plus" in site_str:
-        match = re.search(r'/story/(\d+)', site_str)
-        nid = match.group(1) if match else site_str.strip("/").split("/")[-1]
-        return nid, "novelup"
-
-    elif site_str.startswith("nu_") or site_str.startswith("novelup_"):
-        return site_str.split("_", 1)[-1], "novelup"
-
     elif "kakuyomu.jp" in site_str:
         clean_site = site_str.strip("/").split("/")[-1]
         return clean_site, "kakuyomu"
@@ -70,8 +61,6 @@ def CheckTitle(site):
 
     if site_type == "hameln":
         title = Fs(hame.hameln_title(clean_site))
-    elif site_type == "novelup":
-        title = Fs(novelup.novelup_title(clean_site))
     elif site_type == "kakuyomu":
         title = Fs(kaku.kakuyomu_title(clean_site))
     else:
@@ -106,15 +95,6 @@ def Download(
             end,
             trs_path,
             label
-        ))
-    elif site_type == "novelup":
-        book_title = Fs(novelup.download_novelup_async(
-            clean_site,
-            start,
-            end,
-            trs_path,
-            label,
-            act_massage
         ))
     elif site_type == "kakuyomu":
         book_title = Fs(kaku.download_kakuyomu_async(
@@ -169,8 +149,6 @@ def new_number(site, have=False):
 
     if site_type == "hameln":
         new = Fs(hame.new_hameln(clean_site, have))
-    elif site_type == "novelup":
-        new = Fs(novelup.new_novelup(clean_site, have))
     elif site_type == "kakuyomu":
         new = Fs(kaku.new_kakuyomu(clean_site, have))
     else:
@@ -184,8 +162,6 @@ def number_average(site):
     
     if site_type == "hameln":
         new = Fs(hame.find_ep_hameln_average(clean_site))
-    elif site_type == "novelup":
-        new = Fs(novelup.find_ep_novelup_average(clean_site))
     elif site_type == "kakuyomu":
         new = Fs(kaku.find_ep_kakuyomu_average(clean_site))
     else:

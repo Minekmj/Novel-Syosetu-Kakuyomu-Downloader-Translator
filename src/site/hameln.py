@@ -15,7 +15,7 @@ base_data = None
 
 _reset_lock = threading.Lock()
 _last_reset_time = 0
-_request_sem = threading.Semaphore(3)
+_request_sem = threading.Semaphore(1)
 
 
 def urljoin(base_url: str, relative_url: str) -> str:

@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QFileDialog, QScrollArea, QFrame, QDialog, QMessageBox,
     QMenu, QCheckBox, QSizePolicy, QComboBox, QProgressBar
 )
-from PySide6.QtCore import QTimer, Qt, Signal, QObject, QPropertyAnimation, QEasingCurve
+from PySide6.QtCore import Qt, Signal, QObject, QPropertyAnimation, QEasingCurve
 from PySide6.QtGui import QAction, QIcon
 
 import src.down.down as down
@@ -648,7 +648,7 @@ class MainWindow(QMainWindow):
         self.main_layout.addWidget(self.scroll_area, 1)
 
         self.bottom_bar = QFrame()
-        self.bottom_bar.setObjectName("CardFrame")
+        self.bottom_bar.setObjectName("CardFrame_ui")
         self.bottom_bar_layout = QHBoxLayout(self.bottom_bar)
         self.bottom_bar_layout.setContentsMargins(16, 10, 16, 10)
         self.bottom_bar_layout.setSpacing(12)
