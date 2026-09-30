@@ -77,6 +77,7 @@ class PathSettingsDialog(QDialog):
         self.theme_combo = QComboBox()
         
         if data_iteam and hasattr(data_iteam, "THEME_DATA"):
+            data_iteam.rest()
             self.theme_combo.addItems(list(data_iteam.THEME_DATA.keys()))
             inv_map = {v: k for k, v in data_iteam.THEME_DATA.items()}
             current_theme = inv_map.get(getattr(data_iteam, "THEME_NAME", ""), None)

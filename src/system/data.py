@@ -53,9 +53,11 @@ def rest():
         with open(css_file_path, "r", encoding="UTF-8") as f:
             qss_content = f.read()
 
-        theme_dict = theme.THEMES.get(THEME_NAME) or theme.THEMES.get(
-            "LAVENDER", {}
-        )
+        theme_dict = theme.THEMES.get(THEME_NAME)
+        if theme_dict is None:
+            theme_dict = theme.THEMES.get("LAVENDER")
+            THEME_NAME = "LAVENDER"
+        
         MINIMAL_DARK_THEME = build_qss(qss_content, theme_dict)
 
         raw_color = get_item_background_color("CardFrame_ui", MINIMAL_DARK_THEME)
