@@ -7,40 +7,38 @@ from src.find.get import *
 import re
 
 import src.system.theme as theme
-import src.system.theme_back as theme_back
 from src.system.load_save import load_data, save_data
 
 from PySide6.QtGui import QColor
 
-THEME_DATA = {**theme_back.THEME_DATA, **theme.THEME_DATA}
+THEME_DATA = theme.THEME_DATA
 
 THEME_NAME = "LAVENDER"
 
 MINIMAL_DARK_THEME = ""
 
-def build_qss(template_qss: str, theme_dict: dict) -> str:
-    def replace_var(match):
-        key = match.group(1).strip()
-        val = theme_dict.get(key, "")
-        
-        if val is None:
-            return ""
-        
-        if key.startswith("dv_") and val and not val.strip().endswith(";"):
-            return f"{val.strip()};"
-        
-        return str(val)
+VAR_PATTERN = re.compile(r"\|([a-zA-Z0-9_]+)\|\|")
 
-    pattern = re.compile(r"\|([a-zA-Z0-9_]+)\|\|")
-    rendered_qss = pattern.sub(replace_var, template_qss)
-    
-    lines = [line for line in rendered_qss.splitlines() if line.strip() != ""]
-    return "\n".join(lines)
+def build_qss(template_qss: str, theme_dict: dict) -> str:
+    preprocessed = {}
+    for k, v in theme_dict.items():
+        if v is None:
+            preprocessed[k] = ""
+            continue
+
+        v_str = str(v).strip()
+        if k.startswith("dv_") and v_str and not v_str.endswith(";"):
+            preprocessed[k] = f"{v_str};"
+        else:
+            preprocessed[k] = str(v)
+
+    return VAR_PATTERN.sub(lambda m: preprocessed.get(m.group(1), ""), template_qss)
 
 from src.system.src import get_resource_path
 
+
 def rest():
-    global THEME_NAME, MINIMAL_DARK_THEME  
+    global THEME_NAME, MINIMAL_DARK_THEME
 
     if os.path.exists(DATA_FILE):
         try:
@@ -49,49 +47,37 @@ def rest():
         except Exception:
             pass
 
-    
-    css_file_path = get_resource_path(f"css/main.css")
-    css_file_path_back = get_resource_path(f"css/main_back.css")
+    css_file_path = get_resource_path("css/main.qss")
 
     try:
         with open(css_file_path, "r", encoding="UTF-8") as f:
-            try:
-                if THEME_NAME in theme.THEMES:
-                    MINIMAL_DARK_THEME = build_qss(f.read(), theme.THEMES[THEME_NAME])
-            except:
-                THEME_NAME = "LAVENDER"
-                if THEME_NAME in theme.THEMES:
-                    MINIMAL_DARK_THEME = build_qss(f.read(), theme.THEMES[THEME_NAME])
-        with open(css_file_path_back, "r", encoding="UTF-8") as f:
-            try:
-                if THEME_NAME in theme_back.THEMES:
-                    MINIMAL_DARK_THEME = build_qss(f.read(), theme_back.THEMES[THEME_NAME])
-            except:
-                THEME_NAME = "CYAN"
-                if THEME_NAME in theme_back.THEMES:
-                    MINIMAL_DARK_THEME = build_qss(f.read(), theme_back.THEMES[THEME_NAME])
-                    
+            qss_content = f.read()
+
+        theme_dict = theme.THEMES.get(THEME_NAME) or theme.THEMES.get(
+            "LAVENDER", {}
+        )
+        MINIMAL_DARK_THEME = build_qss(qss_content, theme_dict)
+
         raw_color = get_item_background_color("CardFrame_ui", MINIMAL_DARK_THEME)
-                
+
         def replace_color_to_rgba(match):
             hex_code = match.group(0)
             color = QColor(hex_code)
-            r, g, b = color.red(), color.green(), color.blue()
-            return f"rgba({r}, {g}, {b}, 0.4)"
+            return f"rgba({color.red()}, {color.green()}, {color.blue()}, 0.4)"
 
-        transparent_gradient = re.sub(r'#[0-9a-fA-F]{6}', replace_color_to_rgba, raw_color)
-        
-        MINIMAL_DARK_THEME = change_item_background_color("CardFrame_ui", MINIMAL_DARK_THEME, transparent_gradient)
+        transparent_gradient = re.sub(
+            r"#[0-9a-fA-F]{6}", replace_color_to_rgba, raw_color
+        )
+        MINIMAL_DARK_THEME = change_item_background_color(
+            "CardFrame_ui", MINIMAL_DARK_THEME, transparent_gradient
+        )
 
     except FileNotFoundError:
         print(f"CSS 파일을 찾을 수 없습니다: {css_file_path}")
         
 def return_theme():
     th = "#000000"
-    if THEME_NAME in theme.THEMES:
-        th = getattr(theme, f"COLORS_{THEME_NAME.replace(' ', '_')}", "#000000")
-    else:
-        th = getattr(theme_back, f"COLORS_{THEME_NAME}", "#000000")
+    th = getattr(theme, f"COLORS_{THEME_NAME.replace(' ', '_')}", "#000000")
     return th
 
 def get_item_background_color(item, MINIMAL_DARK_THEME):

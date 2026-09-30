@@ -6,33 +6,77 @@ import string
 import threading
 import time
 from urllib.parse import urljoin
+
 import requests
 from bs4 import BeautifulSoup
 
-base_data = None  # 외부 주입용
+import src.find.site.site_data as sf
+
+
+base_data = None
+
+_reset_lock_h = threading.Lock()
+_last_reset_time_h = 0
+_request_sem_h = threading.Semaphore(3)
 
 
 def generate_random_filename(img_dir, ext=".jpg"):
     chars = string.ascii_letters + string.digits
-
     while True:
-        rand_name = "".join(
-            secrets.choice(chars)
-            for _ in range(16)
-        )
-
+        rand_name = "".join(secrets.choice(chars) for _ in range(16))
         filename = f"{rand_name}{ext}"
         full_path = os.path.join(img_dir, filename)
-
         if not os.path.exists(full_path):
             return filename, full_path
 
 
 def create_session():
     session = requests.Session()
-    headers = base_data.HEADERS
-    session.headers.update(headers)
+    session.headers.update(sf.BASE_HEADERS_H)
+    session.cookies.update(sf.COOKIES_H)
     return session
+
+
+def http_cookie(session=None):
+    if session is not None:
+        session.headers.clear()
+        session.headers.update(sf.BASE_HEADERS_H)
+        session.cookies.clear()
+        session.cookies.update(sf.COOKIES_H)
+
+
+def http_get(url, session=None, headers=None, timeout=30, try_c = False):
+    global _last_reset_time_h
+
+    if session is None:
+        session = create_session()
+
+    req_headers = dict(sf.BASE_HEADERS_H)
+    if headers:
+        req_headers.update(headers)
+
+    with _request_sem_h:
+        res = session.get(url, headers=req_headers, cookies=dict(sf.COOKIES_H), timeout=timeout)
+        
+    if try_c:
+        return res
+
+    is_blocked = res.status_code == 403 or "In order to continue, we need to verify that you're not a robot." in res.text or "verify that you're not a robot" in res.text.lower() or res.text.strip() == ""
+
+    if is_blocked:
+        with _reset_lock_h:
+            if time.time() - _last_reset_time_h > 3.0:
+                sf.reset_H(True)
+                _last_reset_time_h = time.time()
+
+            session.headers.clear()
+            session.headers.update(sf.BASE_HEADERS_H)
+            session.cookies.clear()
+            session.cookies.update(sf.COOKIES_H)
+            
+            res = http_get(url, session=session, headers=None, timeout=30, try_c = True)
+
+    return res
 
 
 def parse_novelup_date(date_str):
@@ -40,7 +84,7 @@ def parse_novelup_date(date_str):
         return None
     date_str = date_str.strip()
 
-    m = re.search(r'(\d{2,4})[/-](\d{1,2})[/-](\d{1,2})(?:\s+(\d{1,2}):(\d{1,2}))?', date_str)
+    m = re.search(r"(\d{2,4})[/-](\d{1,2})[/-](\d{1,2})(?:\s+(\d{1,2}):(\d{1,2}))?", date_str)
     if m:
         y, mth, d, h, mn = m.groups()
         if len(y) == 2:
@@ -52,7 +96,7 @@ def parse_novelup_date(date_str):
         except ValueError:
             pass
 
-    m = re.search(r'(\d{4})年(\d{1,2})月(\d{1,2})日(?:\s*(\d{1,2}):(\d{1,2}))?', date_str)
+    m = re.search(r"(\d{4})年(\d{1,2})月(\d{1,2})日(?:\s+(\d{1,2}):(\d{1,2}))?", date_str)
     if m:
         y, mth, d, h, mn = m.groups()
         h = int(h) if h else 0
@@ -71,9 +115,10 @@ def get_novelup_total_info(soup):
 
     total_elem = soup.select_one(".total_episode_num, .story_episode_count, .episode_count")
     if total_elem:
-        m = re.search(r'総エピソード数[：:]\s*([0-9,]+)\s*話', total_elem.get_text())
+        text = total_elem.get_text(" ", strip=True)
+        m = re.search(r"総エピソード数[：:]\s*([0-9,]+)\s*話", text)
         if not m:
-            m = re.search(r'([0-9,]+)\s*話', total_elem.get_text())
+            m = re.search(r"([0-9,]+)\s*話", text)
         if m:
             total_count = int(m.group(1).replace(",", ""))
             last_page = (total_count - 1) // 100 + 1
@@ -81,24 +126,20 @@ def get_novelup_total_info(soup):
     last_btn = soup.select_one("a[aria-label='最後のページへ'], a[data-label='最後のページへ']")
     if last_btn:
         href = last_btn.get("href", "")
-        m = re.search(r'[?&]p=(\d+)', href)
+        m = re.search(r"[?&]p=(\d+)", href)
         if m:
             last_page = max(last_page, int(m.group(1)))
     else:
-        links = soup.select(".pagination a, div.pager a, a[href*='?p=']")
-        for a in links:
+        for a in soup.select(".pagination a, div.pager a, a[href*='?p=']"):
             href = a.get("href", "")
-            m = re.search(r'[?&]p=(\d+)', href)
+            m = re.search(r"[?&]p=(\d+)", href)
             if m:
-                p_val = int(m.group(1))
-                if p_val > last_page:
-                    last_page = p_val
+                last_page = max(last_page, int(m.group(1)))
 
     return total_count, last_page
 
 
 def parse_episodes_from_soup(soup):
-    """단일 목차 페이지에서 100개 단위의 에피소드 목록 파싱"""
     episodes = []
     items = soup.select(".episodeList .episodeListItem, .episodeListItem")
 
@@ -108,21 +149,17 @@ def parse_episodes_from_soup(soup):
             continue
 
         href = title_tag.get("href", "")
-        match = re.search(r'/story/\d+/(\d+)', href)
+        match = re.search(r"/story/\d+/(\d+)", href)
         if not match:
             continue
 
         ep_id = match.group(1)
-        subtitle = title_tag.get_text(strip=True)
-        subtitle = " ".join(subtitle.split())
-
+        subtitle = " ".join(title_tag.get_text(strip=True).split())
         data_num = title_tag.get("data-number", "")
         ep_no = int(data_num) if data_num.isdigit() else None
-
         date_elem = item.select_one(".publishDate, .episodeDate")
         date_text = date_elem.get_text(strip=True) if date_elem else ""
         dt = parse_novelup_date(date_text)
-
         full_url = urljoin("https://novelup.plus", href)
 
         episodes.append({
@@ -139,52 +176,36 @@ def parse_episodes_from_soup(soup):
 
 def novelup_title(novel_code):
     url = f"https://novelup.plus/story/{novel_code}"
-
     session = create_session()
-    session.headers.update({"Referer": url})
+    http_cookie(session)
 
     try:
-        res = session.get(url, timeout=15)
+        res = http_get(url, session=session, headers={"Referer": url}, timeout=15)
         if res.status_code != 200:
             return novel_code
 
         soup = BeautifulSoup(res.text, "html.parser")
-
         name_tag = soup.select_one(".story_title, .story_name, h1")
         if name_tag:
-            t = name_tag.get_text(strip=True)
-            if t:
-                return t
+            title = name_tag.get_text(strip=True)
+            if title:
+                return title
 
         full_title = soup.title.string if soup.title else ""
-        book_title = re.sub(r'（.+?）\s*\|\s*小説投稿サイト.*$', '', full_title).strip()
-        book_title = re.sub(r'\s*\|\s*小説投稿サイト.*$', '', book_title).strip()
-
+        book_title = re.sub(r"（.+?）\s*\|\s*小説投稿サイト.*$", "", full_title).strip()
+        book_title = re.sub(r"\s*\|\s*小説投稿サイト.*$", "", book_title).strip()
         return book_title or novel_code
-
     except Exception:
         return None
-
     finally:
         session.close()
 
 
-def fetch_novelup_episode(
-    title_path,
-    sem,
-    ep,
-    current_idx,
-    trs_path,
-    label_callback,
-    total_count,
-    progress_state,
-    act_massage,
-    printcall=print,
-    max_retries=3
-):
+def fetch_novelup_episode(title_path, sem, ep, current_idx, trs_path, label_callback, total_count, progress_state, act_massage, printcall=print, max_retries=3):
     with sem:
         backup_file = None
         prefix = f"[{current_idx}] "
+
         if os.path.exists(title_path):
             for fname in os.listdir(title_path):
                 if fname.startswith(prefix) and fname.endswith(".txt"):
@@ -210,7 +231,7 @@ def fetch_novelup_episode(
                 if act_massage != "":
                     a = body.find(act_massage)
                     if a > 0:
-                        body = body[0:a]
+                        body = body[:a]
 
                 with open(trs_file_path, "w", encoding="utf-8") as f:
                     f.write(subtitle + "\n\n" + body + "\n\n")
@@ -219,47 +240,26 @@ def fetch_novelup_episode(
                     progress_state["done"] += 1
                     done = progress_state["done"]
 
-                progress_percent = round((100 / total_count) * done, 1)
-                label_callback(f"{progress_percent}%")
-
+                label_callback(f"{round((100 / total_count) * done, 1)}%")
                 return True
             except Exception as e:
-                printcall(
-                    f"노벨업 {current_idx}화 기존 백업 읽기 실패 ({e}). 웹에서 새로 다운로드합니다."
-                )
+                printcall(f"노벨업 {current_idx}화 기존 백업 읽기 실패 ({e}). 웹에서 새로 다운로드합니다.")
 
         delay = getattr(base_data, "DELAY", 1)
 
         for attempt in range(max_retries):
             session = create_session()
-            session.headers.update({"Referer": ep["url"]})
 
             try:
-                res = session.get(ep["url"], timeout=30)
+                res = http_get(ep["url"], session=session, headers={"Referer": ep["url"]}, timeout=30)
                 if res.status_code != 200:
                     raise Exception(f"HTTP status {res.status_code}")
 
-                html = res.text
-                ep_soup = BeautifulSoup(html, "html.parser")
+                ep_soup = BeautifulSoup(res.text, "html.parser")
+                subtitle_tag = ep_soup.select_one(".episode_title h1") or ep_soup.select_one(".episode_title") or ep_soup.find("h1")
+                subtitle = subtitle_tag.get_text(strip=True) if subtitle_tag else ep["subtitle"]
 
-                subtitle_tag = (
-                    ep_soup.select_one(".episode_title h1")
-                    or ep_soup.select_one(".episode_title")
-                    or ep_soup.find("h1")
-                )
-
-                subtitle = (
-                    subtitle_tag.get_text(strip=True)
-                    if subtitle_tag
-                    else ep["subtitle"]
-                )
-
-                content_element = (
-                    ep_soup.select_one("#episode_content")
-                    or ep_soup.select_one("div.content")
-                    or ep_soup.select_one("#section_episode .content_inner")
-                )
-
+                content_element = ep_soup.select_one("#episode_content") or ep_soup.select_one("div.content") or ep_soup.select_one("#section_episode .content_inner")
                 if not content_element:
                     raise Exception("본문 태그(#episode_content) 없음")
 
@@ -284,7 +284,7 @@ def fetch_novelup_episode(
                         filename, file_save_path = generate_random_filename(img_dir, ext)
 
                         try:
-                            img_res = session.get(full_img_url, timeout=30)
+                            img_res = http_get(full_img_url, session=session, headers={"Referer": ep["url"]}, timeout=30)
                             if img_res.status_code == 200:
                                 with open(file_save_path, "wb") as f_img:
                                     f_img.write(img_res.content)
@@ -310,122 +310,78 @@ def fetch_novelup_episode(
                 raw_html = re.sub(r'<em class="emphasisDots">(.*?)</em>', r"**\1**", raw_html)
                 raw_html = re.sub(r"<[^>]+>", "", raw_html)
 
-                lines = raw_html.splitlines()
-
                 body_paragraphs = []
                 body_paragraphs_raw = []
 
-                for line in lines:
+                for line in raw_html.splitlines():
                     line_text = line.lstrip(" \t").rstrip()
                     line_text = re.sub(r"《《(.+?)》》", r"\1", line_text)
 
                     if line_text or (base_data.EXPORT_TEXT and not line_text):
                         body_paragraphs.append(line_text)
 
-                    if line_text or (not line_text):
-                        body_paragraphs_raw.append(line_text)
+                    body_paragraphs_raw.append(line_text)
 
                 body = "\n".join(body_paragraphs)
                 body_raw = "\n".join(body_paragraphs_raw)
-
                 safe_title = re.sub(r'[\\/:*?"<>|]', "_", subtitle)
                 file_path = os.path.join(trs_path, f"{current_idx}번_{safe_title}.txt")
 
                 if act_massage != "":
                     a = body.find(act_massage)
                     if a > 0:
-                        body = body[0:a]
+                        body = body[:a]
 
                 with open(file_path, "w", encoding="utf-8") as f:
                     f.write(subtitle + "\n\n" + body + "\n\n")
 
-                with open(
-                    os.path.join(title_path, f"[{current_idx}] {safe_title}.txt"),
-                    "w",
-                    encoding="utf-8"
-                ) as f:
-                    f.write(
-                        '=' * 30 +
-                        "\n" +
-                        subtitle +
-                        "\n" +
-                        '=' * 30 +
-                        "\n\n\n\n" +
-                        body_raw
-                    )
+                with open(os.path.join(title_path, f"[{current_idx}] {safe_title}.txt"), "w", encoding="utf-8") as f:
+                    f.write("=" * 30 + "\n" + subtitle + "\n" + "=" * 30 + "\n\n\n\n" + body_raw)
 
                 with progress_state["lock"]:
                     progress_state["done"] += 1
                     done = progress_state["done"]
 
-                progress_percent = round((100 / total_count) * done, 1)
-                label_callback(f"{progress_percent}%")
-
-                wait_time = delay * 5 if has_downloaded_img else delay
-                time.sleep(wait_time)
-
+                label_callback(f"{round((100 / total_count) * done, 1)}%")
+                time.sleep(delay * 5 if has_downloaded_img else delay)
                 return True
 
             except Exception as e:
-                printcall(
-                    f"노벨업 에피소드 다운로드 오류 "
-                    f"({ep.get('id', current_idx)}) "
-                    f"[시도 {attempt + 1}/{max_retries}]: {e}"
-                )
-
+                printcall(f"노벨업 에피소드 다운로드 오류 ({ep.get('id', current_idx)}) [시도 {attempt + 1}/{max_retries}]: {e}")
                 if attempt < max_retries - 1:
                     time.sleep(delay * 10)
                 else:
-                    printcall(
-                        f"노벨업 에피소드 "
-                        f"({ep.get('id', current_idx)}) "
-                        f"최대 재시도 횟수 초과"
-                    )
+                    printcall(f"노벨업 에피소드 ({ep.get('id', current_idx)}) 최대 재시도 횟수 초과")
                     return None
-
             finally:
                 session.close()
 
 
-def download_novelup_async(
-    novel_code,
-    start,
-    end,
-    trs_path,
-    label,
-    act_massage
-):
+def download_novelup_async(novel_code, start, end, trs_path, label, act_massage):
     total_count = end - start + 1
     url = f"https://novelup.plus/story/{novel_code}"
     book_title = novel_code
-
-    progress_state = {
-        "done": 0,
-        "lock": threading.Lock()
-    }
-
+    progress_state = {"done": 0, "lock": threading.Lock()}
     label_callback = label.setText
-
     session = create_session()
-    session.headers.update({"Referer": url})
+    http_cookie(session)
 
     try:
-        res = session.get(url, timeout=30)
+        res = http_get(url, session=session, headers={"Referer": url}, timeout=30)
         if res.status_code != 200:
             return novel_code
 
         first_soup = BeautifulSoup(res.text, "html.parser")
-
         name_tag = first_soup.select_one(".story_title, .story_name, h1")
+
         if name_tag:
             book_title = name_tag.get_text(strip=True)
         else:
             full_title = first_soup.title.string if first_soup.title else ""
-            book_title = re.sub(r'（.+?）\s*\|\s*小説投稿サイト.*$', '', full_title).strip()
+            book_title = re.sub(r"（.+?）\s*\|\s*小説投稿サイト.*$", "", full_title).strip()
 
         start_page = max(1, (start - 1) // 100 + 1)
         end_page = max(1, (end - 1) // 100 + 1)
-
         total_cnt, max_avail_page = get_novelup_total_info(first_soup)
         end_page = min(end_page, max_avail_page)
 
@@ -437,13 +393,12 @@ def download_novelup_async(
                 page_soup = first_soup
             else:
                 time.sleep(getattr(base_data, "DELAY", 1))
-                page_res = session.get(f"{url}?p={p}", timeout=15)
+                page_res = http_get(f"{url}?p={p}", session=session, headers={"Referer": url}, timeout=15)
                 if page_res.status_code != 200:
                     continue
                 page_soup = BeautifulSoup(page_res.text, "html.parser")
 
-            p_eps = parse_episodes_from_soup(page_soup)
-            for ep in p_eps:
+            for ep in parse_episodes_from_soup(page_soup):
                 if ep["id"] not in seen_ids:
                     seen_ids.add(ep["id"])
                     collected_episodes.append(ep)
@@ -451,18 +406,11 @@ def download_novelup_async(
         if not collected_episodes:
             content_element = first_soup.select_one("#episode_content, div.content")
             if content_element:
-                collected_episodes.append({
-                    "id": "1",
-                    "subtitle": book_title or novel_code,
-                    "url": url,
-                    "published_at": None,
-                    "datetime": None
-                })
+                collected_episodes.append({"id": "1", "subtitle": book_title or novel_code, "url": url, "published_at": None, "datetime": None})
 
     except Exception as e:
         print(f"노벨업 목차 가져오기 오류: {e}")
         return novel_code
-
     finally:
         session.close()
 
@@ -473,39 +421,19 @@ def download_novelup_async(
     r_book_title = re.sub(r"^【.*?】", "", book_title)
     r_book_title = re.sub(r"【.*?】$", "", r_book_title)
     r_book_title = re.sub(r'[\\/:*?"<>|]', "_", r_book_title).strip()
-
     title_path = os.path.join(base_data.OUTFOLDER, "list", r_book_title)
     os.makedirs(title_path, exist_ok=True)
 
     offset = (start_page - 1) * 100
     local_start = max(0, start - 1 - offset)
     local_end = local_start + total_count
-
     target_episodes = collected_episodes[local_start:local_end]
-
     sem = threading.Semaphore(base_data.CONCURRENCY_LIMIT)
     threads = []
 
     for idx, ep in enumerate(target_episodes):
         current_idx = idx + start
-
-        thread = threading.Thread(
-            target=fetch_novelup_episode,
-            args=(
-                title_path,
-                sem,
-                ep,
-                current_idx,
-                trs_path,
-                label_callback,
-                total_count,
-                progress_state,
-                act_massage,
-                print
-            ),
-            daemon=True
-        )
-
+        thread = threading.Thread(target=fetch_novelup_episode, args=(title_path, sem, ep, current_idx, trs_path, label_callback, total_count, progress_state, act_massage, print), daemon=True)
         threads.append(thread)
         thread.start()
 
@@ -517,106 +445,108 @@ def download_novelup_async(
 
 def new_novelup(novel_code, have_make=False):
     url = f"https://novelup.plus/story/{novel_code}"
+    session = create_session()
+    http_cookie(session)
 
-    with create_session() as session:
-        try:
-            res = session.get(url, timeout=15)
-            if res.status_code != 200:
-                return None
-
-            first_soup = BeautifulSoup(res.text, "html.parser")
-            total_count, last_page = get_novelup_total_info(first_soup)
-            latest_date = None
-
-            if total_count is None:
-                first_eps = parse_episodes_from_soup(first_soup)
-                if not first_eps and first_soup.select_one("#episode_content, div.content"):
-                    total_count = 1
-
-            if total_count is None:
-                return None
-
-            if not have_make:
-                return total_count
-
-            if last_page > 1:
-                last_res = session.get(f"{url}?p={last_page}", timeout=15)
-                if last_res.status_code == 200:
-                    last_soup = BeautifulSoup(last_res.text, "html.parser")
-                else:
-                    last_soup = first_soup
-            else:
-                last_soup = first_soup
-
-            last_page_eps = parse_episodes_from_soup(last_soup)
-            if last_page_eps:
-                latest_date = last_page_eps[-1].get("published_at")
-
-            return (total_count, base_data.normalize_date(latest_date) if latest_date else None)
-
-        except Exception as e:
-            print(f"노벨업 에피소드 수 확인 오류 ({novel_code}): {e}")
+    try:
+        res = http_get(url, session=session, headers={"Referer": url}, timeout=15)
+        if res.status_code != 200:
             return None
+
+        first_soup = BeautifulSoup(res.text, "html.parser")
+        total_count, last_page = get_novelup_total_info(first_soup)
+        latest_date = None
+
+        if total_count is None:
+            first_eps = parse_episodes_from_soup(first_soup)
+            if not first_eps and first_soup.select_one("#episode_content, div.content"):
+                total_count = 1
+
+        if total_count is None:
+            return None
+
+        if not have_make:
+            return total_count
+
+        if last_page > 1:
+            last_res = http_get(f"{url}?p={last_page}", session=session, headers={"Referer": url}, timeout=15)
+            last_soup = BeautifulSoup(last_res.text, "html.parser") if last_res.status_code == 200 else first_soup
+        else:
+            last_soup = first_soup
+
+        last_page_eps = parse_episodes_from_soup(last_soup)
+        if last_page_eps:
+            latest_date = last_page_eps[-1].get("published_at")
+
+        return total_count, base_data.normalize_date(latest_date) if latest_date else None
+
+    except Exception as e:
+        print(f"노벨업 에피소드 수 확인 오류 ({novel_code}): {e}")
+        return None
+    finally:
+        session.close()
 
 
 def find_ep_novelup_average(novel_code):
     url = f"https://novelup.plus/story/{novel_code}"
+    session = create_session()
+    http_cookie(session)
 
-    with create_session() as session:
-        try:
-            res = session.get(url, timeout=15)
-            if res.status_code != 200:
-                return (None, None, None, None)
+    try:
+        res = http_get(url, session=session, headers={"Referer": url}, timeout=15)
+        if res.status_code != 200:
+            return None, None, None, None
 
-            first_soup = BeautifulSoup(res.text, "html.parser")
-            _, last_page = get_novelup_total_info(first_soup)
+        first_soup = BeautifulSoup(res.text, "html.parser")
+        _, last_page = get_novelup_total_info(first_soup)
+        episodes_data = []
 
-            episodes_data = []
+        for page in range(1, last_page + 1):
+            if page == 1:
+                page_soup = first_soup
+            else:
+                time.sleep(getattr(base_data, "DELAY", 1))
+                page_res = http_get(f"{url}?p={page}", session=session, headers={"Referer": url}, timeout=15)
+                if page_res.status_code != 200:
+                    continue
+                page_soup = BeautifulSoup(page_res.text, "html.parser")
 
-            for page in range(1, last_page + 1):
-                if page == 1:
-                    page_soup = first_soup
-                else:
-                    time.sleep(getattr(base_data, "DELAY", 1))
-                    page_res = session.get(f"{url}?p={page}", timeout=15)
-                    if page_res.status_code != 200:
-                        continue
-                    page_soup = BeautifulSoup(page_res.text, "html.parser")
+            for ep in parse_episodes_from_soup(page_soup):
+                dt = ep.get("datetime")
+                ep_no = ep.get("no")
+                if dt:
+                    episodes_data.append((ep_no or len(episodes_data) + 1, dt))
 
-                page_eps = parse_episodes_from_soup(page_soup)
-                for ep in page_eps:
-                    dt = ep.get("datetime")
-                    ep_no = ep.get("no")
-                    if dt:
-                        episodes_data.append((ep_no or len(episodes_data) + 1, dt))
+        if len(episodes_data) < 2:
+            return None, None, None, None
 
-            if not episodes_data or len(episodes_data) < 2:
-                return (None, None, None, None)
+        episodes_data = sorted(set(episodes_data), key=lambda x: x[0], reverse=True)
 
-            episodes_data = sorted(set(episodes_data), key=lambda x: x[0], reverse=True)
+        def get_average_from_selected(selected):
+            if len(selected) < 2:
+                return None
 
-            def get_average_from_selected(selected):
-                if len(selected) < 2:
-                    return None
-                selected = sorted(selected, key=lambda x: x[1])
-                intervals = []
-                for (_, prev_dt), (_, curr_dt) in zip(selected, selected[1:]):
-                    diff = (curr_dt - prev_dt).total_seconds() / 86400
-                    if diff >= 0:
-                        intervals.append(diff)
-                return sum(intervals) / len(intervals) if intervals else None
+            selected = sorted(selected, key=lambda x: x[1])
+            intervals = []
 
-            recent_avg = get_average_from_selected(episodes_data[:2])
-            avg_10 = get_average_from_selected(episodes_data[:10])
+            for (_, prev_dt), (_, curr_dt) in zip(selected, selected[1:]):
+                diff = (curr_dt - prev_dt).total_seconds() / 86400
+                if diff >= 0:
+                    intervals.append(diff)
 
-            target_date = datetime.now()
-            selected_30 = [item for item in episodes_data if target_date - timedelta(days=30) <= item[1] <= target_date]
-            avg_30 = get_average_from_selected(selected_30)
+            return sum(intervals) / len(intervals) if intervals else None
 
-            avg_all = get_average_from_selected(episodes_data)
+        recent_avg = get_average_from_selected(episodes_data[:2])
+        avg_10 = get_average_from_selected(episodes_data[:10])
+        target_date = datetime.now()
+        selected_30 = [item for item in episodes_data if target_date - timedelta(days=30) <= item[1] <= target_date]
+        avg_30 = get_average_from_selected(selected_30)
+        avg_all = get_average_from_selected(episodes_data)
 
-            return (recent_avg, avg_10, avg_30, avg_all)
+        return recent_avg, avg_10, avg_30, avg_all
 
-        except Exception as e:
-            print(f"노벨업 연재 간격 계산 오류 ({novel_code}): {e}")
-            return (None, None, None, None)
+    except Exception as e:
+        print(f"노벨업 연재 간격 계산 오류 ({novel_code}): {e}")
+        return None, None, None, None
+    finally:
+        session.close()

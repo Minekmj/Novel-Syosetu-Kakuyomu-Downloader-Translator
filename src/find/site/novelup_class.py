@@ -4,19 +4,12 @@ from urllib.parse import urljoin
 import requests
 from bs4 import BeautifulSoup
 
+import src.find.site.site_data as sf
+
 http_session = requests.Session()
 
 
 class NovelupSearch:
-    HEADERS = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/120.0.0.0 Safari/537.36"
-        ),
-        "Referer": "https://novelup.plus/search",
-    }
-
     GENRES = {
         "전체": 0,
         "이세계 판타지": 1,
@@ -86,8 +79,36 @@ class NovelupSearch:
 
     _sort_initialized = False
 
-    @staticmethod
-    def fetch_search_results(params):
+    @classmethod
+    def set_flag(cls):
+        sf.reset_b_H()
+
+    @classmethod
+    def _get(cls, url, headers=None, params=None, timeout=15):
+        req_headers = dict(sf.BASE_HEADERS_H)
+        if headers:
+            req_headers.update(headers)
+
+        req_cookies = dict(sf.COOKIES_H)
+
+        http_session.cookies.update(req_cookies)
+
+        res = http_session.get(url, headers=req_headers, cookies=req_cookies, params=params, timeout=timeout)
+
+        if res.status_code == 403 or "In order to continue, we need to verify that you're not a robot." in res.text or res.text.strip() == "":
+            sf.reset_H(True)
+            req_headers = dict(sf.BASE_HEADERS_H)
+            if headers:
+                req_headers.update(headers)
+            req_cookies = dict(sf.COOKIES_H)
+            http_session.cookies.update(req_cookies)
+            res = http_session.get(url, headers=req_headers, cookies=req_cookies, params=params, timeout=timeout)
+
+        return res
+
+    @classmethod
+    def fetch_search_results(cls, params):
+        cls.set_flag()
 
         search_url = "https://novelup.plus/search"
         query = params.get("query", "").strip()
@@ -167,10 +188,9 @@ class NovelupSearch:
                     payload[flag] = 1
 
         try:
-            res = http_session.get(
+            res = cls._get(
                 search_url,
                 params=payload,
-                headers=NovelupSearch.HEADERS,
                 timeout=25
             )
             res.raise_for_status()
@@ -259,15 +279,14 @@ class NovelupSearch:
                 "items": []
             }
 
-    @staticmethod
-    def fetch_detail_description(work_url):
+    @classmethod
+    def fetch_detail_description(cls, work_url):
         if not work_url:
             return ""
         try:
             work_url, keywords_list = (work_url[:work_url.find("!")], work_url[work_url.find("!")+1:])
-            res = http_session.get(
+            res = cls._get(
                 work_url,
-                headers=NovelupSearch.HEADERS,
                 timeout=20
             )
             res.raise_for_status()
@@ -275,7 +294,7 @@ class NovelupSearch:
             soup = BeautifulSoup(res.text, "html.parser")
             synopsis_elem = soup.select_one("div.novel_synopsis")
             if synopsis_elem:
-                return synopsis_elem.get_text(separator="\n", strip=True)+ "_____1234_____" + keywords_list
+                return synopsis_elem.get_text(separator="\n", strip=True) + "_____1234_____" + keywords_list
 
             return work_url
         except Exception as e:

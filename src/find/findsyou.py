@@ -246,8 +246,6 @@ class MainWindow_Find(QDialog):
             self.windowFlags() | Qt.WindowType.WindowMaximizeButtonHint
         )
 
-        self.setStyleSheet(data_iteam.MINIMAL_DARK_THEME)
-
         self.current_page = 1
         self.search_results = []
         self.active_search_params = None
@@ -663,8 +661,6 @@ class MainWindow_Find(QDialog):
             self.site,
             self
         )
-
-        dialog.setStyleSheet(data_iteam.MINIMAL_DARK_THEME)
         dialog.show()
 
     def closeEvent(self, event):
@@ -672,10 +668,3 @@ class MainWindow_Find(QDialog):
             istaiain.remove(self)
 
         super().closeEvent(event)
-
-
-def rest():
-    data_iteam.rest()
-
-    for window in istaiain:
-        window.setStyleSheet(data_iteam.MINIMAL_DARK_THEME)

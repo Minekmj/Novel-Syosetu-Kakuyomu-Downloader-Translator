@@ -180,14 +180,44 @@ QLabel#lbl_tag {
     |dv_tag||
 }
 
+QLabel#setting_title_txt {
+    color: |checkbox_text||;
+    font-size: 9pt;
+}
+
+QLabel#dropArea {
+    background: transparent;
+    border-radius: 6px;
+    padding: 4px;
+}
+
+QLabel#subLabel {
+    background: transparent;
+    font-size: 11px;
+    font-weight: 600;
+    margin-top: 2px;
+    margin-bottom: 2px;
+}
+
+QLabel#optionLabel {
+    background: transparent;
+    font-size: 11px;
+}
+
+QLabel#secondaryInfo {
+    background: transparent;
+    font-size: 10px;
+}
+
 QLineEdit,
-QSpinBox {
+QSpinBox,
+QDoubleSpinBox {
     background-color: |surface_input||;
     color: |text_input||;
     border: |border_input||;
-    border-radius: |radius_input||;
-    min-height: 24px;
-    padding: 5px 9px;
+    border-radius: 5px;
+    min-height: 34px;
+    padding: 0px 8px;
     font-size: 9pt;
     selection-background-color: |selection_input||;
     selection-color: |selection_text||;
@@ -220,9 +250,9 @@ QComboBox {
     background-color: |surface_input||;
     color: |text_input||;
     border: |border_input||;
-    border-radius: |radius_input||;
-    min-height: 24px;
-    padding: 5px 28px 5px 10px;
+    border-radius: 5px;
+    min-height: 34px;
+    padding: 0px 28px 0px 10px;
     font-size: 9pt;
     |dv_combo||
 }
@@ -418,26 +448,14 @@ QPushButton#detail_tag_btn:pressed {
     |dv_detail_tag_btn_pressed||
 }
 
-QGroupBox {
-    background-color: transparent;
-    border: none;
-    border-top: 1px solid |border_subtle||;
-    margin-top: 14px;
-    padding-top: 14px;
-    color: |text_group||;
-    font-size: 9pt;
-    font-weight: 700;
-    |dv_groupbox||
+QPushButton#subtleBtn {
+    min-height: 34px;
+    padding: 0px 11px;
+    border-radius: 5px;
 }
 
-QGroupBox::title {
-    subcontrol-origin: margin;
-    subcontrol-position: top left;
-    left: 0px;
-    padding: 0px 6px 0px 0px;
-    background-color: |bg||;
-    color: |text_group_title||;
-    |dv_groupbox_title||
+QPushButton#subtleBtn:pressed {
+    padding-top: 1px;
 }
 
 QFrame#CardFrame,
@@ -496,12 +514,24 @@ QWidget#detail_tags {
     |dv_detail_tags||
 }
 
+QWidget#tag_container {
+    background-color: transparent;
+    |dv_tag_container||
+}
+
 QFrame#dialog_separator {
     background-color: |border_subtle||;
     min-height: 1px;
     max-height: 1px;
     border: none;
     |dv_dialog_separator||
+}
+
+QFrame#hr_line {
+    background-color: |border_subtle||;
+    min-height: 1px;
+    max-height: 1px;
+    border: none;
 }
 
 QTextEdit {
@@ -520,8 +550,8 @@ QTextEdit#detail_description {
     background-color: |surface_card||;
     color: |textedit_text||;
     border: |border_card||;
-    border-radius: |radius_card||;
-    padding: 12px;
+    border-radius: 6px;
+    padding: 5px;
     font-size: 9pt;
     selection-background-color: |selection_textedit||;
     selection-color: |selection_text||;
@@ -587,6 +617,24 @@ QScrollArea {
     background: transparent;
     border: none;
     |dv_scrollarea||
+}
+
+QScrollArea#no_back-modelScroll {
+    border: none;
+    background: transparent;
+    background-color: transparent;
+}
+
+QScrollArea#no_back-modelScroll > QWidget {
+    border: none;
+    background: transparent;
+    background-color: transparent;
+}
+
+QScrollArea#no_back-modelScroll QWidget#no_back-modelListContainer {
+    border: none;
+    background: transparent;
+    background-color: transparent;
 }
 
 QScrollBar:vertical {
@@ -662,9 +710,31 @@ QSpinBox::down-arrow {
     height: 0px;
 }
 
-QWidget#tag_container {
+QWidget[objectName^="no_back-"] {
+    background: transparent;
     background-color: transparent;
-    |dv_tag_container||
+}
+
+QGroupBox {
+    background-color: transparent;
+    border: none;
+    border-top: 1px solid |border_subtle||;
+    margin-top: 14px;
+    padding-top: 14px;
+    color: |text_group||;
+    font-size: 9pt;
+    font-weight: 700;
+    |dv_groupbox||
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 0px;
+    padding: 0px 6px 0px 0px;
+    background-color: |bg||;
+    color: |text_group_title||;
+    |dv_groupbox_title||
 }
 
 QGroupBox#group_box::title {
@@ -691,13 +761,6 @@ QToolButton#link_button:hover {
 QToolButton#link_button:pressed {
     background-color: |chip_checked||;
     color: |chip_checked_text||;
-}
-
-QFrame#hr_line {
-    background-color: |border_subtle||;
-    min-height: 1px;
-    max-height: 1px;
-    border: none;
 }
 
 #isCo:hover {
@@ -817,115 +880,10 @@ QPushButton#dictionaryAdd:pressed {
     |dv_dictionary_add_pressed||
 }
 
-QLabel#setting_title_txt {
-    color: |checkbox_text||;
-    font-size: 9pt;
-}
-
 QTabWidget QStackedWidget {
     background: transparent;
     border: none;
     border-top: 1px solid |border_subtle||;
-}
-
-QWidget[objectName^="no_back-"] {
-    background: transparent;
-    background-color: transparent;
-}
-
-QFrame#chunkSepBox {
-    border: 1px solid rgba(77, 166, 255, 0.3);
-    border-radius: 6px;
-    background: rgba(77, 166, 255, 0.06);
-}
-
-QLabel#dropArea {
-    background: transparent;
-    border-radius: 6px;
-    padding: 4px;
-}
-
-QLabel#subLabel {
-    background: transparent;
-    font-size: 11px;
-    font-weight: 600;
-    margin-top: 2px;
-    margin-bottom: 2px;
-}
-
-QLabel#optionLabel {
-    background: transparent;
-    font-size: 11px;
-}
-
-QLabel#secondaryInfo {
-    background: transparent;
-    font-size: 10px;
-}
-
-QPushButton#subtleBtn {
-    min-height: 34px;
-    padding: 0px 11px;
-    border-radius: 5px;
-}
-
-QPushButton#subtleBtn:pressed {
-    padding-top: 1px;
-}
-
-QLineEdit,
-QComboBox,
-QSpinBox,
-QDoubleSpinBox {
-    min-height: 34px;
-    padding: 0px 8px;
-    border-radius: 5px;
-}
-
-QLineEdit#selectedModelDisplay {
-    min-height: 35px;
-}
-
-QScrollArea#no_back-modelScroll {
-    border: none;
-    background: transparent;
-    background-color: transparent;
-}
-
-QScrollArea#no_back-modelScroll > QWidget {
-    border: none;
-    background: transparent;
-    background-color: transparent;
-}
-
-QScrollArea#no_back-modelScroll QWidget#no_back-modelListContainer {
-    border: none;
-    background: transparent;
-    background-color: transparent;
-}
-
-QWidget#no_back-modelRow {
-    background: transparent;
-    background-color: transparent;
-}
-
-QComboBox#modelRowCombo {
-    min-height: 36px;
-    padding: 0px 9px;
-    border-radius: 5px;
-}
-
-QPushButton#modelSelectBtn,
-QPushButton#modelDeleteBtn {
-    min-height: 36px;
-    padding: 0px 10px;
-    border-radius: 5px;
-}
-
-QLabel#modelActiveIndicator {
-    background: transparent;
-    min-width: 12px;
-    max-width: 12px;
 }
 
 QWidget#no_back-tabParams,
@@ -966,6 +924,36 @@ QTabWidget#settingsTab QTabBar::tab:hover {
     color: |text_title||;
 }
 
+QFrame#chunkSepBox {
+    border: 1px solid rgba(77, 166, 255, 0.3);
+    border-radius: 6px;
+    background: rgba(77, 166, 255, 0.06);
+}
+
+QWidget#no_back-modelRow {
+    background: transparent;
+    background-color: transparent;
+}
+
+QComboBox#modelRowCombo {
+    min-height: 36px;
+    padding: 0px 9px;
+    border-radius: 5px;
+}
+
+QPushButton#modelSelectBtn,
+QPushButton#modelDeleteBtn {
+    min-height: 36px;
+    padding: 0px 10px;
+    border-radius: 5px;
+}
+
+QLabel#modelActiveIndicator {
+    background: transparent;
+    min-width: 12px;
+    max-width: 12px;
+}
+
 QProgressBar {
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 4px;
@@ -976,9 +964,4 @@ QProgressBar {
 QProgressBar::chunk {
     border-radius: 3px;
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #3b82f6, stop:1 #60a5fa);
-}
-
-QTextEdit#detail_description {
-    border-radius: 6px;
-    padding: 5px;
 }

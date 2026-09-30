@@ -17,3 +17,5 @@ trans.json
 trans.db
 build.txt
 main.ico~
+test.bat
+session_info_header.json

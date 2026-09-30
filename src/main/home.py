@@ -1,15 +1,15 @@
 import re
 import webbrowser
+from collections import deque
 from datetime import datetime
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout,
     QHBoxLayout, QLineEdit, QPushButton, QLabel,
     QFileDialog, QScrollArea, QFrame, QDialog, QMessageBox,
-    QMenu, QCheckBox, QSizePolicy, QComboBox
+    QMenu, QCheckBox, QSizePolicy, QComboBox, QProgressBar
 )
-from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve
-from PySide6.QtGui import QAction
-from PySide6.QtGui import QIcon
+from PySide6.QtCore import QTimer, Qt, Signal, QObject, QPropertyAnimation, QEasingCurve
+from PySide6.QtGui import QAction, QIcon
 
 import src.down.down as down
 from src.system.data import open_folder, save_data, load_data
@@ -23,7 +23,6 @@ import src.qr.qr_view as qr_view
 import src.main.setting as setting_ui
 import src.main.update as update_ui
 from src.system.src import resource_path
-
 import src.system.v as vsc
 
 data_iteam.rest()
@@ -31,10 +30,14 @@ thread_pyqt.DOWN = down
 qr_view.down = down
 
 findsyou.detail_ui.DOWN = down.downin
-
 setting_ui.data_iteam = data_iteam
-
 trans_view.OUT = down.downin.base_data.OUTFOLDER
+
+class ThreadProgressBridge(QObject):
+    progress_updated = Signal(str)
+
+    def setText(self, text):
+        self.progress_updated.emit(str(text))
 
 class SmoothScrollArea(QScrollArea):
     def __init__(self, parent=None):
@@ -151,18 +154,19 @@ class EditActDialog(QDialog):
         return self.massage_edit.text().strip()
 
 class DownloadDetailDialog(QDialog):
-    def __init__(self, site_url, title_text, last_down, parent, now_s, act_massage, row_widget):
+    def __init__(self, site_url, title_text, last_down, parent, now_s, act_massage, row_widget, main_window):
         super().__init__(parent)
         self.site_url = site_url
         self.title_text = title_text
         self.last_down = last_down
         self.now_state = now_s
         self.row_widget = row_widget
+        self.main_window = main_window
         self.now_res = ""
         self.act_massage = act_massage
         
-        self.setWindowTitle("다운로드")
-        self.setFixedSize(360, 220)
+        self.setWindowTitle("다운로드 설정")
+        self.setFixedSize(360, 200)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -204,15 +208,10 @@ class DownloadDetailDialog(QDialog):
 
         layout.addStretch()
 
-        self.prograss = QLabel("", self)
-        self.prograss.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.prograss.setObjectName("prograss")
-        layout.addWidget(self.prograss)
-
-        self.down_btn = QPushButton("다운로드 시작", self)
+        self.down_btn = QPushButton("다운로드 대기열 추가", self)
         self.down_btn.setObjectName("primaryBtn")
         self.down_btn.setFixedHeight(40)
-        self.down_btn.clicked.connect(self.run_download)
+        self.down_btn.clicked.connect(self.enqueue_and_close)
         layout.addWidget(self.down_btn)
         
         if self.now_state == "-":
@@ -234,7 +233,7 @@ class DownloadDetailDialog(QDialog):
         if not self.end_edit.text():
             self.end_edit.setText(self.now_res)
 
-    def run_download(self):
+    def enqueue_and_close(self):
         start = self.start_edit.text().strip()
         end = self.end_edit.text().strip()
 
@@ -250,50 +249,24 @@ class DownloadDetailDialog(QDialog):
         if int(end) < int(start):
             end = start
 
-        self.prograss.setText("0.0%")
-        self.down_btn.setEnabled(False)
-        self.down_btn.setText("진행 중...")
-
-        self.thread = thread_pyqt.DownloadThread(self.site_url, start, end, self.prograss, self.title_text, self.act_massage)
-        self.thread.finished_signal.connect(
-            lambda success, err_msg: self.on_download_finished(success, err_msg, start, end)
-        )
-        self.thread.start()
-
-    def on_download_finished(self, success, err_msg, start, end):
-        self.down_btn.setEnabled(True)
-        self.down_btn.setText("다운로드 시작")
-
-        if success:
-            nums = []
-            for val in [start, end]:
-                if val.isdigit():
-                    nums.append(int(val))
-
-            now_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-            if nums:
-                max_num = max(nums)
-                data = load_data()
-                if self.title_text in data.get("list", {}):
-                    data["list"][self.title_text]["down"] = str(max_num)
-                    data["list"][self.title_text]["down_time"] = now_time_str
-                    save_data(data)
-
-            target_folder = down.downin.base_data.OUTFOLDER
-            self.row_widget.update_download_info(end, now_time_str)
-            open_folder(target_folder if (target_folder[len(target_folder) - 1] == "\\" or target_folder[len(target_folder) - 1] == "/") else (target_folder + "/"))
-            self.accept()
-        else:
-            QMessageBox.critical(self, "오류", err_msg)
-            self.prograss.setText("오류 발생")
+        task = {
+            "site_url": self.site_url,
+            "title_text": self.title_text,
+            "start": start,
+            "end": end,
+            "act_massage": self.act_massage,
+            "row_widget": self.row_widget
+        }
+        self.main_window.add_download_task(task)
+        self.accept()
 
 class AddressRowWidget(QWidget):
     status_updated = Signal()
 
-    def __init__(self, site_url, title_text=None, parent=None, last="0", down_time="0", act_massage = ""):
+    def __init__(self, site_url, title_text=None, parent=None, last="0", down_time="0", act_massage="", main_window=None):
         super().__init__(parent)
         self.site_url = site_url
+        self.main_window = main_window
         self.last = "0" if last == "" else last
         self.down_time = "0" if not down_time else down_time
         self.now = "-"
@@ -423,6 +396,10 @@ class AddressRowWidget(QWidget):
         self.new_and_now.setText(f"{self.last} / {self.now} 화{time_display}")
         self.status_updated.emit()
 
+    def set_download_state(self, state_text, enabled=True):
+        self.select_btn.setText(state_text)
+        self.select_btn.setEnabled(enabled)
+
     def get_remaining_episodes(self):
         if self.now.isdigit() and self.last.isdigit():
             return max(0, int(self.now) - int(self.last))
@@ -508,9 +485,9 @@ class AddressRowWidget(QWidget):
         webbrowser.open(self.site_url)
 
     def open_detail_dialog(self):
-        dialog = DownloadDetailDialog(self.site_url, self.title_text, self.last, self, self.now, self.act_massage, self)
+        main_win = self.main_window if self.main_window else self.window()
+        dialog = DownloadDetailDialog(self.site_url, self.title_text, self.last, self, self.now, self.act_massage, self, main_win)
         dialog.show()
-    
 
 class MainWindow(QMainWindow):
     def __init__(self, app):
@@ -519,9 +496,13 @@ class MainWindow(QMainWindow):
         self.row_widgets = []
         self.newly_added_widget = None
 
+        self.download_queue = deque()
+        self.current_download_task = None
+        self.current_download_thread = None
+
         self.setWindowTitle(f"MINE DOWNLOADER - {vsc.V}")
-        self.resize(1000, 700)
-        self.setMinimumSize(820, 550)
+        self.resize(1000, 750)
+        self.setMinimumSize(820, 600)
         self.setWindowIcon(QIcon(resource_path("main.ico")))
 
         main_widget = QWidget()
@@ -549,7 +530,7 @@ class MainWindow(QMainWindow):
         def make_lal_spacer_lbl():
             lal_spacer_lbl = QLabel("‖")
             lal_spacer_lbl.setObjectName("lbl_original_title")
-            return(lal_spacer_lbl)
+            return lal_spacer_lbl
         
         header_layout.addWidget(make_lal_spacer_lbl())
 
@@ -576,9 +557,6 @@ class MainWindow(QMainWindow):
         header_layout.addWidget(self.manager_path_btn)
 
         self.main_layout.addLayout(header_layout)
-        
-        header_layout1_widget = QFrame()
-        header_layout1_widget.setObjectName("CardFrame_ui")
         
         header_layout1_widget = QFrame()
         header_layout1_widget.setObjectName("CardFrame_ui")
@@ -669,6 +647,41 @@ class MainWindow(QMainWindow):
         self.scroll_area.setWidget(self.scroll_widget)
         self.main_layout.addWidget(self.scroll_area, 1)
 
+        self.bottom_bar = QFrame()
+        self.bottom_bar.setObjectName("CardFrame")
+        self.bottom_bar_layout = QHBoxLayout(self.bottom_bar)
+        self.bottom_bar_layout.setContentsMargins(16, 10, 16, 10)
+        self.bottom_bar_layout.setSpacing(12)
+
+        self.bottom_title_lbl = QLabel("다운로드 진행 중...")
+        self.bottom_title_lbl.setObjectName("title_lbl")
+        self.bottom_title_lbl.setMinimumWidth(150)
+        self.bottom_title_lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+
+        self.bottom_progress_bar = QProgressBar()
+        self.bottom_progress_bar.setFixedHeight(12)
+        self.bottom_progress_bar.setTextVisible(False)
+        self.bottom_progress_bar.setRange(0, 100)
+        self.bottom_progress_bar.setValue(0)
+
+        self.bottom_progress_lbl = QLabel("0.0%")
+        self.bottom_progress_lbl.setObjectName("prograss")
+        self.bottom_progress_lbl.setFixedWidth(65)
+        self.bottom_progress_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.bottom_queue_lbl = QLabel("대기: 0건")
+        self.bottom_queue_lbl.setObjectName("lbl_original_title")
+        self.bottom_queue_lbl.setFixedWidth(75)
+        self.bottom_queue_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
+        self.bottom_bar_layout.addWidget(self.bottom_title_lbl, 2)
+        self.bottom_bar_layout.addWidget(self.bottom_progress_bar, 3)
+        self.bottom_bar_layout.addWidget(self.bottom_progress_lbl)
+        self.bottom_bar_layout.addWidget(self.bottom_queue_lbl)
+
+        self.main_layout.addWidget(self.bottom_bar)
+        self.bottom_bar.hide()
+
         self.click_watcher = thread_pyqt.ClickWatcher()
         self.click_watcher.update_address.connect(self.main_address_edit.setText)
         self.click_watcher.add_address.connect(self.add_address_row)
@@ -689,6 +702,107 @@ class MainWindow(QMainWindow):
             save_data(data)
             update = update_ui.UpdateView(self)
             update.show()
+
+    def add_download_task(self, task):
+        row_widget = task.get("row_widget")
+        if row_widget:
+            row_widget.set_download_state("대기", False)
+        
+        self.download_queue.append(task)
+        self.update_bottom_bar_ui()
+        if self.current_download_task is None:
+            self.process_next_download()
+
+    def process_next_download(self):
+        if not self.download_queue:
+            self.current_download_task = None
+            self.bottom_bar.hide()
+            return
+
+        self.current_download_task = self.download_queue.popleft()
+        task = self.current_download_task
+        
+        site_url = task["site_url"]
+        start = task["start"]
+        end = task["end"]
+        title_text = task["title_text"]
+        act_massage = task["act_massage"]
+        row_widget = task["row_widget"]
+
+        if row_widget:
+            row_widget.set_download_state("다운 중...", False)
+
+        self.bottom_title_lbl.setText(f"{title_text} ({start}~{end}화)")
+        self.bottom_progress_lbl.setText("0.0%")
+        self.bottom_progress_bar.setValue(0)
+        self.bottom_bar.show()
+        self.update_bottom_bar_ui()
+
+        self.progress_bridge = ThreadProgressBridge()
+        self.progress_bridge.progress_updated.connect(self.on_thread_progress_update)
+
+        self.current_download_thread = thread_pyqt.DownloadThread(
+            site_url, start, end, self.progress_bridge, title_text, act_massage
+        )
+        self.current_download_thread.finished_signal.connect(
+            lambda success, err_msg: self.on_task_finished(success, err_msg, task)
+        )
+        self.current_download_thread.start()
+
+    def on_thread_progress_update(self, text):
+        self.bottom_progress_lbl.setText(text)
+        match = re.search(r"(\d+(\.\d+)?)%", text)
+        if match:
+            try:
+                val = float(match.group(1))
+                self.bottom_progress_bar.setValue(int(val))
+            except Exception:
+                pass
+
+    def on_task_finished(self, success, err_msg, task):
+        site_url = task["site_url"]
+        start = task["start"]
+        end = task["end"]
+        title_text = task["title_text"]
+        row_widget = task["row_widget"]
+
+        if row_widget:
+            row_widget.set_download_state("다운로드", True)
+
+        if success:
+            nums = []
+            for val in [start, end]:
+                if str(val).isdigit():
+                    nums.append(int(val))
+
+            now_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            if nums:
+                max_num = max(nums)
+                data = load_data()
+                if title_text in data.get("list", {}):
+                    data["list"][title_text]["down"] = str(max_num)
+                    data["list"][title_text]["down_time"] = now_time_str
+                    save_data(data)
+
+            if row_widget:
+                row_widget.update_download_info(end, now_time_str)
+
+            target_folder = down.downin.base_data.OUTFOLDER
+            open_folder(target_folder if (target_folder.endswith("\\") or target_folder.endswith("/")) else (target_folder + "/"))
+        else:
+            QMessageBox.critical(self, "오류", f"[{title_text}] 다운로드 실패:\n{err_msg}")
+
+        self.current_download_task = None
+        self.process_next_download()
+
+    def update_bottom_bar_ui(self):
+        queue_count = len(self.download_queue)
+        self.bottom_queue_lbl.setText(f"대기: {queue_count}건")
+        if queue_count > 0 or self.current_download_task is not None:
+            self.bottom_bar.show()
+        else:
+            self.bottom_bar.hide()
 
     def on_sort_changed(self):
         self.newly_added_widget = None
@@ -731,7 +845,8 @@ class MainWindow(QMainWindow):
                 parent=self,
                 last=last_down,
                 down_time=down_time,
-                act_massage=act_masseage
+                act_massage=act_masseage,
+                main_window=self
             )
 
             row.del_btn.clicked.connect(lambda _, r=row: self.delete_row(r))
@@ -822,7 +937,7 @@ class MainWindow(QMainWindow):
         self.add_btn.setText("...")
         QApplication.processEvents()
 
-        temp_row = AddressRowWidget(url)
+        temp_row = AddressRowWidget(url, main_window=self)
         title_text = temp_row.title_text
 
         if "list" not in data:
@@ -866,6 +981,9 @@ class MainWindow(QMainWindow):
     def delete_row(self, row_widget):
         if self.newly_added_widget == row_widget:
             self.newly_added_widget = None
+
+        self.download_queue = deque([t for t in self.download_queue if t.get("row_widget") != row_widget])
+        self.update_bottom_bar_ui()
 
         data = load_data()
 
@@ -953,8 +1071,10 @@ class MainWindow(QMainWindow):
             if data["theme"] != data_iteam.THEME_NAME:
                 data_iteam.THEME_NAME = data["theme"]
                 data_iteam.rest()
-                findsyou.rest()
+                
+                self.setUpdatesEnabled(False)
                 self.app.setStyleSheet(data_iteam.MINIMAL_DARK_THEME)
+                self.setUpdatesEnabled(True)
 
     def open_translate_dialog(self):
         dialog = trans_view.TranslateDialog(self)

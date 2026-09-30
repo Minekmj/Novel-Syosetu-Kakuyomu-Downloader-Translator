@@ -14,6 +14,9 @@ import urllib.request
 SRC = "session_info.json"
 TARGET_URL = "https://syosetu.org"
 
+SRC_H = "session_info_header.json"
+TARGET_URL_H = "https://novelup.plus/search"
+
 CLEAN_UI_JS = """
 (function() {
     if (document.getElementById('mine-downloader-custom-style')) return;
@@ -210,6 +213,7 @@ class SimpleWebSocketClient:
         self.sock = socket.create_connection((self.host, self.port), timeout=10)
         self._handshake()
         self.msg_id = 0
+
     def _handshake(self):
         key = base64.b64encode(os.urandom(16)).decode("ascii")
         req = (
@@ -229,6 +233,7 @@ class SimpleWebSocketClient:
             res_data.extend(chunk)
         if b"101 " not in res_data:
             raise ConnectionError(f"핸드셰이크 실패: {res_data.decode('latin1', errors='ignore')}")
+
     def _recv_exact(self, length):
         buf = bytearray()
         while len(buf) < length:
@@ -237,6 +242,7 @@ class SimpleWebSocketClient:
                 raise ConnectionError("소켓 연결이 닫혔습니다.")
             buf.extend(chunk)
         return bytes(buf)
+
     def send_frame(self, message: str):
         data = message.encode("utf-8")
         length = len(data)
@@ -253,6 +259,7 @@ class SimpleWebSocketClient:
         frame.extend(mask)
         frame.extend(bytes(b ^ mask[i % 4] for i, b in enumerate(data)))
         self.sock.sendall(frame)
+
     def recv_frame(self):
         while True:
             head = self._recv_exact(2)
@@ -275,6 +282,7 @@ class SimpleWebSocketClient:
                 return payload.decode("utf-8", errors="ignore")
             if opcode == 0x8:
                 return None
+
     def call_cdp(self, method, params=None):
         self.msg_id += 1
         req_id = self.msg_id
@@ -292,6 +300,7 @@ class SimpleWebSocketClient:
                     return res.get("result", {})
             except Exception:
                 continue
+
     def close(self):
         try:
             self.sock.close()
@@ -489,5 +498,204 @@ def find_cf():
         time.sleep(0.2)
         shutil.rmtree(temp_dir, ignore_errors=True)
 
+def find_cf_header(target_url=TARGET_URL_H, save_path=SRC_H):
+    if os.path.exists(save_path):
+        try:
+            os.remove(save_path)
+            print(f"[*] 이전 '{save_path}' 파일을 삭제했습니다.")
+        except Exception:
+            pass
+
+    browser_path = get_browser_path()
+    if not browser_path:
+        print("[!] 지원되는 브라우저(Chrome/Edge)를 찾을 수 없습니다.")
+        return
+
+    win_w, win_h = 400, 300
+    pos_x, pos_y = -3000, -3000
+    debug_port = get_free_port()
+    temp_dir = tempfile.mkdtemp(prefix="cf_header_")
+    default_dir = os.path.join(temp_dir, "Default")
+    os.makedirs(default_dir, exist_ok=True)
+
+    preferences = {
+        "translate": {"enabled": False},
+        "intl": {"accept_languages": "ko-KR,ko;q=0.9,ja-JP;q=0.8,ja;q=0.7,en-US;q=0.6,en;q=0.5"},
+    }
+
+    try:
+        with open(os.path.join(default_dir, "Preferences"), "w", encoding="utf-8") as f:
+            json.dump(preferences, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+    cmd = [
+        browser_path,
+        f"--remote-debugging-port={debug_port}",
+        f"--user-data-dir={temp_dir}",
+        f"--app={target_url}",
+        f"--window-size={win_w},{win_h}",
+        f"--window-position={pos_x},{pos_y}",
+        "--disable-sync",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-translate",
+        "--lang=ko-KR",
+        "--silent",
+        "--log-level=3",
+        "--disable-logging",
+    ]
+
+    print(f"[*] 브라우저 실행: {target_url}")
+    proc = subprocess.Popen(cmd)
+    ws_client = None
+
+    try:
+        ws_url = None
+        for _ in range(50):
+            try:
+                req_url = f"http://127.0.0.1:{debug_port}/json"
+                with urllib.request.urlopen(req_url, timeout=1) as resp:
+                    targets = json.loads(resp.read().decode("utf-8"))
+                    for t in targets:
+                        if t.get("type") == "page":
+                            ws_url = t.get("webSocketDebuggerUrl")
+                            break
+                    if ws_url:
+                        break
+            except Exception:
+                time.sleep(0.1)
+
+        if not ws_url:
+            raise RuntimeError("CDP 엔드포인트에 접속할 수 없습니다.")
+
+        ws_client = SimpleWebSocketClient(ws_url)
+        ws_client.call_cdp("Network.enable")
+        ws_client.call_cdp("Page.enable")
+        ws_client.call_cdp("Runtime.enable")
+
+        ws_client.call_cdp("Page.navigate", {"url": target_url})
+
+        captured_headers = {}
+        user_agent = ""
+        previous_cookies = {}
+        current_cookies = {}
+        start_time = time.time()
+
+        print("[*] 새로운 쿠키 생성 대기 중...")
+
+        while time.time() - start_time < 30:
+            raw = ws_client.recv_frame()
+            if not raw:
+                continue
+
+            try:
+                msg = json.loads(raw)
+            except Exception:
+                continue
+
+            method = msg.get("method", "")
+            params = msg.get("params", {})
+
+            if method == "Network.requestWillBeSent":
+                request = params.get("request", {})
+                req_url = request.get("url", "")
+
+                if urllib.parse.urlsplit(target_url).netloc in req_url and not captured_headers:
+                    captured_headers = request.get("headers", {})
+                    user_agent = captured_headers.get("User-Agent", "")
+
+            elif method == "Network.cookieChanged":
+                cookie = params.get("cookie", {})
+                cookie_name = cookie.get("name", "")
+                if cookie_name:
+                    print(f"[+] 쿠키 변경 감지: {cookie_name}")
+
+            try:
+                cookie_res = ws_client.call_cdp("Network.getCookies", {"urls": [target_url]})
+                cookie_list = cookie_res.get("cookies", [])
+                current_cookies = {c.get("name"): c.get("value") for c in cookie_list if c.get("name")}
+
+                if current_cookies and current_cookies != previous_cookies:
+                    if previous_cookies:
+                        new_cookies = set(current_cookies) - set(previous_cookies)
+                        changed_cookies = {
+                            k for k in current_cookies
+                            if k in previous_cookies and current_cookies[k] != previous_cookies[k]
+                        }
+
+                        if new_cookies or changed_cookies:
+                            print("[+] 새로운 쿠키 생성/변경 감지!")
+                            break
+                    else:
+                        previous_cookies = current_cookies.copy()
+
+            except Exception:
+                pass
+
+        if not current_cookies:
+            cookie_res = ws_client.call_cdp("Network.getCookies", {"urls": [target_url]})
+            cookie_list = cookie_res.get("cookies", [])
+            current_cookies = {c.get("name"): c.get("value") for c in cookie_list if c.get("name")}
+
+        if not current_cookies:
+            raise RuntimeError("쿠키가 생성되지 않았습니다.")
+
+        if not user_agent:
+            ua_res = ws_client.call_cdp(
+                "Runtime.evaluate",
+                {"expression": "navigator.userAgent", "returnByValue": True}
+            )
+            user_agent = ua_res.get("result", {}).get("value", "")
+
+        final_headers = {
+            "User-Agent": user_agent,
+            "Accept": captured_headers.get(
+                "Accept",
+                "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
+            ),
+            "Accept-Language": captured_headers.get(
+                "Accept-Language",
+                "ko-KR,ko;q=0.9,ja-JP;q=0.8,ja;q=0.7,en-US;q=0.6,en;q=0.5"
+            ),
+            "Referer": captured_headers.get("Referer", target_url),
+        }
+
+        for k, v in captured_headers.items():
+            if k.lower().startswith("sec-ch-ua"):
+                final_headers[k] = v
+
+        session_data = {
+            "browser": "native_cdp_header",
+            "url": target_url,
+            "page_fully_loaded": True,
+            "headers": final_headers,
+            "cookies": current_cookies,
+            "saved_at": time.strftime("%Y-%m-%d %H:%M:%S")
+        }
+
+        with open(save_path, "w", encoding="utf-8") as f:
+            json.dump(session_data, f, ensure_ascii=False, indent=4)
+
+        print(f"[+] '{save_path}'에 새로운 쿠키 감지 후 헤더 및 전체 쿠키 저장 완료!")
+
+    except Exception as e:
+        print(f"[!] 헤더/쿠키 추출 중 에러 발생: {e}")
+
+    finally:
+        if ws_client:
+            ws_client.close()
+
+        try:
+            proc.terminate()
+            proc.wait(timeout=2)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
 if __name__ == "__main__":
-    find_cf()
+    find_cf_header()
