@@ -1,6 +1,7 @@
 import argparse
 import hashlib
 import json
+import math
 import os
 import subprocess
 import sys
@@ -8,7 +9,7 @@ import threading
 import tkinter as tk
 from tkinter import ttk
 import urllib.request
-from PIL import Image, ImageTk
+from PIL import Image, ImageColor, ImageDraw, ImageTk
 
 GITHUB_RELEASE_URL = "https://api.github.com/repos/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/releases/latest"
 
@@ -79,25 +80,35 @@ def enable_window_drag(window, widgets=None):
                 widget.bind("<ButtonPress-1>", start_drag)
                 widget.bind("<B1-Motion>", drag)
 
-
 def draw_rounded_rect(canvas, x1, y1, x2, y2, radius=14, fill="", outline="", width=1):
-    d = 2 * radius
-    if fill:
-        canvas.create_rectangle(x1 + radius, y1, x2 - radius, y2, fill=fill, outline="")
-        canvas.create_rectangle(x1, y1 + radius, x2, y2 - radius, fill=fill, outline="")
-        canvas.create_arc(x1, y1, x1 + d, y1 + d, start=90, extent=90, fill=fill, outline="")
-        canvas.create_arc(x2 - d, y1, x2, y1 + d, start=0, extent=90, fill=fill, outline="")
-        canvas.create_arc(x2 - d, y2 - d, x2, y2, start=270, extent=90, fill=fill, outline="")
-        canvas.create_arc(x1, y2 - d, x1 + d, y2, start=180, extent=90, fill=fill, outline="")
-    if outline and width > 0:
-        canvas.create_line(x1 + radius, y1, x2 - radius, y1, fill=outline, width=width)
-        canvas.create_line(x1 + radius, y2, x2 - radius, y2, fill=outline, width=width)
-        canvas.create_line(x1, y1 + radius, x1, y2 - radius, fill=outline, width=width)
-        canvas.create_line(x2, y1 + radius, x2, y2 - radius, fill=outline, width=width)
-        canvas.create_arc(x1, y1, x1 + d, y1 + d, start=90, extent=90, style="arc", outline=outline, width=width)
-        canvas.create_arc(x2 - d, y1, x2, y1 + d, start=0, extent=90, style="arc", outline=outline, width=width)
-        canvas.create_arc(x2 - d, y2 - d, x2, y2, start=270, extent=90, style="arc", outline=outline, width=width)
-        canvas.create_arc(x1, y2 - d, x1 + d, y2, start=180, extent=90, style="arc", outline=outline, width=width)
+    scale = 4
+    w = max(1, int((x2 - x1) * scale))
+    h = max(1, int((y2 - y1) * scale))
+    r = max(1, int(radius * scale))
+    image = Image.new("RGB", (w, h), (1, 1, 1))
+    draw = ImageDraw.Draw(image)
+
+    draw.rounded_rectangle((0, 0, w - 1, h - 1), radius=r, fill=fill if fill else None, outline=outline if outline else None, width=max(1, int(width * scale)) if outline else 1)
+
+    image = image.resize((max(1, int(x2 - x1)), max(1, int(y2 - y1))), Image.Resampling.LANCZOS)
+
+    pixels = image.load()
+    bg = (1, 1, 1)
+
+    for y in range(image.height):
+        for x in range(image.width):
+            r_, g_, b_ = pixels[x, y]
+            if r_ <= 4 and g_ <= 4 and b_ <= 4:
+                pixels[x, y] = bg
+
+    photo = ImageTk.PhotoImage(image)
+    item = canvas.create_image(x1, y1, image=photo, anchor="nw")
+
+    if not hasattr(canvas, "_rounded_images"):
+        canvas._rounded_images = []
+
+    canvas._rounded_images.append(photo)
+    return item
 
 
 def rounded_window(window, width, height):
@@ -113,25 +124,28 @@ def rounded_window(window, width, height):
 
     screen_width = window.winfo_screenwidth()
     screen_height = window.winfo_screenheight()
-
-    x = (screen_width // 2) - (width // 2)
-    y = (screen_height // 2) - (height // 2)
+    x = (screen_width - width) // 2
+    y = (screen_height - height) // 2
 
     window.geometry(f"{width}x{height}+{x}+{y}")
     window.configure(bg=transparent_color)
 
-    canvas = tk.Canvas(
-        window,
-        width=width,
-        height=height,
-        bg=transparent_color,
-        highlightthickness=0,
-        bd=0
-    )
+    canvas = tk.Canvas(window, width=width, height=height, bg=transparent_color, highlightthickness=0, bd=0)
     canvas.pack(fill="both", expand=True)
 
     r = THEME_CONFIG["corner_radius"]
-    draw_rounded_rect(canvas, 1, 1, width - 1, height - 1, radius=r, fill=THEME_CONFIG["bg_color"], outline=THEME_CONFIG["border_color"], width=1)
+
+    draw_rounded_rect(
+        canvas,
+        0,
+        0,
+        width,
+        height,
+        radius=r,
+        fill=THEME_CONFIG["bg_color"],
+        outline=THEME_CONFIG["border_color"],
+        width=1
+    )
 
     return canvas
 
