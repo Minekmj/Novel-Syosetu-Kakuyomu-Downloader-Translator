@@ -463,7 +463,8 @@ def download_syosetu_async(
     start,
     end,
     trs_path,
-    label
+    label,
+    raw_title
 ):
     total_count = end - start + 1
 
@@ -516,12 +517,16 @@ def download_syosetu_async(
         session.close()
 
     threads = []
+    
+    if raw_title != "":
+        book_title = raw_title
 
     r_book_title = re.sub(r"^【.*?】", "", book_title)
 
     r_book_title = re.sub(r"【.*?】$", "", r_book_title)
 
     r_book_title = r_book_title.strip()
+    r_book_title = base_data.sanitize_file_name(r_book_title)
 
     title_path = os.path.join(base_data.OUTFOLDER, "list", r_book_title)
 

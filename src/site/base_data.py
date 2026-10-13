@@ -51,3 +51,12 @@ def normalize_date(date_str):
         return f"{year}-{month}-{day} {hour}:{minute}:{second}"
 
     return date_str
+
+import unicodedata
+def sanitize_file_name(file_name: str) -> str:
+    file_name = ''.join(c for c in file_name if c.isprintable() and unicodedata.category(c) not in ('Cc', 'Cf', 'Cs', 'Co', 'Cn', 'Zl', 'Zp'))
+    file_name = re.sub(r'[<>:"/\\|?*\x00-\x1f\x7f]', '', file_name)
+    file_name = file_name.rstrip('. ')
+    file_name = re.sub(r'\s+', ' ', file_name).strip()
+    file_name = re.sub(r'^(CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])(?=\.|$)', r'_\1', file_name, flags=re.IGNORECASE)
+    return file_name or '_'

@@ -45,25 +45,5 @@ def reset(b):
 def reset_b():
     reset(False)
 
-
-def reset_H(b):
-    if b:
-        sf.find_cf_header()
-    global BASE_HEADERS_H, COOKIES_H
-    if os.path.exists(sf.SRC_H):
-        try:
-            with open(sf.SRC_H, "r", encoding="UTF-8") as f:
-                g = json.load(f)
-                BASE_HEADERS_H = load_headers(g)
-                COOKIES_H = load_cookies(g)
-        except Exception as e:
-            print(f"[!] reset_H 로드 실패: {e}")
-
-
-def reset_b_H():
-    reset_H(False)
-
-
 # 초기 로드 실행
 reset(False)
-reset_H(False)

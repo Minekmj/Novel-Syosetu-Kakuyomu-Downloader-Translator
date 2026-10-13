@@ -356,13 +356,14 @@ class TranslateDialog(QDialog):
         self.log_follow_btn = self._button('번역 로그 추적', self.toggle_log_follow, 'subtleBtn', 32, 100, True)
         self.log_follow_btn.setChecked(True)
         row.addWidget(self.log_follow_btn)
+        
+        row.addWidget(self._button('지우기', self.clear_logs, w=58, h=32))
 
         self.log_filter_combo = self._combo(['전체', '일반', '경고', '오류'], h=32)
-        self.log_filter_combo.setFixedWidth(78)
+        self.log_filter_combo.setFixedWidth(90)
         self.log_filter_combo.currentTextChanged.connect(self.filter_logs)
         row.addWidget(self.log_filter_combo)
-
-        row.addWidget(self._button('지우기', self.clear_logs, w=58, h=32))
+        
         rl.addLayout(row)
 
         self.log_edit = QTextEdit()

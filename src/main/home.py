@@ -111,6 +111,47 @@ class EditTitleDialog(QDialog):
     def get_new_title(self):
         return self.title_edit.text().strip()
     
+class EditTitleRawDialog(QDialog):
+    def __init__(self, current_title, parent=None):
+        super().__init__(parent)
+
+        self.setWindowTitle("제목 수정 - 원본")
+        self.setFixedSize(800, 190)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+
+        self.title_edit = QLineEdit(self)
+        self.title_edit.setText(current_title)
+        self.title_edit.setSelection(0, len(current_title))
+        layout.addWidget(self.title_edit)
+        
+        info = QLabel("작품의 일본어 제목을 수정하는 것으로, 원문 제목 다운로드 시 제목을 변경 하고 싶거나\n백업 또는 원문 제목 다운로드 시 경로 문제가 생기는 경우 변경하십시오.\n변경 시 백업 폴더가 다르게 되어 백업이 달라집니다.")
+        layout.addWidget(info)
+        
+        layout.addStretch()
+
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(8)
+        btn_layout.addStretch()
+
+        cancel_btn = QPushButton("취소", self)
+        cancel_btn.setObjectName("secondaryBtn")
+        cancel_btn.clicked.connect(self.reject)
+
+        save_btn = QPushButton("저장", self)
+        save_btn.setObjectName("primaryBtn")
+        save_btn.clicked.connect(self.accept)
+
+        btn_layout.addWidget(cancel_btn)
+        btn_layout.addWidget(save_btn)
+
+        layout.addLayout(btn_layout)
+
+    def get_new_title(self):
+        return self.title_edit.text().strip()
+    
 class EditActDialog(QDialog):
     def __init__(self, current_massage, parent=None):
         super().__init__(parent)
@@ -154,7 +195,7 @@ class EditActDialog(QDialog):
         return self.massage_edit.text().strip()
 
 class DownloadDetailDialog(QDialog):
-    def __init__(self, site_url, title_text, last_down, parent, now_s, act_massage, row_widget, main_window):
+    def __init__(self, site_url, title_text, last_down, parent, now_s, act_massage, row_widget, raw_title, main_window):
         super().__init__(parent)
         self.site_url = site_url
         self.title_text = title_text
@@ -164,6 +205,7 @@ class DownloadDetailDialog(QDialog):
         self.main_window = main_window
         self.now_res = ""
         self.act_massage = act_massage
+        self.title_raw_text = raw_title
         
         self.setWindowTitle("다운로드 설정")
         self.setFixedSize(360, 200)
@@ -255,6 +297,7 @@ class DownloadDetailDialog(QDialog):
             "start": start,
             "end": end,
             "act_massage": self.act_massage,
+            "raw_title": self.title_raw_text,
             "row_widget": self.row_widget
         }
         self.main_window.add_download_task(task)
@@ -263,7 +306,7 @@ class DownloadDetailDialog(QDialog):
 class AddressRowWidget(QWidget):
     status_updated = Signal()
 
-    def __init__(self, site_url, title_text=None, parent=None, last="0", down_time="0", act_massage="", main_window=None):
+    def __init__(self, site_url, title_text=None, parent=None, last="0", down_time="0", act_massage="", title_raw_text="", main_window=None):
         super().__init__(parent)
         self.site_url = site_url
         self.main_window = main_window
@@ -272,6 +315,8 @@ class AddressRowWidget(QWidget):
         self.now = "-"
         self.time = ""
         self.act_massage = act_massage
+        
+        self.title_raw_text = title_raw_text
 
         self.is_empty = not site_url
 
@@ -409,18 +454,21 @@ class AddressRowWidget(QWidget):
         menu = QMenu(self)
 
         edit_title_action = QAction("제목 수정", self)
+        edit_title_original_action = QAction("제목 수정 (원본)", self)
         act_massege_action = QAction("작가의 말 트리거 수정", self)
         copy_action = QAction("URL 복사", self)
         visit_action = QAction("브라우저 열기", self)
         delete_action = QAction("삭제", self)
 
         edit_title_action.triggered.connect(self.open_edit_title_dialog)
+        edit_title_original_action.triggered.connect(self.open_edit_title_original_dialog)
         act_massege_action.triggered.connect(self.open_edit_act_massege_dialog)
         copy_action.triggered.connect(lambda: QApplication.clipboard().setText(self.site_url))
         visit_action.triggered.connect(self.open_browser)
         delete_action.triggered.connect(self.del_btn.click)
 
         menu.addAction(edit_title_action)
+        menu.addAction(edit_title_original_action)
         if "https://kakuyomu.jp/" in self.site_url:
             menu.addAction(act_massege_action)
         menu.addSeparator()
@@ -466,6 +514,31 @@ class AddressRowWidget(QWidget):
             self.title_text = new_title
             self.title_lbl.setText(new_title)
             
+    def open_edit_title_original_dialog(self):
+        data = load_data()
+        if self.title_raw_text == "":
+            base = down.downin.CheckTitle_Raw(self.site_url)
+        else:
+            base = data["list"][self.title_text].get("original_title", "")
+        
+        dialog = EditTitleRawDialog(base, self)
+
+        if dialog.exec():
+            new_title = dialog.get_new_title()
+
+            if not new_title or new_title == base:
+                return
+
+            data = load_data()
+
+            if "list" in data and self.title_text in data["list"]:
+                data["list"][self.title_text]["original_title"] = new_title
+
+            save_data(data)
+
+            self.title_raw_text = new_title
+        
+            
     def open_edit_act_massege_dialog(self):
         dialog = EditActDialog(self.act_massage, self)
 
@@ -486,7 +559,7 @@ class AddressRowWidget(QWidget):
 
     def open_detail_dialog(self):
         main_win = self.main_window if self.main_window else self.window()
-        dialog = DownloadDetailDialog(self.site_url, self.title_text, self.last, self, self.now, self.act_massage, self, main_win)
+        dialog = DownloadDetailDialog(self.site_url, self.title_text, self.last, self, self.now, self.act_massage, self, self.title_raw_text, main_win)
         dialog.show()
 
 class MainWindow(QMainWindow):
@@ -728,6 +801,7 @@ class MainWindow(QMainWindow):
         title_text = task["title_text"]
         act_massage = task["act_massage"]
         row_widget = task["row_widget"]
+        raw_title = task["raw_title"]
 
         if row_widget:
             row_widget.set_download_state("다운 중...", False)
@@ -742,7 +816,7 @@ class MainWindow(QMainWindow):
         self.progress_bridge.progress_updated.connect(self.on_thread_progress_update)
 
         self.current_download_thread = thread_pyqt.DownloadThread(
-            site_url, start, end, self.progress_bridge, title_text, act_massage
+            site_url, start, end, self.progress_bridge, title_text, act_massage, raw_title
         )
         self.current_download_thread.finished_signal.connect(
             lambda success, err_msg: self.on_task_finished(success, err_msg, task)
@@ -838,6 +912,7 @@ class MainWindow(QMainWindow):
             last_down = item.get("down", "0")
             down_time = item.get("down_time", "0")
             act_masseage = item.get("act_masseage", "")
+            raw_title = item.get("original_title", "")
 
             row = AddressRowWidget(
                 site_url,
@@ -846,6 +921,7 @@ class MainWindow(QMainWindow):
                 last=last_down,
                 down_time=down_time,
                 act_massage=act_masseage,
+                title_raw_text=raw_title,
                 main_window=self
             )
 

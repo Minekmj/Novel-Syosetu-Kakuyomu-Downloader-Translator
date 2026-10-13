@@ -45,7 +45,7 @@ class ClickWatcher(QObject):
 class DownloadThread(QThread):
     finished_signal = Signal(bool, str)
 
-    def __init__(self, site_url, start, end, label, title, act_massage):
+    def __init__(self, site_url, start, end, label, title, act_massage, raw_title):
         super().__init__()
         self.site_url = site_url
         self.start_num = start
@@ -53,10 +53,11 @@ class DownloadThread(QThread):
         self.label = label
         self.title = title
         self.act_massage = act_massage
+        self.raw_title = raw_title
 
     def run(self):
         try:
-            DOWN.downin.Download(self.site_url, self.start_num, self.end_num, self.label, self.title, self.act_massage)
+            DOWN.downin.Download(self.site_url, self.start_num, self.end_num, self.label, self.title, self.raw_title, self.act_massage)
             self.finished_signal.emit(True, "")
         except Exception as e:
             self.finished_signal.emit(False, str(e))
@@ -255,7 +256,8 @@ class ModelLoadThread(QThread):
                     
                 exclude_keywords = [
                     "embedding", "robotics", "tts", "audio", "image", 
-                    "omni", "computer-use", "customtools", "live", "transcribe"
+                    "omni", "computer-use", "customtools", "live", "transcribe", "nano",
+                    "3.1-flash-lite-preview", "3-pro-preview", "3.7-flash", "2.5"
                 ]
                 if any(keyword in name.lower() for keyword in exclude_keywords):
                     continue
@@ -265,6 +267,10 @@ class ModelLoadThread(QThread):
                     continue
                 
                 model_names.append(name)
+            try:
+                model_names.remove("gemini-3.5-flash")
+            except:
+                pass
             self.finished.emit(sorted(set(model_names)), "")
         except Exception as e:
             self.finished.emit([], str(e))

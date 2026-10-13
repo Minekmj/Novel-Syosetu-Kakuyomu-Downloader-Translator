@@ -463,6 +463,7 @@ def download_kakuyomu_async(
     end,
     trs_path,
     label,
+    raw_title,
     act_massage
 ):
     total_count = end - start + 1
@@ -537,9 +538,13 @@ def download_kakuyomu_async(
 
         return book_title or novel_code
 
+    if raw_title != "":
+        book_title = raw_title
+
     r_book_title = re.sub(r"^【.*?】", "", book_title)
     r_book_title = re.sub(r"【.*?】$", "", r_book_title)
     r_book_title = re.sub(r'[\\/:*?"<>|]', "_", r_book_title).strip()
+    r_book_title = base_data.sanitize_file_name(r_book_title)
 
     title_path = os.path.join(base_data.OUTFOLDER, "list", r_book_title)
     os.makedirs(title_path, exist_ok=True)

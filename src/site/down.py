@@ -69,6 +69,20 @@ def CheckTitle(site):
     title_ko = Translator(title, True)
     return title_ko
 
+def CheckTitle_Raw(site):
+    clean_site, site_type = parse_site_info(site)
+
+    if site_type == "hameln":
+        title = Fs(hame.hameln_title(clean_site))
+    elif site_type == "kakuyomu":
+        title = Fs(kaku.kakuyomu_title(clean_site))
+    else:
+        title = Fs(naru.syosetu_title(clean_site))
+
+    r_title = re.sub(r"^【.*?】", "", title)
+    r_title = re.sub(r"【.*?】$", "", r_title)
+    
+    return r_title
 
 def Download(
     site,
@@ -76,6 +90,7 @@ def Download(
     end,
     label,
     title,
+    raw_title,
     act_massage = ""
 ):
     start = int(start)
@@ -94,7 +109,8 @@ def Download(
             start,
             end,
             trs_path,
-            label
+            label,
+            raw_title
         ))
     elif site_type == "kakuyomu":
         book_title = Fs(kaku.download_kakuyomu_async(
@@ -103,6 +119,7 @@ def Download(
             end,
             trs_path,
             label,
+            raw_title,
             act_massage
         ))
     else:
@@ -111,7 +128,8 @@ def Download(
             start,
             end,
             trs_path,
-            label
+            label,
+            raw_title
         ))
 
     data = f"{start} ~ {end}"

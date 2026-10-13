@@ -464,7 +464,7 @@ def get_hameln_episodes(nid, session, html_text, is_r18=False):
     return episodes
 
 
-def download_hameln_async(novel_code, start, end, trs_path, label):
+def download_hameln_async(novel_code, start, end, trs_path, label, raw_title):
     total_count = end - start + 1
     nid, is_r18 = parse_novel_code(novel_code)
 
@@ -507,9 +507,13 @@ def download_hameln_async(novel_code, start, end, trs_path, label):
         print("하멜른 에피소드를 찾지 못했습니다.")
         return book_title or novel_code
 
+    if raw_title != "":
+        book_title = raw_title
+            
     r_book_title = re.sub(r"^【.*?】", "", book_title)
     r_book_title = re.sub(r"【.*?】$", "", r_book_title)
     r_book_title = re.sub(r'[\\/:*?"<>|]', "_", r_book_title).strip()
+    r_book_title = base_data.sanitize_file_name(r_book_title)
 
     title_path = os.path.join(base_data.OUTFOLDER, "list", r_book_title)
     os.makedirs(title_path, exist_ok=True)
