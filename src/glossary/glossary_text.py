@@ -9,6 +9,8 @@ from src.trans.prompt_sanitizer import get_safety_settings
 
 from src.glossary.glossary import extract_glossary_sample as _extract_glossary_sample
 
+get_japanese_ratio = None # 주입용
+
 
 class AsyncRateLimiter:
     def __init__(self, rpm: float):
@@ -269,14 +271,14 @@ async def _filter_system_and_terms_async(
     terms_list_str = "\n".join([f"{k}: {v}" for k, v in terms_to_check.items()])
 
     if log_callback:
-        log_callback(f"[2차 검증] [제도/명칭] {len(terms_to_check)}개 항목 중 당연한 일반 어휘 필터링 시작...")
+        log_callback(f"[2차 검증] {len(terms_to_check)}개 항목 중 당연한 일반 어휘 필터링 시작...")
 
     await rate_limiter.wait()
 
     try:
         response = await client.aio.models.generate_content(
             model=model,
-            contents=f"다음 [제도] 및 [명칭] 목록 중 제외할 너무 당연한 일반 단어를 골라내십시오.\n\n{terms_list_str}",
+            contents=f"다음 목록 중 제외할 너무 당연한 일반 단어를 골라내십시오.\n\n{terms_list_str}",
             config=types.GenerateContentConfig(
                 system_instruction=FILTER_SYSTEM_PROMPT,
                 temperature=0.0,
@@ -411,6 +413,9 @@ async def _extract_glossary_async(
 
         best_target, _ = Counter(targets).most_common(1)[0]
         best_category, _ = Counter(categories).most_common(1)[0]
+        
+        if get_japanese_ratio(best_category) != 0:
+            continue
 
         if best_category == "일반":
             ignored_general += 1

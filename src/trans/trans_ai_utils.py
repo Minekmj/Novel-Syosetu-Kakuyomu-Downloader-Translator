@@ -10,7 +10,6 @@ from src.trans.prom import *
 import src.glossary.glossary_text as glossary_text
 extract_glossary = glossary_text.extract_glossary
 
-
 def split_text_by_lines(text, max_chars=5000):
     lines = text.splitlines(keepends=True)
     chunks = []
@@ -408,3 +407,5 @@ def save_translation_txt(
 
     with open(file_path, 'w', encoding='utf-8') as f:
         f.write(title + '\n' + ''.join(p for p in translated_parts if p))
+        
+glossary_text.get_japanese_ratio = get_japanese_ratio
