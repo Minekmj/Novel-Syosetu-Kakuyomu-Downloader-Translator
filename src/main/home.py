@@ -22,6 +22,7 @@ import src.glossary.glossary_manager as glossary_manager
 import src.qr.qr_view as qr_view
 import src.main.setting as setting_ui
 import src.main.update as update_ui
+import src.recommend.recommend as recommend
 from src.system.src import resource_path
 import src.system.v as vsc
 
@@ -32,6 +33,8 @@ qr_view.down = down
 findsyou.detail_ui.DOWN = down.downin
 setting_ui.data_iteam = data_iteam
 trans_view.OUT = down.downin.base_data.OUTFOLDER
+
+recommend.detail_ui = findsyou.detail_ui
 
 class ThreadProgressBridge(QObject):
     progress_updated = Signal(str)
@@ -594,16 +597,23 @@ class MainWindow(QMainWindow):
 
         header_layout.addWidget(app_title)
         header_layout.addStretch()
-
-        self.gloss_bt = QPushButton("용어집 관리")
-        self.gloss_bt.setObjectName("secondaryBtn")
-        self.gloss_bt.clicked.connect(self.open_gloss)
-        header_layout.addWidget(self.gloss_bt)
         
         def make_lal_spacer_lbl():
             lal_spacer_lbl = QLabel("‖")
             lal_spacer_lbl.setObjectName("lbl_original_title")
             return lal_spacer_lbl
+        
+        self.reco_bt = QPushButton("AI 작품 추천")
+        self.reco_bt.setObjectName("secondaryBtn")
+        self.reco_bt.clicked.connect(self.open_reco)
+        header_layout.addWidget(self.reco_bt)
+        
+        header_layout.addWidget(make_lal_spacer_lbl())
+
+        self.gloss_bt = QPushButton("용어집 관리")
+        self.gloss_bt.setObjectName("secondaryBtn")
+        self.gloss_bt.clicked.connect(self.open_gloss)
+        header_layout.addWidget(self.gloss_bt)
         
         header_layout.addWidget(make_lal_spacer_lbl())
 
@@ -1158,6 +1168,10 @@ class MainWindow(QMainWindow):
 
     def open_gloss(self):
         dialog = glossary_manager.GlossaryManagerDialog(self)
+        dialog.show()
+        
+    def open_reco(self):
+        dialog = recommend.NovelRecommendDialog(self)
         dialog.show()
 
     def convert_txt_to_epub(self):

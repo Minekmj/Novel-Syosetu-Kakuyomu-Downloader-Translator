@@ -243,3 +243,33 @@ class NaroSearch:
     @staticmethod
     def fetch_detail_description(work_url):
         return work_url
+    
+    @staticmethod
+    def fetch_detail_description_real(work_url):
+        import re
+        from urllib.parse import urlparse
+
+        try:
+            match = re.search(r"/(n\d+[a-z]*)/?", urlparse(work_url).path, re.I)
+            if not match:
+                return ""
+
+            ncode = match.group(1).lower()
+            api_url = "https://api.syosetu.com/novelapi/api/"
+            res = http_session.get(api_url, params={"out": "json", "ncode": ncode, "of": "t-s-k"}, headers=NaroSearch.HEADERS, timeout=10)
+            res.raise_for_status()
+            data = res.json()
+
+            if len(data) < 2:
+                return ""
+
+            item = data[1]
+            story = item.get("story", "").strip()
+            keywords = item.get("keyword", "").split()
+            keywords = [keyword.strip() for keyword in keywords if keyword.strip()]
+
+            return story + "\n\n_____1234_____\n" + ", ".join(keywords)
+
+        except Exception as e:
+            print(f"나로우 작품 상세 정보 요청 에러: {e}")
+            return ""
