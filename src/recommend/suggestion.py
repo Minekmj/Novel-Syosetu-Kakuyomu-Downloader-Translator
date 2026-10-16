@@ -268,6 +268,8 @@ class NovelRecommender:
         self.executor = SearchExecutor()
         self.back_decision = ""
         self.user_data = user_data
+        if user_data == {'list': {}}:
+            self.user_data = {"list":{"없음":{"src":"None"}}}
         self.log = log
 
         self.site_meta = {
@@ -310,7 +312,10 @@ class NovelRecommender:
                 "last_time": info.get("down_time", "")
             }
             a = SearchExecutor()
-            set_data["story"], set_data["keywords"] = a.get_description(site_key, {"kakuyomu":KakuyomuSearch, "naro":NaroSearch, "hameln":SyosetuSearch}[site_key], src)
+            try:
+                set_data["story"], set_data["keywords"] = a.get_description(site_key, {"kakuyomu":KakuyomuSearch, "naro":NaroSearch, "hameln":SyosetuSearch}[site_key], src)
+            except:
+                pass
             
             history_items.append(set_data)
 

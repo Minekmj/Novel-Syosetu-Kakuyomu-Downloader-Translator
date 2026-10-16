@@ -44,6 +44,7 @@ class RecommendWorker(QThread):
         self.condition = condition
         self.top_k = top_k
         self.user_data = user_data
+        print(user_data)
 
     def run(self):
         try:
@@ -157,7 +158,7 @@ class RecommendedWorkCard(QFrame):
 
         rationale = self.item_data.get("score_rationale", "")
         if rationale:
-            rat_lbl = QLabel(f"<b>선정 이유:</b> {rationale}")
+            rat_lbl = QLabel(f"<b>평가:</b> {rationale}")
             rat_lbl.setObjectName("detail_description")
             rat_lbl.setWordWrap(True)
             info_box_layout.addWidget(rat_lbl)
