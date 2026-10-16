@@ -44,7 +44,6 @@ class RecommendWorker(QThread):
         self.condition = condition
         self.top_k = top_k
         self.user_data = user_data
-        print(user_data)
 
     def run(self):
         try:
