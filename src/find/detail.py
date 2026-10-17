@@ -36,7 +36,10 @@ class DetailWorker(QThread):
     def run(self):
         try:
             search_class = get_search_class(self.site)
-            description = search_class.fetch_detail_description(self.work_url)
+            if self.site == Sites.NAROU:
+                description = search_class.fetch_detail_description_real(self.work_url)
+            else:
+                description = search_class.fetch_detail_description(self.work_url)
             translated_desc = description
             if self.auto_translate and description:
                 try:
@@ -265,7 +268,7 @@ class DetailDialog(QDialog):
         self.average_labels['all'].setText(format_day(avg_total))
 
     def load_detail(self):
-        target_url = self.item_data.get('url' if (self.site == Sites.KAKUYOMU or self.site == Sites.HAMELLEUN or self.site == Sites.HAMELLEUN18) else 'story', '')
+        target_url = self.item_data.get('url' if (self.site == Sites.NAROU or self.site == Sites.KAKUYOMU or self.site == Sites.HAMELLEUN or self.site == Sites.HAMELLEUN18) else 'story', '')
         self.worker = DetailWorker(target_url, self.auto_translate, self.site)
         self.worker.finished.connect(self.on_finished)
         self.worker.start()
