@@ -480,6 +480,13 @@ QFrame#CardFrame_ui {
     |dv_card||
 }
 
+QFrame#CardFrame_ui_h {
+    background-color: |surface_hover||;
+    border: |border_card||;
+    border-radius: |radius_card||;
+    |dv_card||
+}
+
 QListWidget {
     background: transparent;
     border: none;

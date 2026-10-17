@@ -146,7 +146,7 @@ class TranslateDialog(QDialog):
         self.file_edit.setPlaceholderText('번역할 TXT 또는 JSON 파일 선택')
         self.file_edit.setMinimumHeight(35)
         file_row.addWidget(self.file_edit, 1)
-        file_row.addWidget(self._button('파일 찾기', self.browse_file, w=70))
+        file_row.addWidget(self._button('파일 찾기', self.browse_file, w=90))
         top.addLayout(file_row)
         root.addLayout(top)
 
@@ -353,11 +353,11 @@ class TranslateDialog(QDialog):
         row.addWidget(self._label('번역 로그', 'subLabel'))
         row.addStretch(1)
 
-        self.log_follow_btn = self._button('번역 로그 추적', self.toggle_log_follow, 'subtleBtn', 32, 100, True)
+        self.log_follow_btn = self._button('번역 로그 추적', self.toggle_log_follow, 'subtleBtn', 50, 100, True)
         self.log_follow_btn.setChecked(True)
         row.addWidget(self.log_follow_btn)
         
-        row.addWidget(self._button('지우기', self.clear_logs, w=58, h=32))
+        row.addWidget(self._button('지우기', self.clear_logs, w=70, h=50))
 
         self.log_filter_combo = self._combo(['전체', '일반', '경고', '오류'], h=32)
         self.log_filter_combo.setFixedWidth(90)

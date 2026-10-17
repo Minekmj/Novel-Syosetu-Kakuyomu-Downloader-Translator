@@ -314,6 +314,24 @@ def build_thinking_config(thinking_val, model_name=""):
 
         return types.ThinkingConfig(thinking_level=_get_level_enum(target_level))
 
+    if 'gemini-4' in m:
+        def _get_level_enum(name):
+            try:
+                return getattr(types.ThinkingLevel, name)
+            except AttributeError:
+                return name
+
+        if level == 'MINIMAL':
+            target_level = 'LOW' if is_pro else 'MINIMAL'
+        elif level in ('LOW', 'MEDIUM', 'HIGH'):
+            target_level = level
+        elif raw_number == 0:
+            target_level = 'LOW' if is_pro else 'MINIMAL'
+        else:
+            target_level = 'LOW'
+
+        return types.ThinkingConfig(thinking_level=_get_level_enum(target_level))
+
     if 'gemini-2.5' in m:
         budget_map = {
             'MINIMAL': 0,

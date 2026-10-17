@@ -13,6 +13,7 @@ from collections.abc import Callable
 
 import src.find.get as datas
 from src.find.get import KakuyomuSearch, NaroSearch, SyosetuSearch
+from src.trans.trans_ai_utils import build_thinking_config
 
 from google import genai
 from google.genai import types
@@ -105,9 +106,10 @@ class GeminiAIClient:
 
         config = types.GenerateContentConfig(
             system_instruction=system_instruction if system_instruction else None,
-            temperature=0.7,
+            temperature=1.0,
             response_mime_type="application/json",
-            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+            thinking_config=build_thinking_config("HIGH", self.model)
         )
 
         for attempt in range(1, max_retries + 1):
@@ -309,8 +311,6 @@ class SearchExecutor:
         return story, current_keywords
 
 class NovelRecommender:
-    MAX_SEARCH_PER_SITE = 12
-
     def __init__(self, gemini_api_key: Optional[str] = None, model: str = "gemini-3.1-flash-lite", user_data: dict = {"list":{"없음":{"src":"None"}}}, log: Callable=None):
         self.ai = GeminiAIClient(api_key=gemini_api_key, model=model)
         self.executor = SearchExecutor()
@@ -354,10 +354,7 @@ class NovelRecommender:
             
             set_data = {
                 "title": title,
-                "url": src,
-                "site": site_key,
-                "download_count": int(info.get("down", 0)),
-                "last_time": info.get("down_time", "")
+                "url": src
             }
             a = SearchExecutor()
             try:
@@ -660,8 +657,7 @@ class NovelRecommender:
                 )
         success_tips = "\n".join(successful_queries[-8:]) if successful_queries else "아직 성공/실패 패턴 기록 없음"
 
-        user_req_text = f"★ [사용자 특별 요청 조건 (최우선 절대 원칙)]:\n\"{user_custom_prompt}\"\n" if user_custom_prompt else "★ [사용자 특별 요청 조건]: 없음"
-
+        user_req_text = f"## ★ [사용자 특별 요청 조건 (최우선 절대 원칙)][매우중요]:\n\"{user_custom_prompt}\"\n[end 사용자 조건]\n" if user_custom_prompt else "★ [사용자 특별 요청 조건]: 없음"
         system_instruction = (
             "당신은 일본 3대 웹소설 플랫폼(카쿠요무, 소설가가되자, 하멜른)을 통달한 최고 실력의 수석 데이터 큐레이터입니다.\n"
             "목표: [사용자 특별 요청 조건]과 독자의 기존 취향을 철저히 분석하여, 방황 없이 가장 정밀한 검색 쿼리와 파라미터를 발주하는 것입니다.\n\n"
@@ -710,7 +706,7 @@ class NovelRecommender:
   "actions": [
     {{
       "site": "kakuyomu",  // "kakuyomu", "naro", "hameln"
-      "reason": "구체적인 전략적 선정 사유", //다만 조건들을 나열하는 것이 아니라 자연스럽게 설명하는 것이며 일본어 태그를 말할 시 한국어(일본어)로 말 해준다. "decision"의 상태를 직접적으로 말하는 것이아니라 '속행', '끝' 이런식으로 일반 사용자가 들을 수 있도록 한다.
+      "reason": "구체적인 전략적 선정 사유", //다만 조건들을 나열하는 것이 아니라 자연스럽게 설명하는 것이며 일본어 태그를 말할 시 한국어로 말 해준다. "decision"의 상태를 직접적으로 말하는 것이아니라 '속행', '끝' 이런식으로 일반 사용자가 들을 수 있도록 한다.
       "page": 1,
       "query": [],  // 핵심 일본어 태그 0~2개. 매우 상세히 알고 싶으면 3개 이상(이 때는 대중적인 태그를 사용하여야 함.)
       "genre": "romance",
@@ -898,10 +894,6 @@ class NovelRecommender:
                 if site not in self.site_meta:
                     continue
 
-                if self.site_success_counts[site] >= self.MAX_SEARCH_PER_SITE:
-                    PrintIo(f"[{site}] 검색 상한선({self.MAX_SEARCH_PER_SITE}회) 도달로 건너뜁니다.")
-                    continue
-
                 try:
                     page = int(act.get("page", 1) or 1)
                 except (ValueError, TypeError):
@@ -974,7 +966,7 @@ class NovelRecommender:
                 continue
 
             PrintIo(f"[1차 스크리닝] 신규 발굴 {len(round_pending_items)}작품 대상 적합성 사전 심사")
-            self.log("info", f"총 {len(round_pending_items)} 개의 찾은 작품 정리 중...")
+            self.log("info", f"총 {len(round_pending_items)}개의 찾은 작품 정리 중...")
             triage_map = self.triage_candidates_with_ai(
                 round_pending_items,
                 user_custom_prompt=user_custom_prompt,
@@ -1021,7 +1013,7 @@ class NovelRecommender:
             PrintIo(
                 f"[1차 스크리닝 결산] 신규 {len(round_pending_items)}개 중 [통과: {triage_stats['통과'] + triage_stats['의심']}개], [버려: {triage_stats['버려']}개 제외] (누적 고유 후보: {len(all_candidates)}개)"
             )
-            self.log("info", f"{len(round_pending_items)} 개의 결과 중 {triage_stats['통과'] + triage_stats['의심']} 개 통과")
+            self.log("info", f"{len(round_pending_items)}개의 결과 중 {triage_stats['통과'] + triage_stats['의심']}개 통과")
 
             for meta in action_results_meta:
                 search_history_logs.append({
@@ -1063,7 +1055,7 @@ class NovelRecommender:
 
         user_cond_note = f"""
 ★ [사용자 특별 요청 조건 (최우선 절대 원칙)]:
-"{user_custom_prompt}"
+"{user_custom_prompt}\n[end 사용자 조건]"
 """ if user_custom_prompt else ""
 
         system_instruction = (
@@ -1100,7 +1092,7 @@ class NovelRecommender:
 
 위 후보작 중에서 독자의 취향 및 특별 요청 조건에 가장 알맞은 최상위 {top_k}작품을 선별하여 아래 JSON 규격으로 반환하세요:
 {{
-  "curator_note": "독자에게 전하는 종합 코멘트 (특별 요청 사항 반영 내역 및 엄격한 선별 기준 설명 3문장)", //다만 조건들을 나열하는 것이 아니라 자연스럽게 설명하는 것이며 일본어 태그를 말할 시 한국어(일본어)로 말 해준다.
+  "curator_note": "독자에게 전하는 종합 코멘트 (특별 요청 사항 반영 내역 및 엄격한 선별 기준 설명 3문장)", //다만 조건들을 나열하는 것이 아니라 자연스럽게 설명하는 것이며 일본어 태그를 말할 시 한국어로 말 해준다.
   "recommended_works": [
     {{
       "candidate_id": 0,
@@ -1180,7 +1172,7 @@ class NovelRecommender:
             PrintIo(f"\n[최종 탐색 결산] 중복 제외 총 {len(candidates)}개의 고유 신작 후보 확보")
             PrintIo(f"[플랫폼별 검색 성공 횟수]: {self.site_success_counts}")
             
-            self.log("info", f"검색 종료. {len(candidates)} 개의 작품 중 {top_k}개 선별")
+            self.log("info", f"검색 종료. {len(candidates)}개의 작품 중 {top_k}개 선별")
 
             final_result = self.rerank_and_synthesize(
                 history_items=history_items,

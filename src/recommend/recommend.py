@@ -1,6 +1,6 @@
 from typing import Dict, Any, List
 
-from PySide6.QtCore import Qt, QTimer, QUrl
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, QTimer, QUrl
 from PySide6.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QTextEdit, QPushButton, QComboBox, QCheckBox,
@@ -13,6 +13,73 @@ from src.find.site_list import site_point_text
 from src.main.thread_pyqt import ModelLoadThread, RecommendWorker, TitleTranslateWorker
 
 detail_ui = None
+
+class SmoothScrollArea(QScrollArea):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.anim = QPropertyAnimation(self.verticalScrollBar(), b"value")
+        self.anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self.anim.setDuration(250)
+        self.target_scroll_value = 0
+
+    def wheelEvent(self, event):
+        num_degrees = event.angleDelta().y()
+        if num_degrees == 0:
+            super().wheelEvent(event)
+            return
+
+        bar = self.verticalScrollBar()
+        step = -int(num_degrees * 0.9)
+
+        if self.anim.state() == QPropertyAnimation.State.Running:
+            start_val = self.anim.currentValue()
+            target_val = self.target_scroll_value + step
+        else:
+            start_val = bar.value()
+            target_val = bar.value() + step
+
+        target_val = max(0, min(bar.maximum(), target_val))
+        self.target_scroll_value = target_val
+
+        self.anim.stop()
+        self.anim.setStartValue(start_val)
+        self.anim.setEndValue(target_val)
+        self.anim.start()
+
+        event.accept()
+
+class SmoothListWidget(QListWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.anim = QPropertyAnimation(self.verticalScrollBar(), b"value", self)
+        self.anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self.anim.setDuration(250)
+        self.target_scroll_value = 0
+
+    def wheelEvent(self, event):
+        num_degrees = event.angleDelta().y()
+        if num_degrees == 0:
+            super().wheelEvent(event)
+            return
+
+        bar = self.verticalScrollBar()
+        step = -int(num_degrees * 0.9)
+
+        if self.anim.state() == QPropertyAnimation.State.Running:
+            start_val = self.anim.currentValue()
+            target_val = self.target_scroll_value + step
+        else:
+            start_val = bar.value()
+            target_val = bar.value() + step
+
+        target_val = max(bar.minimum(), min(bar.maximum(), target_val))
+        self.target_scroll_value = target_val
+
+        self.anim.stop()
+        self.anim.setStartValue(int(start_val))
+        self.anim.setEndValue(target_val)
+        self.anim.start()
+        event.accept()
 
 class ClickableTitleLabel(QLabel):
     def __init__(self, title_text: str, url_string: str = "", parent=None):
@@ -239,8 +306,8 @@ class NovelRecommendDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("AI 추천")
-        self.resize(1300, 840)
-        self.setMinimumSize(1100, 720)
+        self.resize(1150, 720)
+        self.setMinimumSize(1150, 720)
         self.setWindowFlags(self.windowFlags() | Qt.WindowMaximizeButtonHint)
 
         self.recommend_worker = None
@@ -341,12 +408,13 @@ class NovelRecommendDialog(QDialog):
         history_header.addWidget(self.btn_select_all_history)
         layout.addLayout(history_header)
 
-        self.history_list_widget = QListWidget()
+        self.history_list_widget = SmoothListWidget()
         self.history_list_widget.setMinimumHeight(120)
         self.history_list_widget.setMaximumHeight(200)
         self.history_list_widget.setObjectName("group_box")
         self.history_list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.history_list_widget.setTextElideMode(Qt.ElideRight)
+        self.history_list_widget.setVerticalScrollMode(QListWidget.ScrollPerPixel)
         self.history_list_widget.setStyleSheet(
             "QListWidget::item {"
             "  padding: 5px 6px;"
@@ -356,12 +424,8 @@ class NovelRecommendDialog(QDialog):
             "  background-color: rgba(128, 128, 128, 0.15);"
             "  border-radius: 4px;"
             "}"
-            "QListWidget::item:selected {"
-            "  background-color: rgba(50, 120, 240, 0.25);"
-            "  color: inherit;"
-            "  border-radius: 4px;"
-            "}"
         )
+        
         layout.addWidget(self.history_list_widget)
         
         list_desc = QLabel("Ai 추천 시 반영할 목록 입니다. 작품을 선택하여 반영 혹은 반영하지 않음을 선택 할 수 있습니다.\n작품 좌측 표시를 트리거 하세요.")
@@ -425,7 +489,7 @@ class NovelRecommendDialog(QDialog):
 
         self.clear_feed_btn = QPushButton("로그 지우기")
         self.clear_feed_btn.setObjectName("subtleBtn")
-        self.clear_feed_btn.setFixedSize(90, 28)
+        self.clear_feed_btn.setFixedSize(90, 50)
         self.clear_feed_btn.setCursor(Qt.PointingHandCursor)
         self.clear_feed_btn.clicked.connect(self.clear_feed)
         h_layout.addWidget(self.clear_feed_btn)
@@ -440,7 +504,7 @@ class NovelRecommendDialog(QDialog):
         results_vbox.setContentsMargins(0, 8, 0, 0)
         results_vbox.setSpacing(0)
 
-        self.scroll_area = QScrollArea()
+        self.scroll_area = SmoothScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setFrameShape(QFrame.NoFrame)
         self.scroll_area.setObjectName("t_123")
@@ -463,7 +527,7 @@ class NovelRecommendDialog(QDialog):
         feed_vbox.setContentsMargins(14, 8, 8, 8)
         feed_vbox.setSpacing(0)
 
-        self.feed_scroll = QScrollArea()
+        self.feed_scroll = SmoothScrollArea()
         self.feed_scroll.setWidgetResizable(True)
         self.feed_scroll.setFrameShape(QFrame.NoFrame)
         self.feed_scroll.setObjectName("t_123")
@@ -591,6 +655,18 @@ class NovelRecommendDialog(QDialog):
                 child.widget().deleteLater()
 
     def append_info_card(self, message: str):
+        prev_index = self.feed_layout.count() - 2
+        if prev_index >= 0:
+            prev_item = self.feed_layout.itemAt(prev_index)
+            prev_widget = prev_item.widget() if prev_item else None
+
+            if prev_widget and prev_widget.objectName() == "CardFrame_ui":
+                msg_lbl = prev_widget.findChild(QLabel, "new_and_now")
+                if msg_lbl:
+                    msg_lbl.setText(f"{msg_lbl.text()}\n{message}")
+                    QTimer.singleShot(50, self.scroll_feed_to_bottom)
+                    return
+
         card = QFrame()
         card.setObjectName("CardFrame_ui")
         c_layout = QHBoxLayout(card)
@@ -607,7 +683,7 @@ class NovelRecommendDialog(QDialog):
 
     def append_ai_speech_card(self, thought_or_note: str):
         card = QFrame()
-        card.setObjectName("CardFrame_ui")
+        card.setObjectName("CardFrame_ui_h")
         c_layout = QVBoxLayout(card)
         c_layout.setContentsMargins(14, 12, 14, 12)
         c_layout.setSpacing(6)
@@ -668,6 +744,9 @@ class NovelRecommendDialog(QDialog):
 
         self.tab_widget.setCurrentIndex(1)
 
+        self.append_ai_speech_card(
+            f"<center><b>새 추천 시작</b></center>"
+        )
         self.append_info_card(
             f"추천 세션 가동: 모델 {model}, 상위 {top_k}작품 선별, 기존 목록 {len(user_data['list'])}개 참조"
         )

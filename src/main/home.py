@@ -8,8 +8,8 @@ from PySide6.QtWidgets import (
     QFileDialog, QScrollArea, QFrame, QDialog, QMessageBox,
     QMenu, QCheckBox, QSizePolicy, QComboBox, QProgressBar
 )
-from PySide6.QtCore import Qt, Signal, QObject, QPropertyAnimation, QEasingCurve
-from PySide6.QtGui import QAction, QIcon
+from PySide6.QtCore import QTimer, Qt, Signal, QObject, QPropertyAnimation, QEasingCurve
+from PySide6.QtGui import QAction, QFontMetrics, QIcon, QPainter
 
 import src.down.down as down
 from src.system.data import open_folder, save_data, load_data
@@ -113,6 +113,62 @@ class EditTitleDialog(QDialog):
 
     def get_new_title(self):
         return self.title_edit.text().strip()
+    
+class MarqueeLabel(QLabel):
+
+    def __init__(self, text="", parent=None):
+        super().__init__(text, parent)
+        self._offset = 0
+        self._spacing = 40
+        self._speed = 2
+
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._scroll_text)
+        self._timer.start(30)
+
+    def setText(self, text):
+        super().setText(text)
+        self._offset = 0
+        self.update()
+
+    def _scroll_text(self):
+        fm = QFontMetrics(self.font())
+        text_width = fm.horizontalAdvance(self.text())
+
+        if text_width > self.width():
+            self._offset += self._speed
+            if self._offset >= text_width + self._spacing:
+                self._offset = 0
+            self.update()
+        else:
+            if self._offset != 0:
+                self._offset = 0
+                self.update()
+
+    def paintEvent(self, event):
+        if not self.text():
+            super().paintEvent(event)
+            return
+
+        fm = QFontMetrics(self.font())
+        text_width = fm.horizontalAdvance(self.text())
+
+        if text_width <= self.width():
+            super().paintEvent(event)
+            return
+
+        painter = QPainter(self)
+
+        painter.setFont(self.font())
+        painter.setPen(self.palette().color(self.foregroundRole()))
+
+        y = (self.height() + fm.ascent() - fm.descent()) // 2
+
+        x1 = -self._offset
+        painter.drawText(x1, y, self.text())
+
+        x2 = x1 + text_width + self._spacing
+        painter.drawText(x2, y, self.text())
     
 class EditTitleRawDialog(QDialog):
     def __init__(self, current_title, parent=None):
@@ -736,7 +792,7 @@ class MainWindow(QMainWindow):
         self.bottom_bar_layout.setContentsMargins(16, 10, 16, 10)
         self.bottom_bar_layout.setSpacing(12)
 
-        self.bottom_title_lbl = QLabel("다운로드 진행 중...")
+        self.bottom_title_lbl = MarqueeLabel("작품...")
         self.bottom_title_lbl.setObjectName("title_lbl")
         self.bottom_title_lbl.setMinimumWidth(150)
         self.bottom_title_lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
