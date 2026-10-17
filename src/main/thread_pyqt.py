@@ -1,11 +1,14 @@
 import re
 import threading
 
+from src.recommend.suggestion import NovelRecommender
 import src.trans.trans_ai as trans_ai
 from PySide6.QtCore import QObject, QThread, Signal
 import src.find.findsyou as findsyou
 import os
 from google import genai
+
+from src.trans.trans import Translator
 
 DOWN = None
 
@@ -318,3 +321,55 @@ class GlossaryExtractThread(QThread):
                 {},
                 str(e)
             )
+            
+class TitleTranslateWorker(QThread):
+    finished = Signal(str)
+
+    def __init__(self, text: str):
+        super().__init__()
+        self.text = text
+
+    def run(self):
+        try:
+            res = Translator(self.text, True)
+            self.finished.emit(res)
+        except Exception:
+            self.finished.emit(self.text)
+
+
+class RecommendWorker(QThread):
+    log_signal = Signal(str, str)
+    finished_signal = Signal(dict)
+    error_signal = Signal(str)
+
+    def __init__(self, api_key: str, model: str, condition: str, top_k: int, user_data: dict):
+        super().__init__()
+        self.api_key = api_key
+        self.model = model
+        self.condition = condition
+        self.top_k = top_k
+        self.user_data = user_data
+
+    def run(self):
+        try:
+            if NovelRecommender is None:
+                raise RuntimeError("NovelRecommender 모듈을 찾을 수 없습니다.")
+
+            def log_callback(l_type: str, text: str):
+                self.log_signal.emit(l_type, str(text))
+
+            recommender = NovelRecommender(
+                gemini_api_key=self.api_key,
+                model=self.model,
+                user_data=self.user_data,
+                log=log_callback
+            )
+
+            result = recommender.run_recommendation(
+                top_k=self.top_k,
+                user_custom_prompt=self.condition
+            )
+            self.finished_signal.emit(result)
+
+        except Exception as e:
+            self.error_signal.emit(str(e))

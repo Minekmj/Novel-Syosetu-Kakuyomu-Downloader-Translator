@@ -1,4 +1,5 @@
 import re
+import sqlite3
 import time
 import json
 import traceback
@@ -16,12 +17,43 @@ from src.find.get import KakuyomuSearch, NaroSearch, SyosetuSearch
 from google import genai
 from google.genai import types
 
+DB_FILE = "./workdatacache.db"
+
+def init_db():
+    with sqlite3.connect(DB_FILE) as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS WorkDataCache (
+                src_text TEXT PRIMARY KEY,
+                dst_text TEXT
+            )
+        """)
+init_db()
+
+def get_cached(text):
+    with sqlite3.connect(DB_FILE) as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT dst_text FROM WorkDataCache WHERE src_text = ?", (text,))
+        row = cur.fetchone()
+        return row[0] if row else None
+
+def set_cached(src_text, dst_text):
+    with sqlite3.connect(DB_FILE) as conn:
+        conn.execute("INSERT OR REPLACE INTO WorkDataCache VALUES (?, ?)", (src_text, dst_text))
+
 PRINT_OK = False
 def PrintIo(text: str):
     if PRINT_OK: print(text)
 
 def site_delay(site: str):
     if site == 'kakuyomu':
+        time.sleep(1)
+    elif site == 'hameln':
+        time.sleep(2.0)
+
+def site_delay_all(site: str):
+    if site == 'kakuyomu':
+        time.sleep(1)
+    elif site == 'naro':
         time.sleep(1)
     elif site == 'hameln':
         time.sleep(2.0)
@@ -42,14 +74,17 @@ def extract_json_from_response(text: str) -> Any:
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        first_brace = text.find('{')
-        last_brace = text.rfind('}')
-        if first_brace != -1 and last_brace != -1:
-            return json.loads(text[first_brace:last_brace + 1])
-        first_bracket = text.find('[')
-        last_bracket = text.rfind(']')
-        if first_bracket != -1 and last_bracket != -1:
-            return json.loads(text[first_bracket:last_bracket + 1])
+        try:
+            first_brace = text.find('{')
+            last_brace = text.rfind('}')
+            if first_brace != -1 and last_brace != -1:
+                return json.loads(text[first_brace:last_brace + 1])
+            first_bracket = text.find('[')
+            last_bracket = text.rfind(']')
+            if first_bracket != -1 and last_bracket != -1:
+                return json.loads(text[first_bracket:last_bracket + 1])
+        except:
+            pass
         return {}
 
 class GeminiAIClient:
@@ -192,11 +227,17 @@ class SearchExecutor:
             return existing_story
 
         fetch_fn = getattr(site_cls, 'fetch_detail_description', None)
-
+        
+        data = get_cached(work_url)
         if callable(fetch_fn):
             for attempt in range(1, 4):
                 try:
-                    detail = fetch_fn(work_url)
+                    if data:
+                        detail = data
+                    else:
+                        detail = fetch_fn(work_url)
+                        set_cached(work_url, detail)
+                        
                     if isinstance(detail, str):
                         story_text = detail
                         if '_____1234_____' in detail:
@@ -219,8 +260,8 @@ class SearchExecutor:
                         time.sleep(3)
                         continue
                     PrintIo(f"[{site}] 상세 페이지 수집 실패 ({work_url}): {e}")
-                    
-        site_delay(site)
+        if not data:  
+            site_delay(site)
 
         return existing_story
     
@@ -232,10 +273,16 @@ class SearchExecutor:
         if not fetch_fn:
             fetch_fn = getattr(site_cls, 'fetch_detail_description_real', None)
 
+        data = get_cached(work_url)
         if callable(fetch_fn):
             for attempt in range(1, 4):
                 try:
-                    detail = fetch_fn(work_url)
+                    if data:
+                        detail = data
+                    else:
+                        detail = fetch_fn(work_url)
+                        set_cached(work_url, detail)
+                        
                     if isinstance(detail, str):
                         story_text = detail
                         if '_____1234_____' in detail:
@@ -255,8 +302,9 @@ class SearchExecutor:
                         time.sleep(3)
                         continue
                     PrintIo(f"[{site}] 상세 페이지 수집 실패 ({work_url}): {e}")
-                    
-        site_delay(site)
+        
+        if not data:
+            site_delay_all(site)
 
         return story, current_keywords
 
@@ -280,7 +328,7 @@ class NovelRecommender:
         self.site_success_counts = {'kakuyomu': 0, 'naro': 0, 'hameln': 0}
 
     def get_read_history(self) -> Dict[str, Any]:
-        self.log("info", "사전 작업 중...")
+        self.log("info", "사용자 작품 목록 로드 중...")
         PrintIo("[행동] 사용자 감상 목록 로드")
         user_data = self.user_data
 
@@ -327,10 +375,10 @@ class NovelRecommender:
 [3대 소설 플랫폼 완벽 파라미터 규격서]
 
 ★ 핵심 검색 전략 및 일본 웹소설 엔진 특성:
-1. 웹소설 검색창(query)은 기본적으로 AND 조건입니다. 일본어 태그를 3개 이상 넣으면 결과가 0건으로 급감합니다! 반드시 1개 또는 최대 2개의 가장 핵심적인 태그만 입력하세요. 단만 매우 상세히 검색 하고 싶을 시에는 4개 이상 사용해도 좋습니다.
+1. 웹소설 검색창(query)은 기본적으로 AND 조건입니다.  특정 장르를 보고 싶다먄 0개를 사용하소. 1개 또는 최대 2개의 가장 핵심적인 태그만 입력하여 상세 검색하세요. 단만 매우 상세히 검색 하고 싶을 시에는 4개 이상 사용해도 좋습니다.
 2. 장르와 쿼리를 중복하지 마세요 (예: 러브코미디 장르를 선택했으면 쿼리에 "ラブコメ"를 또 넣지 말고 "すれ違い"나 "甘々" 같은 구체적 상황 태그를 넣으세요).
 3. 컷오프(min_pt, min_chars)를 처음부터 너무 높게 잡으면 작품이 전멸합니다. 적절한 하한선을 설정하세요.
-4. 이전 라운드에서 new_added가 (카쿠요무, 나로우는 15개, 하멜른은 6개 이상)개 이상 나온 성공 쿼리는 반드시 다음 라운드에서 page: 2, page: 3으로 연속 탐색을 할 수 있습니다.
+4. 이전 라운드에서 new_added가 (카쿠요무, 나로우는 15개, 하멜른은 6개 이상)개 이상 나온 성공 쿼리는 재량껏 다음 라운드에서 page: 2, page: 3으로 연속 탐색을 할 수 있습니다.
 
 1. kakuyomu (카쿠요무)
 - query: 일본어 검색어/태그
@@ -340,7 +388,7 @@ class NovelRecommender:
 - last_published: ""(전체), "1days"(1일 이내), "7days"(7일 이내), "1months"(1개월 이내), "6months"(6개월 이내), "1years"(1년 이내)
 - min_start: 리뷰 별점 하한선 정수 (예: 30, 50, 100, 300)
 - min_chars: 총 글자수 하한선 정수 (예: 10000, 30000)
-- exclude_words: 제외 단어 리스트 (예: ["BL", "R18", "NTR"])
+- exclude_words: 제외 단어 리스트 (예: [""])
 - inclusion_flag: 필수 포함 플래그 리스트 (허용값: "cruel", "violent", "sexual", "has_publication")
 - exclusion_flag: 절대 배제 플래그 리스트 (허용값: "cruel", "violent", "sexual", "has_publication")
 
@@ -353,32 +401,22 @@ class NovelRecommender:
 - last_published: 일수 정수 (1, 7, 30, 90, 180, 365, null)
 - min_pt: 종합 포인트 하한선 정수 (예: 300, 1000, 3000)
 - min_chars: 최소 글자수 정수 (예: 10000, 50000)
-- exclude_words: 제외어 리스트 (예: ["BL", "TS", "ハーレム"])
+- exclude_words: 제외어 리스트 (예: [""])
 - inclusion_flags: 필수 포함 태그 리스트 (허용값: "ai", "r15", "zankoku", "bl", "gl", "tensei", "tenni", "stop")
 - exlusion_flags: 배제 태그 리스트 (허용값: "ai", "r15", "zankoku", "bl", "gl", "tensei", "tenni", "stop")
 
 3. hameln (하멜른)
 - query: 일본어 검색어/태그
 - genre_val: "ジャンル：冒険・バトル", "ジャンル：戦記", "ジャンル：恋愛", "ジャンル：スポーツ", "ジャンル：コメディ", "ジャンル：ホラー", "ジャンル：ミステリー", "ジャンル：日常", "ジャンル：文芸", "ジャンル：ノンジャンル", ""(전체)
-- origin: "原作：オリジナル"(오리지널 창작), "原作：二次創作"(2차창작)
+- origin: "原作：オリジナル"(오리지널 창작), "原作：二次創作"(2차창작), "原作：(`특정 작품` 일본어 제목)"(`특정 작품` 2차창작)
 - order: "45"(최종갱신순), "28"(종합평가순), "4"(평균평가순), "42"(가중평균순), "30"(주간종합평가), "31"(월간종합평가), "32"(분기종합평가), "33"(연간종합평가), "10"(즐겨찾기순), "20"(총글자수순), "24"(화수순), "22"(감상순), "6"(1화문자수순), "8"(첫게시일), "0"(신착순)
 - serial_status: ""(전체), "rensai_s2"(연재중), "rensai_s4"(완결), "rensai_s1"(단편)
 - last_published: 일수 정수 (1, 7, 30, 90, 180, 365, null)
 - min_pt: 종합 평가 포인트(soupt2) 하한 정수 (예: 50, 200, 500)
-- max_pt: 종합 평가 포인트 상한 정수
-- min_fav: 북마크/즐겨찾기(f2) 하한 정수 (예: 100, 500, 1000)
-- max_fav: 즐겨찾기 상한 정수
 - min_chars: 전체 글자수(mozi2_all) 하한 정수 (예: 20000, 50000)
-- max_chars: 전체 글자수 상한 정수
-- min_ep_chars: 1화당 글자수(mozi2) 하한 정수 (예: 2000, 3000)
-- min_episodes: 최소 화수(v2) 하한 정수 (예: 10, 30)
-- min_rate: 평균 평가점(rate2) 하한 정수
-- min_rev: 감상수(re2) 하한 정수
-- min_voters: 평가자수(r2) 하한 정수
-- exclude_words: 제외어 리스트 (예: ["BL", "TS"])
+- exclude_words: 제외어 리스트 (예: [""])
 - inclusion_flags: 추가 포함어 리스트
-- exclusion_flags: 배제 태그 리스트
-  허용 태그코드: "tag15"(AI), "tag2"(R15), "tag7"(잔혹), "tag12"(크로스오버), "tag5"(오리주), "tag6"(신전생), "tag9"(환생), "tag10"(빙의), "tag11"(성전환/TS), "tag3"(BL), "tag4"(GL), "tag8"(안티헤이트), "tag13"(게시판형식), "tag14"(대본형식)
+- exclusion_flags: 배제 태그 리스트. 허용 태그코드: "tag15"(AI), "tag2"(R15), "tag7"(잔혹), "tag12"(크로스오버), "tag5"(오리주), "tag6"(신전생), "tag9"(환생), "tag10"(빙의), "tag11"(성전환/TS), "tag3"(BL), "tag4"(GL), "tag8"(안티헤이트), "tag13"(게시판형식), "tag14"(대본형식)
 """
 
     def build_search_params(self, site: str, strategy: Dict[str, Any], page: int = 1) -> Dict[str, Any]:
@@ -609,7 +647,7 @@ class NovelRecommender:
             if st in platform_counts:
                 platform_counts[st] += 1
 
-        platform_plus = {'kakuyomu': 15, 'naro': 15, 'hameln': 5}
+        platform_plus = {'kakuyomu': 15, 'naro': 15, 'hameln': 6}
         successful_queries = []
         for log in search_history_logs:
             if log.get("new_added", 0) >= platform_plus[log['site']]:
@@ -672,26 +710,26 @@ class NovelRecommender:
   "actions": [
     {{
       "site": "kakuyomu",  // "kakuyomu", "naro", "hameln"
-      "reason": "구체적인 전략적 선정 사유",
+      "reason": "구체적인 전략적 선정 사유", //다만 조건들을 나열하는 것이 아니라 자연스럽게 설명하는 것이며 일본어 태그를 말할 시 한국어(일본어)로 말 해준다. "decision"의 상태를 직접적으로 말하는 것이아니라 '속행', '끝' 이런식으로 일반 사용자가 들을 수 있도록 한다.
       "page": 1,
-      "query": ["すれ違い"],  // 핵심 일본어 태그 1~2개
+      "query": [],  // 핵심 일본어 태그 0~2개. 매우 상세히 알고 싶으면 3개 이상(이 때는 대중적인 태그를 사용하여야 함.)
       "genre": "romance",
       "order": "popular",
       "serial_status": "running",
       "last_published": "1months",
       "min_pt": 50,
       "min_chars": 10000,
-      "exclude_words": ["BL", "NTR"],
+      "exclude_words": [],
       "inclusion_flags": [],
       "exclusion_flags": [],
       "origin": "原作：オリジナル",  // 하멜른 전용
-      "min_fav": 100,               // 하멜른 전용 옵션
-      "min_episodes": 10             // 하멜른 전용 옵션
     }}
   ]
 }}
-* CONTINUE일 때는 반드시 1~3개의 고효율 action을 지시하세요.
-* 70개 이상 많은 작품이 있을 시 더이상 검색을 하지 말고 "FINISH"를 무조건 사용해야 합니다.(안그러면 글자수 에러가 납니다.)
+* CONTINUE일 때는 반드시 1~3개의 action을 지시하세요.
+* action은 보통 사이트를 골고루 넣지만 같은 사이트를 여러번하여도 좋습니다.
+* 70개 이상 많은 작품이 있을 시 더이상 검색을 하지 말고 "FINISH"를 무조건 사용해야 합니다. [매우중요]
+* 무조건 70개 이상일 때만 멈추는 것이 아니라 70개 보다 작은 수의 작품이라도 이정도면 충분하다고 판단되면 "FINISH" 해도 좋습니다.
 """
         raw_res = self.ai.generate(prompt, system_instruction)
         return extract_json_from_response(raw_res)
@@ -710,7 +748,6 @@ class NovelRecommender:
             simplified_list.append({
                 "id": idx,
                 "title": it.get("title", ""),
-                "site": it.get("site_type", ""),
                 "keywords": it.get("keywords", []),
                 "story_preview": (it.get("story", "") or "")[:250]
             })
@@ -719,7 +756,8 @@ class NovelRecommender:
 
         system_instruction = (
             "당신은 일본 웹소설 1차 사전 스크리닝 심사관입니다.\n"
-            "목표: 제목, 키워드(태그), 간이 줄거리를 보고 사용자의 특별 요청 조건과 독자 취향에 맞는지 냉철하게 판정하는 것입니다. 그리고 작품 후보를 줄이는 역할을 하며 20개 이상의 매우 많은 작품일 경우 최대 20개의 작품만 '줄거리', 5개만 '의심'할 수 있습니다. 이 때 최선의 선택을 하여야 합니다.\n\n"
+            "목표1: 제목, 키워드(태그), 간이 줄거리를 보고 사용자의 특별 요청 조건과 독자 취향에 맞는지 냉철하게 판정하는 것입니다.\n"
+            "목표2: 작품 후보를 줄이는 역할을 하며 25개 이상의 매우 많은 작품일 경우 최대 20개의 작품만 '줄거리'로 판정 할 수 있고, 5개만 '의심' 판정 할 수 있습니다. 그리고 남은 작품은 전부 '버려'로 지정합니다. 이 때 최선의 선택을 하여야 합니다.\n\n"
             "★ 판정 상태 (정확히 다음 3가지 중 하나로 판정):\n"
             "1. '버려': 사용자의 금기 조건이 확인되거나, 질적으로 부적합한 경우. 또는 사용자가 싫어할 것으로 예상이 되거나 절대 선택될 일이 없는 작품 -> 상세 조회 없이 즉시 폐기.\n"
             "2. '줄거리': 요청 조건과 취향에 부합하는 명백한 핵심 키워드가 확인되어 정밀 검토할 가치가 매우 높은 경우.\n"
@@ -755,10 +793,15 @@ class NovelRecommender:
     }}
   ]
 }}
+* 모든 id가 포함되어야 합니다.
 """
         try:
-            raw_res = self.ai.generate(prompt, system_instruction)
-            parsed = extract_json_from_response(raw_res)
+            parsed = {}
+            for _ in range(3):
+                raw_res = self.ai.generate(prompt, system_instruction)
+                parsed = extract_json_from_response(raw_res)
+                if parsed != {}:
+                    break
             results = parsed.get("triage_results", [])
 
             status_map = {}
@@ -771,6 +814,7 @@ class NovelRecommender:
             for idx in range(len(items_to_triage)):
                 if idx not in status_map:
                     status_map[idx] = {"status": "의심"}
+                    PrintIo(f"[경고] 결과에 {idx}가 없어 '의심'으로 지정")
 
             return status_map
 
@@ -793,13 +837,20 @@ class NovelRecommender:
         search_history_logs: List[Dict[str, Any]] = []
 
         max_agent_rounds = 7
+        
+        round_idx = 0
+        round_all = 0
 
-        for round_idx in range(1, max_agent_rounds + 1):
+        while round_idx < max_agent_rounds:
+            
+            round_idx += 1
+            round_all += 1
+            
             if self.back_decision == "FINISH":
                 if len(all_candidates) < top_k:
                     PrintIo(f"[안내] 목표({top_k}작품) 대비 후보군({len(all_candidates)}개)이 부족하여 추가 탐색합니다.")
                 else:
-                    PrintIo(f"[AI 자율 판단] 고품질 후보군({len(all_candidates)}개) 확보 완료로 탐색을 자율 종료합니다.")
+                    PrintIo(f"[AI 자율 판단] 후보군({len(all_candidates)}개) 확보 완료로 탐색을 자율 종료합니다.")
                     break
                 
             total_searches = sum(self.site_success_counts.values())
@@ -810,7 +861,7 @@ class NovelRecommender:
             PrintIo(f"\n[라운드 {round_idx}/{max_agent_rounds}] 전략 수립 및 파라미터 계획 수립")
 
             plan = self.agent_decide_searches(
-                round_num=round_idx,
+                round_num=round_all,
                 history_items=history_items,
                 user_custom_prompt=user_custom_prompt,
                 collected_summary=list(all_candidates.values()),
@@ -869,6 +920,7 @@ class NovelRecommender:
 
                 try:
                     result = self.executor.run_search_with_retry(site, site_cls, params)
+                    site_delay_all(site)
                     raw_items = result.get("items", []) if isinstance(result, dict) else []
                     self.site_success_counts[site] += 1
 
@@ -918,6 +970,7 @@ class NovelRecommender:
                         "new_added": 0,
                         "status": meta["status"]
                     })
+                round_idx -= 1
                 continue
 
             PrintIo(f"[1차 스크리닝] 신규 발굴 {len(round_pending_items)}작품 대상 적합성 사전 심사")
@@ -1022,7 +1075,7 @@ class NovelRecommender:
             "- 80~89점: 요청 조건의 핵심을 만족하나 1~2가지 아쉬운 클리셰나 약간의 호불호 요소가 포함된 수작.\n"
             "- 70~79점: 기본 조건은 맞추었으나 과거 취향과 미묘하게 어긋나거나 평이한 양산형 전개가 섞인 경우.  (대다수가 이 점수로)\n"
             "- 60~69점: 조건 중 일부만 일치하거나 매력이 부족한 평작.\n"
-            "- 60점 미만: 조건 위배 또는 지뢰 요소 포함 (절대 최종 top_k 추천 목록에 포함 금지).\n"
+            "- 60점 미만: 조건 위배 또는 지뢰 요소 포함.\n"
             "※ 절대 억지로 점수를 80~90점대로 부풀리지 마세요. 아쉬운 점과 지뢰/불호 가능성을 cons_and_warnings에 날카롭게 지적하세요."
         )
         
@@ -1047,13 +1100,10 @@ class NovelRecommender:
 
 위 후보작 중에서 독자의 취향 및 특별 요청 조건에 가장 알맞은 최상위 {top_k}작품을 선별하여 아래 JSON 규격으로 반환하세요:
 {{
-  "curator_note": "독자에게 전하는 종합 코멘트 (특별 요청 사항 반영 내역 및 엄격한 선별 기준 설명 3문장)",
+  "curator_note": "독자에게 전하는 종합 코멘트 (특별 요청 사항 반영 내역 및 엄격한 선별 기준 설명 3문장)", //다만 조건들을 나열하는 것이 아니라 자연스럽게 설명하는 것이며 일본어 태그를 말할 시 한국어(일본어)로 말 해준다.
   "recommended_works": [
     {{
       "candidate_id": 0,
-      "title_ja": "일본어 원제",
-      "url": "작품 링크",
-      "site": "kakuyomu/naro/hameln",
       "match_score": 78,
       "score_rationale": "냉정한 점수 산출 근거 (요청 조건 만족도 및 감점 사유 명시)",
       "connection_with_past_reads": "과거 읽은 특정 작품의 감상 포인트와 이어지는 이유",
@@ -1062,14 +1112,18 @@ class NovelRecommender:
     }}
   ]
 }}
+반드시 위와 같은 JSON 규격으로 출력하세요.
 """
         final_output = None
         for _ in range(3):
             raw_res = self.ai.generate(prompt, system_instruction)
             try:
                 final_output = extract_json_from_response(raw_res)
+                if final_output == {}:
+                    continue
                 break
             except Exception:
+                print("error")
                 continue
 
         if not isinstance(final_output, dict):
@@ -1088,6 +1142,9 @@ class NovelRecommender:
                     rec["updated_at"] = orig.get("updated_at", "")
                     rec["story"] = orig.get("story", "")
                     rec["keywords"] = orig.get("keywords", [])
+                    rec["url"] = orig.get("url", "")
+                    rec["site"] = orig.get("site_type", "")
+                    rec["title_ja"] = orig.get("title", "")
 
         return final_output
 
@@ -1110,6 +1167,8 @@ class NovelRecommender:
                 msg = "읽은 작품 기록이 없습니다."
                 PrintIo(msg)
                 return {"error": msg, "recommended_works": []}
+            
+            self.log("info", "Ai를 시작하는 중...")
 
             candidates = self.run_agentic_search(
                 history_items=history_items,
@@ -1133,6 +1192,7 @@ class NovelRecommender:
 
             duration = (datetime.now() - start_time).total_seconds()
             PrintIo(f"=== 추천 파이프라인 완료 (소요시간: {duration:.2f}초) ===")
+            PrintIo(f"=== {final_result['curator_note']} ===")
             return final_result
 
         except Exception as e:

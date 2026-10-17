@@ -1,74 +1,18 @@
 from typing import Dict, Any, List
 
-from PySide6.QtCore import Qt, QThread, Signal, QTimer, QUrl
+from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QTextEdit, QPushButton, QComboBox, QCheckBox,
     QListWidget, QListWidgetItem, QScrollArea, QFrame, QSplitter,
-    QMessageBox, QApplication
+    QMessageBox, QTabWidget
 )
 from PySide6.QtGui import QCursor, QDesktopServices
 from src.system.data import load_data, save_data
-from src.trans.trans import Translator
 from src.find.site_list import site_point_text
-from src.main.thread_pyqt import ModelLoadThread
-from src.recommend.suggestion import NovelRecommender
+from src.main.thread_pyqt import ModelLoadThread, RecommendWorker, TitleTranslateWorker
 
 detail_ui = None
-
-
-class TitleTranslateWorker(QThread):
-    finished = Signal(str)
-
-    def __init__(self, text: str):
-        super().__init__()
-        self.text = text
-
-    def run(self):
-        try:
-            res = Translator(self.text, True)
-            self.finished.emit(res)
-        except Exception:
-            self.finished.emit(self.text)
-
-
-class RecommendWorker(QThread):
-    log_signal = Signal(str, str)
-    finished_signal = Signal(dict)
-    error_signal = Signal(str)
-
-    def __init__(self, api_key: str, model: str, condition: str, top_k: int, user_data: dict):
-        super().__init__()
-        self.api_key = api_key
-        self.model = model
-        self.condition = condition
-        self.top_k = top_k
-        self.user_data = user_data
-
-    def run(self):
-        try:
-            if NovelRecommender is None:
-                raise RuntimeError("NovelRecommender 모듈을 찾을 수 없습니다.")
-
-            def log_callback(l_type: str, text: str):
-                self.log_signal.emit(l_type, str(text))
-
-            recommender = NovelRecommender(
-                gemini_api_key=self.api_key,
-                model=self.model,
-                user_data=self.user_data,
-                log=log_callback
-            )
-
-            result = recommender.run_recommendation(
-                top_k=self.top_k,
-                user_custom_prompt=self.condition
-            )
-            self.finished_signal.emit(result)
-
-        except Exception as e:
-            self.error_signal.emit(str(e))
-
 
 class ClickableTitleLabel(QLabel):
     def __init__(self, title_text: str, url_string: str = "", parent=None):
@@ -83,60 +27,77 @@ class ClickableTitleLabel(QLabel):
             QDesktopServices.openUrl(QUrl(self.url_string))
         super().mousePressEvent(event)
 
+
 class RecommendedWorkCard(QFrame):
-    def __init__(self, item_data: Dict[str, Any], parent=None):
+    def __init__(self, item_data: Dict[str, Any], order_number=1, parent=None):
         super().__init__(parent)
         self.item_data = item_data
+        self.order_number = order_number
         self.story_expanded = False
         self.setObjectName("CardFrame")
         self.init_ui()
 
     def init_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 14, 16, 14)
-        layout.setSpacing(10)
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(14)
 
         header_layout = QHBoxLayout()
-        header_layout.setSpacing(10)
+        header_layout.setSpacing(12)
+        header_layout.setAlignment(Qt.AlignTop)
+
+        title_container = QHBoxLayout()
+        title_container.setSpacing(8)
+        title_container.setAlignment(Qt.AlignTop)
+
+        order_label = QLabel(str(self.order_number))
+        order_label.setObjectName("lbl_title")
+        order_label.setStyleSheet("font-size: 15px; font-weight: bold;")
+        order_label.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
+        order_label.setFixedWidth(22)
+        title_container.addWidget(order_label)
 
         title_col = QVBoxLayout()
-        title_col.setSpacing(3)
+        title_col.setSpacing(4)
 
         title_ja = self.item_data.get("title_ja", self.item_data.get("title", ""))
         url = self.item_data.get("url", "")
 
         self.title_label = ClickableTitleLabel(title_ja, url)
-        self.title_label.setObjectName('lbl_title')
+        self.title_label.setObjectName("lbl_title")
         self.title_label.setStyleSheet("font-size: 15px; font-weight: bold;")
+        self.title_label.setWordWrap(True)
         title_col.addWidget(self.title_label)
 
         if title_ja:
-            self.sub_title_label = QLabel(f"{title_ja}")
+            self.sub_title_label = QLabel(f"원제: {title_ja}")
             self.sub_title_label.setObjectName("lbl_url")
+            self.sub_title_label.setStyleSheet("font-size: 11px;")
             self.sub_title_label.setWordWrap(True)
             title_col.addWidget(self.sub_title_label)
 
-        header_layout.addLayout(title_col, stretch=1)
+        title_container.addLayout(title_col, stretch=1)
+        header_layout.addLayout(title_container, stretch=1)
 
-        badge_box = QVBoxLayout()
+        badge_box = QHBoxLayout()
+        badge_box.setSpacing(6)
         badge_box.setAlignment(Qt.AlignRight | Qt.AlignTop)
-        badge_box.setSpacing(4)
-
-        score = self.item_data.get("match_score", 0)
-        score_lbl = QLabel(f"적합도 {score}점")
-        score_lbl.setStyleSheet(
-            "font-weight: bold; "
-            "padding: 4px 8px; border-radius: 4px; font-size: 12px;"
-        )
-        score_lbl.setAlignment(Qt.AlignCenter)
-        badge_box.addWidget(score_lbl)
 
         site = self.item_data.get("site", "kakuyomu")
         site_names = {"kakuyomu": "카쿠요무", "naro": "소설가가 되자", "hameln": "하멜른"}
         site_lbl = QLabel(site_names.get(site, site))
         site_lbl.setObjectName("new_and_now")
-        site_lbl.setAlignment(Qt.AlignRight)
+        site_lbl.setStyleSheet("font-size: 11px; padding: 3px 6px;")
+        site_lbl.setAlignment(Qt.AlignCenter)
         badge_box.addWidget(site_lbl)
+
+        score = self.item_data.get("match_score", 0)
+        score_lbl = QLabel(f"적합도 {score}점")
+        score_lbl.setStyleSheet(
+            "font-weight: bold; padding: 4px 10px; border-radius: 4px; font-size: 12px;"
+        )
+        score_lbl.setAlignment(Qt.AlignCenter)
+        badge_box.addWidget(score_lbl)
 
         header_layout.addLayout(badge_box)
         layout.addLayout(header_layout)
@@ -144,83 +105,96 @@ class RecommendedWorkCard(QFrame):
         info_box = QFrame()
         info_box.setObjectName("CardFrame_ui")
         info_box_layout = QVBoxLayout(info_box)
-        info_box_layout.setContentsMargins(12, 10, 12, 10)
-        info_box_layout.setSpacing(7)
+        info_box_layout.setContentsMargins(14, 12, 14, 12)
+        info_box_layout.setSpacing(10)
 
         one_liner = self.item_data.get("curator_one_liner", "")
         if one_liner:
-            one_liner_lbl = QLabel(f"\"{one_liner}\"")
+            one_liner_lbl = QLabel(f"“ {one_liner} ”")
             one_liner_lbl.setObjectName("detail_description")
-            one_liner_lbl.setStyleSheet("font-weight: 600; font-size: 13px;")
+            one_liner_lbl.setStyleSheet("font-weight: bold; font-size: 13px; padding-bottom: 2px;")
             one_liner_lbl.setWordWrap(True)
             info_box_layout.addWidget(one_liner_lbl)
 
+        details_col = QVBoxLayout()
+        details_col.setSpacing(6)
+
         rationale = self.item_data.get("score_rationale", "")
         if rationale:
-            rat_lbl = QLabel(f"<b>평가:</b> {rationale}")
+            rat_lbl = QLabel(f"<span style='font-size:11px;'>●</span> <b>평가 :</b> {rationale}")
             rat_lbl.setObjectName("detail_description")
             rat_lbl.setWordWrap(True)
-            info_box_layout.addWidget(rat_lbl)
+            details_col.addWidget(rat_lbl)
 
         past_conn = self.item_data.get("connection_with_past_reads", "")
         if past_conn:
-            conn_lbl = QLabel(f"<b>독자 취향 연계:</b> {past_conn}")
+            conn_lbl = QLabel(f"<span style='font-size:11px;'>●</span> <b>독자 취향 연계 :</b> {past_conn}")
             conn_lbl.setObjectName("detail_description")
             conn_lbl.setWordWrap(True)
-            info_box_layout.addWidget(conn_lbl)
+            details_col.addWidget(conn_lbl)
 
         warnings = self.item_data.get("cons_and_warnings", [])
         if warnings:
             if isinstance(warnings, list):
-                warn_text = " / ".join(str(w) for w in warnings if str(w).strip())
+                warn_text = " · ".join(str(w) for w in warnings if str(w).strip())
             else:
                 warn_text = str(warnings)
             if warn_text:
-                warn_lbl = QLabel(f"<b>호불호:</b> {warn_text}")
+                warn_lbl = QLabel(f"<span style='font-size:11px;'>●</span> <b>주의 / 호불호 :</b> {warn_text}")
                 warn_lbl.setObjectName("lbl_url")
                 warn_lbl.setStyleSheet("font-size: 12px;")
                 warn_lbl.setWordWrap(True)
-                info_box_layout.addWidget(warn_lbl)
+                details_col.addWidget(warn_lbl)
 
-        meta_row = QHBoxLayout()
-        meta_row.setSpacing(12)
+        info_box_layout.addLayout(details_col)
+        layout.addWidget(info_box)
 
+        footer_layout = QHBoxLayout()
+        footer_layout.setContentsMargins(2, 0, 2, 0)
+        footer_layout.setSpacing(12)
+        footer_layout.setAlignment(Qt.AlignVCenter)
+
+        meta_items = []
         stars = str(self.item_data.get("stars", "0"))
         if stars and stars != "0":
             site_int = {"kakuyomu": 2, "naro": 1, "hameln": 3}
-            meta_row.addWidget(QLabel(f"{site_point_text(site_int.get(site, 1), stars)}"))
+            meta_items.append(f"{site_point_text(site_int.get(site, 1), stars)}")
 
         episodes = str(self.item_data.get("status_episodes", ""))
         if episodes:
-            meta_row.addWidget(QLabel(episodes))
+            meta_items.append(episodes)
 
         updated = str(self.item_data.get("updated_at", ""))
         if updated:
-            meta_row.addWidget(QLabel(f"갱신: {updated}"))
+            meta_items.append(f"갱신 {updated}")
 
-        meta_row.addStretch()
-        info_box_layout.addLayout(meta_row)
+        meta_text = "  ·  ".join(meta_items)
+        meta_lbl = QLabel(meta_text)
+        meta_lbl.setObjectName("lbl_url")
+        meta_lbl.setStyleSheet("font-size: 12px;")
+        
+        footer_layout.addWidget(meta_lbl, stretch=1)
 
-        layout.addWidget(info_box)
-
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(8)
-        btn_row.addStretch()
+        btn_box = QHBoxLayout()
+        btn_box.setSpacing(6)
 
         if detail_ui:
             self.dialog_btn = QPushButton("상세보기")
             self.dialog_btn.setObjectName("subtleBtn")
-            self.dialog_btn.setFixedSize(94, 32)
+            self.dialog_btn.setFixedSize(88, 30)
+            self.dialog_btn.setCursor(Qt.PointingHandCursor)
             self.dialog_btn.clicked.connect(self.open_detail_dialog)
-            btn_row.addWidget(self.dialog_btn)
+            btn_box.addWidget(self.dialog_btn)
 
         self.add_work_btn = QPushButton("작품 추가")
         self.add_work_btn.setObjectName("subtleBtn")
-        self.add_work_btn.setFixedSize(94, 32)
+        self.add_work_btn.setFixedSize(88, 30)
+        self.add_work_btn.setCursor(Qt.PointingHandCursor)
         self.add_work_btn.clicked.connect(self.save_to_user_list)
-        btn_row.addWidget(self.add_work_btn)
+        btn_box.addWidget(self.add_work_btn)
 
-        layout.addLayout(btn_row)
+        footer_layout.addLayout(btn_box)
+        layout.addLayout(footer_layout)
 
         if title_ja:
             self.trans_worker = TitleTranslateWorker(title_ja)
@@ -254,8 +228,9 @@ class RecommendedWorkCard(QFrame):
             dialog.exec()
 
     def save_to_user_list(self):
-        detail_ui.click_plus_url = self.item_data.get('url', '')
-        detail_ui.click = True
+        if detail_ui:
+            detail_ui.click_plus_url = self.item_data.get('url', '')
+            detail_ui.click = True
         self.add_work_btn.setText("추가됨")
         self.add_work_btn.setEnabled(False)
 
@@ -264,8 +239,8 @@ class NovelRecommendDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("AI 추천")
-        self.resize(1320, 860)
-        self.setMinimumSize(1150, 750)
+        self.resize(1300, 840)
+        self.setMinimumSize(1100, 720)
         self.setWindowFlags(self.windowFlags() | Qt.WindowMaximizeButtonHint)
 
         self.recommend_worker = None
@@ -283,31 +258,32 @@ class NovelRecommendDialog(QDialog):
     def init_ui(self):
         root = QVBoxLayout(self)
         root.setContentsMargins(14, 14, 14, 14)
-        root.setSpacing(10)
+        root.setSpacing(0)
 
         self.splitter = QSplitter(Qt.Horizontal)
         self.splitter.setHandleWidth(8)
 
         left_widget = self.build_left_panel()
-        center_widget = self.build_center_panel()
-        right_widget = self.build_right_panel()
+        right_widget = self.build_right_workspace()
 
         self.splitter.addWidget(left_widget)
-        self.splitter.addWidget(center_widget)
         self.splitter.addWidget(right_widget)
 
-        self.splitter.setSizes([330, 620, 370])
+        self.splitter.setSizes([380, 900])
         self.splitter.setStretchFactor(0, 0)
         self.splitter.setStretchFactor(1, 1)
-        self.splitter.setStretchFactor(2, 0)
 
-        root.addWidget(self.splitter, 1)
+        root.addWidget(self.splitter)
 
     def build_left_panel(self) -> QWidget:
         container = QWidget()
         layout = QVBoxLayout(container)
-        layout.setContentsMargins(2, 2, 8, 2)
-        layout.setSpacing(9)
+        layout.setContentsMargins(4, 2, 10, 2)
+        layout.setSpacing(10)
+        
+        api_lbl = QLabel("API 설정")
+        api_lbl.setObjectName("cat_label")
+        layout.addWidget(api_lbl)
 
         api_box = QHBoxLayout()
         api_box.setSpacing(6)
@@ -322,6 +298,7 @@ class NovelRecommendDialog(QDialog):
         self.api_toggle_btn.setCheckable(True)
         self.api_toggle_btn.setObjectName("subtleBtn")
         self.api_toggle_btn.setFixedSize(54, 34)
+        self.api_toggle_btn.setCursor(Qt.PointingHandCursor)
         self.api_toggle_btn.clicked.connect(self.toggle_api_visibility)
         api_box.addWidget(self.api_toggle_btn)
         layout.addLayout(api_box)
@@ -337,6 +314,7 @@ class NovelRecommendDialog(QDialog):
         self.refresh_model_btn = QPushButton("새로고침")
         self.refresh_model_btn.setObjectName("subtleBtn")
         self.refresh_model_btn.setFixedSize(68, 34)
+        self.refresh_model_btn.setCursor(Qt.PointingHandCursor)
         self.refresh_model_btn.clicked.connect(self.fetch_gemini_models)
         model_box.addWidget(self.refresh_model_btn)
         layout.addLayout(model_box)
@@ -348,7 +326,8 @@ class NovelRecommendDialog(QDialog):
         layout.addWidget(model_desc)
 
         history_header = QHBoxLayout()
-        self.chk_use_history = QCheckBox("내 목록 허용")
+        history_header.setSpacing(6)
+        self.chk_use_history = QCheckBox("내 감상 목록 반영")
         self.chk_use_history.setChecked(True)
         self.chk_use_history.toggled.connect(self.on_history_toggled)
         history_header.addWidget(self.chk_use_history)
@@ -356,13 +335,15 @@ class NovelRecommendDialog(QDialog):
 
         self.btn_select_all_history = QPushButton("전체")
         self.btn_select_all_history.setObjectName("subtleBtn")
-        self.btn_select_all_history.setFixedSize(44, 26)
+        self.btn_select_all_history.setFixedSize(48, 26)
+        self.btn_select_all_history.setCursor(Qt.PointingHandCursor)
         self.btn_select_all_history.clicked.connect(self.toggle_all_history_checks)
         history_header.addWidget(self.btn_select_all_history)
         layout.addLayout(history_header)
 
         self.history_list_widget = QListWidget()
-        self.history_list_widget.setFixedHeight(220)
+        self.history_list_widget.setMinimumHeight(120)
+        self.history_list_widget.setMaximumHeight(200)
         self.history_list_widget.setObjectName("group_box")
         self.history_list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.history_list_widget.setTextElideMode(Qt.ElideRight)
@@ -394,9 +375,11 @@ class NovelRecommendDialog(QDialog):
         layout.addWidget(req_lbl)
 
         self.prompt_edit = QTextEdit()
+        self.prompt_edit.setPlaceholderText("예: 주인공이 지능적이고 분위기가 진지한 다크 판타지 추천해줘.")
         layout.addWidget(self.prompt_edit, stretch=1)
 
         rec_count_box = QHBoxLayout()
+        rec_count_box.setSpacing(8)
         rec_count_lbl = QLabel("추천 수:")
         rec_count_lbl.setObjectName("cat_label")
         rec_count_box.addWidget(rec_count_lbl)
@@ -418,26 +401,44 @@ class NovelRecommendDialog(QDialog):
 
         return container
 
-    def build_center_panel(self) -> QWidget:
+    def build_right_workspace(self) -> QWidget:
         container = QWidget()
         layout = QVBoxLayout(container)
-        layout.setContentsMargins(6, 2, 6, 2)
-        layout.setSpacing(10)
+        layout.setContentsMargins(6, 2, 2, 2)
+        layout.setSpacing(8)
 
         header = QFrame()
         header.setObjectName("CardFrame_ui")
         h_layout = QHBoxLayout(header)
         h_layout.setContentsMargins(14, 10, 14, 10)
+        h_layout.setSpacing(10)
 
-        self.results_title_lbl = QLabel("추천 결과")
+        self.results_title_lbl = QLabel("AI 작품 추천")
         self.results_title_lbl.setStyleSheet("font-size: 15px; font-weight: bold;")
         h_layout.addWidget(self.results_title_lbl)
+
         h_layout.addStretch()
 
-        self.results_status_lbl = QLabel("")
+        self.results_status_lbl = QLabel("대기 중")
         self.results_status_lbl.setObjectName("new_and_now")
         h_layout.addWidget(self.results_status_lbl)
+
+        self.clear_feed_btn = QPushButton("로그 지우기")
+        self.clear_feed_btn.setObjectName("subtleBtn")
+        self.clear_feed_btn.setFixedSize(90, 28)
+        self.clear_feed_btn.setCursor(Qt.PointingHandCursor)
+        self.clear_feed_btn.clicked.connect(self.clear_feed)
+        h_layout.addWidget(self.clear_feed_btn)
+
         layout.addWidget(header)
+
+        self.tab_widget = QTabWidget()
+        self.tab_widget.setObjectName("settingsTab")
+
+        tab_results = QWidget()
+        results_vbox = QVBoxLayout(tab_results)
+        results_vbox.setContentsMargins(0, 8, 0, 0)
+        results_vbox.setSpacing(0)
 
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
@@ -448,35 +449,19 @@ class NovelRecommendDialog(QDialog):
         self.cards_container = QWidget()
         self.cards_container.setObjectName("t_123")
         self.cards_container.setStyleSheet("#t_123{background: transparent;}")
-        
+
         self.cards_layout = QVBoxLayout(self.cards_container)
-        self.cards_layout.setContentsMargins(0, 0, 8, 0)
+        self.cards_layout.setContentsMargins(14, 8, 8, 8)
         self.cards_layout.setSpacing(12)
         self.cards_layout.addStretch()
 
         self.scroll_area.setWidget(self.cards_container)
-        layout.addWidget(self.scroll_area, stretch=1)
+        results_vbox.addWidget(self.scroll_area)
 
-        return container
-
-    def build_right_panel(self) -> QWidget:
-        container = QWidget()
-        layout = QVBoxLayout(container)
-        layout.setContentsMargins(8, 2, 2, 2)
-        layout.setSpacing(10)
-
-        header_row = QHBoxLayout()
-        header_lbl = QLabel("추천 상태 로그")
-        header_lbl.setStyleSheet("font-size: 14px; font-weight: bold;")
-        header_row.addWidget(header_lbl)
-        header_row.addStretch()
-
-        clear_btn = QPushButton("지우기")
-        clear_btn.setObjectName("subtleBtn")
-        clear_btn.setFixedSize(70, 28)
-        clear_btn.clicked.connect(self.clear_feed)
-        header_row.addWidget(clear_btn)
-        layout.addLayout(header_row)
+        tab_feed = QWidget()
+        feed_vbox = QVBoxLayout(tab_feed)
+        feed_vbox.setContentsMargins(14, 8, 8, 8)
+        feed_vbox.setSpacing(0)
 
         self.feed_scroll = QScrollArea()
         self.feed_scroll.setWidgetResizable(True)
@@ -487,15 +472,19 @@ class NovelRecommendDialog(QDialog):
         self.feed_container = QWidget()
         self.feed_container.setObjectName("t_123")
         self.feed_container.setStyleSheet("#t_123{background: transparent;}")
-        
+
         self.feed_layout = QVBoxLayout(self.feed_container)
         self.feed_layout.setContentsMargins(0, 0, 8, 0)
         self.feed_layout.setSpacing(10)
         self.feed_layout.addStretch()
 
         self.feed_scroll.setWidget(self.feed_container)
-        layout.addWidget(self.feed_scroll, stretch=1)
+        feed_vbox.addWidget(self.feed_scroll)
 
+        self.tab_widget.addTab(tab_results, "추천 결과")
+        self.tab_widget.addTab(tab_feed, "실시간 AI 분석 로그")
+
+        layout.addWidget(self.tab_widget, stretch=1)
         return container
 
     def load_initial_data(self):
@@ -605,7 +594,7 @@ class NovelRecommendDialog(QDialog):
         card = QFrame()
         card.setObjectName("CardFrame_ui")
         c_layout = QHBoxLayout(card)
-        c_layout.setContentsMargins(10, 8, 10, 8)
+        c_layout.setContentsMargins(12, 10, 12, 10)
         c_layout.setSpacing(8)
 
         msg_lbl = QLabel(message)
@@ -620,7 +609,7 @@ class NovelRecommendDialog(QDialog):
         card = QFrame()
         card.setObjectName("CardFrame_ui")
         c_layout = QVBoxLayout(card)
-        c_layout.setContentsMargins(12, 10, 12, 10)
+        c_layout.setContentsMargins(14, 12, 14, 12)
         c_layout.setSpacing(6)
 
         body_lbl = QLabel(thought_or_note)
@@ -675,7 +664,9 @@ class NovelRecommendDialog(QDialog):
         self.clear_result_cards()
         self.start_btn.setEnabled(False)
         self.start_btn.setText("추천 탐색 진행 중...")
-        self.results_status_lbl.setText("Ai 추천 중...")
+        self.results_status_lbl.setText("AI 분석 중...")
+
+        self.tab_widget.setCurrentIndex(1)
 
         self.append_info_card(
             f"추천 세션 가동: 모델 {model}, 상위 {top_k}작품 선별, 기존 목록 {len(user_data['list'])}개 참조"
@@ -710,24 +701,40 @@ class NovelRecommendDialog(QDialog):
             self.append_ai_speech_card(f"<b>[최종 선별 총평]</b>\n{curator_note}")
 
         if not works:
-            self.results_status_lbl.setText("추천 후보작 없음")
+            self.results_status_lbl.setText("후보작 없음")
             no_lbl = QLabel("조건에 부합하는 작품을 발견하지 못했습니다. 검색 조건을 완화해 보세요.")
             no_lbl.setObjectName("new_and_now")
             no_lbl.setAlignment(Qt.AlignCenter)
             self.cards_layout.insertWidget(0, no_lbl)
+            self.tab_widget.setCurrentIndex(0)
             return
 
-        self.results_status_lbl.setText(f"{len(works)} 작품 추천")
+        self.results_status_lbl.setText(f"{len(works)}작품 추천 완료")
+        self.tab_widget.setTabText(0, f"추천 결과 ({len(works)})")
 
-        for work in works:
-            card = RecommendedWorkCard(work, self)
+        if curator_note:
+            note_card = QFrame()
+            note_card.setObjectName("CardFrame_ui")
+            n_layout = QVBoxLayout(note_card)
+            n_layout.setContentsMargins(16, 12, 16, 12)
+            n_layout.setSpacing(6)
+            note_desc = QLabel(curator_note)
+            note_desc.setObjectName("detail_description")
+            note_desc.setWordWrap(True)
+            n_layout.addWidget(note_desc)
+            self.cards_layout.insertWidget(self.cards_layout.count() - 1, note_card)
+
+        for order, work in enumerate(works):
+            card = RecommendedWorkCard(work, order + 1, self)
             self.cards_layout.insertWidget(self.cards_layout.count() - 1, card)
 
         self.scroll_area.verticalScrollBar().setValue(0)
+        self.tab_widget.setCurrentIndex(0)
 
     def on_recommendation_failed(self, error_msg: str):
         self.start_btn.setEnabled(True)
         self.start_btn.setText("추천 시작")
         self.results_status_lbl.setText("추천 실패")
-        self.append_info_card(f"치명적 오류 발생: {error_msg}")
+        self.append_info_card(f"오류 발생: {error_msg}")
+        self.tab_widget.setCurrentIndex(1)
         QMessageBox.critical(self, "추천 오류", f"추천 파이프라인 수행 중 오류가 발생했습니다:\n{error_msg}")
