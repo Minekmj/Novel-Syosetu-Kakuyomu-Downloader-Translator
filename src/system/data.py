@@ -1,7 +1,7 @@
 import json
 import os
 
-from src.system.config import DATA_FILE
+from src.system.load_save import load_data, save_data
 from src.find.get import *
 
 import re
@@ -40,12 +40,7 @@ from src.system.src import get_resource_path
 def rest():
     global THEME_NAME, MINIMAL_DARK_THEME
 
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, "r", encoding="utf-8") as f:
-                THEME_NAME = json.load(f).get("theme", "LAVENDER")
-        except Exception:
-            pass
+    THEME_NAME = load_data().get("theme", "LAVENDER")
 
     css_file_path = get_resource_path("css/main.qss")
 

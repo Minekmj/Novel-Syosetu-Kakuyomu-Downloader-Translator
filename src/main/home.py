@@ -364,6 +364,7 @@ class DownloadDetailDialog(QDialog):
 
 class AddressRowWidget(QWidget):
     status_updated = Signal()
+    fetch_finished = Signal()
 
     def __init__(self, site_url, title_text=None, parent=None, last="0", down_time="0", act_massage="", title_raw_text="", main_window=None):
         super().__init__(parent)
@@ -374,6 +375,7 @@ class AddressRowWidget(QWidget):
         self.now = "-"
         self.time = ""
         self.act_massage = act_massage
+        self.is_loading = False
         
         self.title_raw_text = title_raw_text
 
@@ -482,16 +484,22 @@ class AddressRowWidget(QWidget):
         self.start_async_fetch()
 
     def start_async_fetch(self):
+        if self.is_empty:
+            return
+        self.is_loading = True
+        self.new_and_now.setText("조회 중...")
         self.worker = thread_pyqt.FetchNewNumberWorker(self.site_url, True)
         self.worker.finished.connect(self.update_new_label)
         self.worker.start()
 
     def update_new_label(self, result_text):
+        self.is_loading = False
         self.now = str(result_text[0])
         self.time = str(result_text[1]) if len(result_text) > 1 and result_text[1] else ""
         time_display = f" - {self.time}" if self.time else ""
         self.new_and_now.setText(f"{self.last} / {self.now} 화{time_display}")
         self.status_updated.emit()
+        self.fetch_finished.emit()
 
     def update_download_info(self, last, down_time):
         self.last = str(last)
@@ -750,23 +758,28 @@ class MainWindow(QMainWindow):
         self.sort_combo = QComboBox(self)
         self.sort_combo.setFixedHeight(36)
         self.sort_combo.addItems([
-            "이름순",
-            "역이름순",
-            "남은 화수순",
-            "역 남은 화수순",
-            "최근 다운로드순",
-            "역 최근 다운로드순",
-            "최신화 날짜순",
-            "역 최신화 날짜순"
+            "이름순", "역이름순", "남은 화수순", "역 남은 화수순",
+            "최근 다운로드순", "역 최근 다운로드순", "최신화 날짜순", "역 최신화 날짜순"
         ])
         self.sort_combo.currentIndexChanged.connect(self.on_sort_changed)
+        
+        self.refresh_btn = QPushButton("새로고침", self)
+        self.refresh_btn.setObjectName("secondaryBtn")
+        self.refresh_btn.setFixedHeight(36)
+        self.refresh_btn.setEnabled(False)
+        self.refresh_btn.clicked.connect(self.refresh_all_rows)
 
         self.filter_chk = QCheckBox("남은 화수 있음", self)
         self.filter_chk.setObjectName("isCo")
         self.filter_chk.stateChanged.connect(self.apply_filter_and_sort)
 
+        self.refresh_timer = QTimer(self)
+        self.refresh_timer.setSingleShot(True)
+        self.refresh_timer.timeout.connect(lambda: self.refresh_btn.setEnabled(True))
+
         control_layout.addWidget(self.search_edit, 1)
         control_layout.addWidget(self.sort_combo)
+        control_layout.addWidget(self.refresh_btn)
         control_layout.addWidget(self.filter_chk)
 
         self.main_layout.addLayout(control_layout)
@@ -841,6 +854,25 @@ class MainWindow(QMainWindow):
             save_data(data)
             update = update_ui.UpdateView(self)
             update.show()
+            
+    def check_all_fetched(self):
+        if not self.row_widgets:
+            return
+
+        is_any_loading = any(getattr(row, "is_loading", False) for row in self.row_widgets)
+        
+        if not is_any_loading:
+            self.refresh_timer.start(1000)
+
+    def refresh_all_rows(self):
+        if not self.row_widgets:
+            return
+
+        self.refresh_btn.setEnabled(False)
+        self.refresh_timer.stop()
+
+        for row in self.row_widgets:
+            row.start_async_fetch()
 
     def add_download_task(self, task):
         row_widget = task.get("row_widget")
@@ -993,6 +1025,7 @@ class MainWindow(QMainWindow):
 
             row.del_btn.clicked.connect(lambda _, r=row: self.delete_row(r))
             row.status_updated.connect(self.apply_filter_and_sort)
+            row.fetch_finished.connect(self.check_all_fetched)
 
             self.rows_layout.addWidget(row)
             self.row_widgets.append(row)
@@ -1102,6 +1135,11 @@ class MainWindow(QMainWindow):
         row.setParent(self)
         row.del_btn.clicked.connect(lambda _, r=row: self.delete_row(r))
         row.status_updated.connect(self.apply_filter_and_sort)
+        
+        row.fetch_finished.connect(self.check_all_fetched)
+
+        self.refresh_btn.setEnabled(False)
+        self.refresh_timer.stop()
 
         self.row_widgets.insert(0, row)
         self.newly_added_widget = row
@@ -1140,6 +1178,7 @@ class MainWindow(QMainWindow):
             self.is_first_massage.show()
 
         row_widget.deleteLater()
+        self.check_all_fetched()
 
     def open_manager_path_dialog(self):
         data = load_data()

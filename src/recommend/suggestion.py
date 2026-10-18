@@ -18,10 +18,10 @@ from src.trans.trans_ai_utils import build_thinking_config
 from google import genai
 from google.genai import types
 
-DB_FILE = "./workdatacache.db"
+from src.system.config import DB_FILE_WORKED
 
 def init_db():
-    with sqlite3.connect(DB_FILE) as conn:
+    with sqlite3.connect(DB_FILE_WORKED) as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS WorkDataCache (
                 src_text TEXT PRIMARY KEY,
@@ -31,14 +31,14 @@ def init_db():
 init_db()
 
 def get_cached(text):
-    with sqlite3.connect(DB_FILE) as conn:
+    with sqlite3.connect(DB_FILE_WORKED) as conn:
         cur = conn.cursor()
         cur.execute("SELECT dst_text FROM WorkDataCache WHERE src_text = ?", (text,))
         row = cur.fetchone()
         return row[0] if row else None
 
 def set_cached(src_text, dst_text):
-    with sqlite3.connect(DB_FILE) as conn:
+    with sqlite3.connect(DB_FILE_WORKED) as conn:
         conn.execute("INSERT OR REPLACE INTO WorkDataCache VALUES (?, ?)", (src_text, dst_text))
 
 PRINT_OK = False
@@ -145,12 +145,11 @@ class SearchExecutor:
         self.http_session.mount("https://", adapter)
 
         for mod in (datas, getattr(datas, 'KakuyomuSearch', None), getattr(datas, 'NaroSearch', None), getattr(datas, 'SyosetuSearch', None)):
-            if mod and hasattr(mod, 'http_session'):
-                try:
-                    mod.http_session.mount("http://", adapter)
-                    mod.http_session.mount("https://", adapter)
-                except Exception:
-                    pass
+            try:
+                mod.http_session.mount("http://", adapter)
+                mod.http_session.mount("https://", adapter)
+            except Exception:
+                pass
 
     def run_search_with_retry(self, site: str, site_cls, params: Dict[str, Any], max_attempts: int = 5) -> Dict[str, Any]:
         for attempt in range(1, max_attempts + 1):
@@ -186,11 +185,7 @@ class SearchExecutor:
                     return site_cls.parse_search_results(resp.text)
 
                 elif site in ('naro', 'hameln'):
-                    if hasattr(site_cls, 'fetch_search_results'):
-                        res = site_cls.fetch_search_results(params)
-                    else:
-                        inst = site_cls() if callable(site_cls) else site_cls
-                        res = inst.fetch_search_results(params)
+                    res = site_cls.fetch_search_results(params)
                     return res
 
             except Exception as e:
@@ -468,11 +463,10 @@ class NovelRecommender:
 
         if site == 'kakuyomu':
             genre_name = ""
-            if KakuyomuSearch and hasattr(KakuyomuSearch, 'GENRES'):
-                if genre in KakuyomuSearch.GENRES.values():
-                    genre_name = genre
-                elif genre in KakuyomuSearch.GENRES:
-                    genre_name = KakuyomuSearch.GENRES[genre]
+            if genre in KakuyomuSearch.GENRES.values():
+                genre_name = genre
+            elif genre in KakuyomuSearch.GENRES:
+                genre_name = KakuyomuSearch.GENRES[genre]
 
             order_val = order if (KakuyomuSearch and order in KakuyomuSearch.SORT_ORDERS.values()) else "popular"
             if not order_val and KakuyomuSearch and order in KakuyomuSearch.SORT_ORDERS:
@@ -511,7 +505,7 @@ class NovelRecommender:
                 genre_val = genre
             elif str(genre).isdigit():
                 genre_val = int(genre)
-            elif NaroSearch and hasattr(NaroSearch, 'GENRES') and genre in NaroSearch.GENRES:
+            elif genre in NaroSearch.GENRES:
                 genre_val = NaroSearch.GENRES[genre]
 
             order_val = order if (NaroSearch and order in NaroSearch.SORT_ORDERS.values()) else "hyoka"
@@ -526,7 +520,7 @@ class NovelRecommender:
             if last_pub is not None:
                 if str(last_pub).isdigit():
                     last_pub_val = int(last_pub)
-                elif NaroSearch and hasattr(NaroSearch, 'LAST_PUBLISHED_PERIODS') and last_pub in NaroSearch.LAST_PUBLISHED_PERIODS:
+                elif last_pub in NaroSearch.LAST_PUBLISHED_PERIODS:
                     last_pub_val = NaroSearch.LAST_PUBLISHED_PERIODS[last_pub]
 
             valid_n_flags = {"ai", "r15", "zankoku", "bl", "gl", "tensei", "tenni", "stop"}
@@ -553,11 +547,10 @@ class NovelRecommender:
 
         elif site == 'hameln':
             genre_val = ""
-            if SyosetuSearch and hasattr(SyosetuSearch, 'GENRES'):
-                if genre in SyosetuSearch.GENRES.values():
-                    genre_val = genre
-                elif genre in SyosetuSearch.GENRES:
-                    genre_val = SyosetuSearch.GENRES[genre]
+            if genre in SyosetuSearch.GENRES.values():
+                genre_val = genre
+            elif genre in SyosetuSearch.GENRES:
+                genre_val = SyosetuSearch.GENRES[genre]
 
             order_val = str(order) if (SyosetuSearch and str(order) in SyosetuSearch.SORT_ORDERS.values()) else "45"
             if SyosetuSearch and order in SyosetuSearch.SORT_ORDERS:
@@ -573,7 +566,7 @@ class NovelRecommender:
             if last_pub is not None:
                 if str(last_pub).isdigit():
                     last_pub_val = int(last_pub)
-                elif SyosetuSearch and hasattr(SyosetuSearch, 'LAST_PUBLISHED_PERIODS') and last_pub in SyosetuSearch.LAST_PUBLISHED_PERIODS:
+                elif last_pub in SyosetuSearch.LAST_PUBLISHED_PERIODS:
                     last_pub_val = SyosetuSearch.LAST_PUBLISHED_PERIODS[last_pub]
 
             h_exc_map = {

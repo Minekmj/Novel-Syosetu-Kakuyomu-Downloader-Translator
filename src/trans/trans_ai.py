@@ -8,7 +8,7 @@ from google import genai
 from google.genai import types
 
 import src.down.down as down
-from src.system.config import DATA_FILE
+from src.system.load_save import load_data, save_data
 from src.trans.prom import *
 from src.trans.prompt_sanitizer import (
     assemble_final_text,
@@ -42,29 +42,15 @@ def set_api_key(api_key):
     API = api_key.strip() or ''
     client = genai.Client(api_key=API if API != '' else "None")
     glossary_text.client = client
-    data = {}
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-        except Exception:
-            data = {}
+    data = load_data()
     data['api'] = API
-    with open(DATA_FILE, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
-
+    save_data(data)
 
 def rest():
     global API, client
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, 'r', encoding='utf-8') as f:
-                API = json.load(f).get('api', '')
-            client = genai.Client(api_key=API)
-            glossary_text.client = client
-        except Exception:
-            pass
-
+    API = load_data().get('api', '')
+    client = genai.Client(api_key=API if API != '' else "None")
+    glossary_text.client = client
 
 client = genai.Client(api_key=API if API != '' else "None")
 glossary_text.client = client

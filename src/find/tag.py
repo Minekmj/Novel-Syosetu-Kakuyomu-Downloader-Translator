@@ -11,7 +11,7 @@ from PySide6.QtGui import QAction
 
 from src.system.load_save import load_data, save_data
 
-USER_TAGS_SRC = "./tag_user.json"
+from src.system.config import USER_TAGS_SRC
 
 class FlowLayout(QLayout):
     def __init__(self, parent=None, margin=0, spacing=4):

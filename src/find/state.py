@@ -11,7 +11,9 @@ import time
 import urllib.parse
 import urllib.request
 
-SRC = "session_info.json"
+from src.system.config import USER_SESSION_SRC
+SRC = USER_SESSION_SRC
+
 TARGET_URL = "https://syosetu.org"
 
 CLEAN_UI_JS = """

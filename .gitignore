@@ -9,6 +9,8 @@ run.dist/
 run.build/
 src/MINE_DOWNLOADER.egg-info/
 지원철회/
+test/
+DATA/
 
 # Files
 data.json

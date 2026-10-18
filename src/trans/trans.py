@@ -1,7 +1,8 @@
 import sqlite3
 import requests
 
-DB_FILE = "./trans.db"
+from src.system.config import DB_FILE_TRANS
+
 session = requests.Session()
 session.headers.update({
     "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
@@ -10,7 +11,7 @@ session.headers.update({
 })
 
 def init_db():
-    with sqlite3.connect(DB_FILE) as conn:
+    with sqlite3.connect(DB_FILE_TRANS) as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS translations (
                 src_text TEXT PRIMARY KEY,
@@ -20,14 +21,14 @@ def init_db():
 init_db()
 
 def get_cached(text):
-    with sqlite3.connect(DB_FILE) as conn:
+    with sqlite3.connect(DB_FILE_TRANS) as conn:
         cur = conn.cursor()
         cur.execute("SELECT dst_text FROM translations WHERE src_text = ?", (text,))
         row = cur.fetchone()
         return row[0] if row else None
 
 def set_cached(src_text, dst_text):
-    with sqlite3.connect(DB_FILE) as conn:
+    with sqlite3.connect(DB_FILE_TRANS) as conn:
         conn.execute("INSERT OR REPLACE INTO translations VALUES (?, ?)", (src_text, dst_text))
 
 def Translator(text, cache=False):

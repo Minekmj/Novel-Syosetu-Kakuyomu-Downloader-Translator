@@ -1,7 +1,6 @@
 import argparse
 import hashlib
 import json
-import math
 import os
 import subprocess
 import sys
@@ -9,7 +8,10 @@ import threading
 import tkinter as tk
 from tkinter import ttk
 import urllib.request
-from PIL import Image, ImageColor, ImageDraw, ImageTk
+from PIL import Image, ImageDraw, ImageTk
+
+from src.system.config import *
+from src.system.load_save import load_data, save_data
 
 GITHUB_RELEASE_URL = "https://api.github.com/repos/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/releases/latest"
 
@@ -665,6 +667,25 @@ def create_splash(pre_file=None):
 
 
 def main():
+    if not os.path.exists(DATA_FOLDER):
+        os.mkdir(DATA_FOLDER)
+        
+        # 구버전 데이터 이동 로직
+        if os.path.exists("./data.json"):
+            data = load_data("./data.json")
+            save_data(data)
+            os.remove("./data.json")
+        
+        def move_data(one, two):
+            if os.path.exists(one):
+                import shutil
+                shutil.move(one, two)
+                
+        move_data("./session_info.json", USER_SESSION_SRC)
+        move_data("./tag_user.json", USER_TAGS_SRC)
+        move_data("./trans.db", DB_FILE_TRANS)
+        move_data("./workdatacache.db", DB_FILE_WORKED)
+            
     parser = argparse.ArgumentParser(description="Splash Screen Loader")
     parser.add_argument("-f", "--file", type=str, help="실행할 절대경로 배치 파일", default=None)
     args = parser.parse_args()

@@ -17,6 +17,8 @@ import src.trans.trans_check_jp as check_jp
 import src.trans.preset as preset
 from src.trans.trans_glossary import *
 
+from src.system.load_save import save_data, load_data
+
 check_jp.trans_ai = trans_ai
 
 OUT = "./out/"
@@ -45,8 +47,6 @@ class ElidedLabel(QLabel):
 
 
 class TranslateDialog(QDialog):
-    SETTINGS_FILE = './data.json'
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self.is_trans = False
@@ -747,19 +747,10 @@ class TranslateDialog(QDialog):
         ]
 
     def _load_json(self):
-        if not os.path.exists(self.SETTINGS_FILE):
-            return {}
-
-        try:
-            with open(self.SETTINGS_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception as e:
-            self.add_log(f'설정 불러오기 실패: {e}')
-            return {}
+        return load_data()
 
     def _save_json(self, data):
-        with open(self.SETTINGS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=4)
+        save_data(data)
 
     def _model_config(self, model, base=None):
         base = base or {}
