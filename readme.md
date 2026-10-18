@@ -187,7 +187,6 @@ https://pytorch.org/get-started/locally/
 `config.py`에서 다음 옵션을 변경합니다.
 
 ```python
-DATA_FILE = "./data.json"
 USE_LOCAL_AI = True
 ```
 
