@@ -4,7 +4,7 @@ import time
 import weakref
 from google import genai
 from src.system.load_save import load_data, save_data
-from src.trans.trans_ai_utils import glossary_text
+from src.trans.trans_ai_utils import glossary_text, extract_glossary
 
 API = ''
 API_KEYS = []

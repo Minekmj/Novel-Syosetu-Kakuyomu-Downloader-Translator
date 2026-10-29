@@ -233,4 +233,4 @@ class PresetLoadDialog(QDialog):
                     parent.preset_name_edit.clear()
                     parent.preset_status.setText('현재 프리셋 없음')
             if hasattr(parent, 'add_log'):
-                parent.add_log(f"프리셋 삭제 완료: {name}")
+                parent.log_panel.add_log(f"프리셋 삭제 완료: {name}")

@@ -274,7 +274,7 @@ class DictionaryDialog(QDialog):
                 return self.extract_json_source_text(data)
 
         except Exception as e:
-            parent.add_log(f"AI 용어집 원문 읽기 실패: {e}")
+            parent.log_panel.add_log(f"AI 용어집 원문 읽기 실패: {e}")
 
         return ''
 
@@ -332,6 +332,9 @@ class DictionaryDialog(QDialog):
         self.accept()
 
     def open_ai_glossary_dialog(self):
+        parent = self.parent()
+        parent.log_panel.reset_time()
+        
         all_text = self.read_source_text()
 
         if not all_text.strip():
@@ -361,13 +364,13 @@ class DictionaryDialog(QDialog):
     def on_ai_glossary_log(self, text):
         parent = self.parent()
 
-        parent.add_log(f"[AI 용어집] {text}")
+        parent.log_panel.add_log(f"[AI 용어집] {text}")
 
     def on_ai_glossary_finished(self, glossary, error):
         if error:
             parent = self.parent()
 
-            parent.add_log(f"[AI 용어집] 추출 실패: {error}")
+            parent.log_panel.add_log(f"[AI 용어집] 추출 실패: {error}")
 
             QMessageBox.critical(self, 'AI 용어집 오류', error)
             return
@@ -375,7 +378,7 @@ class DictionaryDialog(QDialog):
         if not glossary:
             parent = self.parent()
 
-            parent.add_log('[AI 용어집] 추출된 용어가 없습니다.')
+            parent.log_panel.add_log('[AI 용어집] 추출된 용어가 없습니다.')
 
             QMessageBox.information(self, 'AI 용어집', '추출된 용어가 없습니다.')
             return
@@ -400,7 +403,7 @@ class DictionaryDialog(QDialog):
 
         parent = self.parent()
 
-        parent.add_log(f"[AI 용어집] 추출 완료: {len(glossary)}개 / 추가: {added}개 / 기존 용어: {skipped}개")
+        parent.log_panel.add_log(f"[AI 용어집] 추출 완료: {len(glossary)}개 / 추가: {added}개 / 기존 용어: {skipped}개")
 
         QMessageBox.information(
             self,

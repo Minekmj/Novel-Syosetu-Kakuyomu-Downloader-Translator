@@ -23,6 +23,7 @@ from .config import (
     refresh_client,
     rest,
     client,
+    extract_glossary
 )
 
 from .novel_translator import TransAi_All
