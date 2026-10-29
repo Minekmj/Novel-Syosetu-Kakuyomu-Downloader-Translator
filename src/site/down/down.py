@@ -73,7 +73,7 @@ def Download(
 
     clean_title = re.sub(r'[\\/:*?"<>|]', '_', book_title)
 
-    outfolder = getattr(base_data, "OUTFOLDER", "./out") if base_data else "./out"
+    outfolder = os.environ.get("minedown_setting_src", "./out/")
     if not os.path.exists(outfolder):
         os.makedirs(outfolder, exist_ok=True)
 

@@ -1,4 +1,6 @@
+import datetime
 import html
+import time
 from PySide6.QtWidgets import QWidget, QTextEdit
 from src.system.data import return_theme
 from .ui_factory import create_layout, create_label, create_button, create_combo
@@ -68,6 +70,8 @@ def matches_log_filter(log_type, filter_text):
 class LogPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.startTime = time.time()
+        
         self.log_history = []
         self.log_follow_enabled = True
         self.init_ui()
@@ -119,13 +123,19 @@ class LogPanel(QWidget):
         if not text:
             return
         log_type = determine_log_type(text)
-        formatted_html = format_log_html(text, log_type)
+        
+        elapsed_seconds = int(time.time() - self.startTime)
+        formatted_time = str(datetime.timedelta(seconds=elapsed_seconds))
+        formatted_html = format_log_html(f"[{formatted_time}] " + text, log_type)
         self.log_history.append((log_type, formatted_html))
 
         current_filter = self.log_filter_combo.currentText()
         if matches_log_filter(log_type, current_filter):
             self.log_edit.append(formatted_html)
             self.scroll_to_bottom()
+            
+    def reset_time(self):
+        self.startTime = time.time()
 
     def filter_logs(self, filter_text):
         self.log_edit.clear()

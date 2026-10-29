@@ -1,3 +1,5 @@
+import os
+
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 import src.down.down as down
 import src.trans.trans_view as trans_view
@@ -10,6 +12,8 @@ from src.system.v import V
 
 def init_system_config():
     data = load_data()
+    setting_ui.export_env_settings(data)
+
     trans_view.trans_ai.CUSTOM_AI_PROMPT = data.get("AI_PROMPT", "")
     down.downin.base_data.EXPORT_TEXT = data.get("RAW_TEXT", False)
     down.downin.base_data.ORIGIN_NAME = data.get("origin_name", False)
@@ -21,6 +25,7 @@ def init_system_config():
 
     if data.get("src"):
         down.downin.base_data.OUTFOLDER = data["src"]
+        os.environ["minedown_setting_src"] = data["src"]
         trans_view.OUT = data["src"]
 
 def check_app_version(parent_window):
@@ -36,71 +41,34 @@ def handle_settings_dialog(parent_window):
     data = load_data()
     if data.get("theme"):
         data_iteam.THEME_NAME = data["theme"]
-    dialog = setting_ui.PathSettingsDialog(parent_window)
+    if not data.get("src") and down.downin.base_data.OUTFOLDER:
+        data["src"] = down.downin.base_data.OUTFOLDER
 
-    if data.get("src"):
-        dialog.path_edit.setText(data["src"])
-    elif down.downin.base_data.OUTFOLDER:
-        dialog.path_edit.setText(down.downin.base_data.OUTFOLDER)
-
-    dialog.raw_text_toggle.setChecked(data.get("RAW_TEXT", False))
-    dialog.origin_name_toggle.setChecked(data.get("origin_name", False))
-    dialog.ai_prompt_edit.setPlainText(data.get("AI_PROMPT", ""))
-    censor_adv = data.get("CENSOR_ADVANCED", False)
-    dialog.censor_toggle.setChecked(censor_adv)
-    dialog.censor_sub_widget.setVisible(censor_adv)
-    dialog.shuffle_toggle.setChecked(data.get("CENSOR_SHUFFLE", True))
-    saved_mode = data.get("CENSOR_MODE", "word")
-    idx = dialog.mode_combo.findData(saved_mode)
-
-    if idx >= 0:
-        dialog.mode_combo.setCurrentIndex(idx)
-    dialog.papago_toggle.setChecked(data.get("CENSOR_PAPAGO", False))
-
-    if "epub_data" in data:
-        dialog.set_epub_data(data["epub_data"])
+    dialog = setting_ui.PathSettingsDialog(data, parent_window)
 
     if dialog.exec():
-        selected_path = dialog.path_edit.text().strip()
-        selected_theme = data_iteam.THEME_DATA.get(dialog.theme_combo.currentText(), "DARK")
+        new_settings = dialog.get_data()
+        data.update(new_settings)
+        setting_ui.export_env_settings(new_settings)
 
-        raw_text = dialog.get_raw_text()
-        origin_name = dialog.get_origin_name()
-        ai_prompt = dialog.get_ai_prompt()
-        censor_advanced = dialog.get_censor_advanced()
-        censor_shuffle = dialog.get_censor_shuffle()
-        censor_mode = dialog.get_censor_mode()
-        censor_papago = dialog.get_censor_papago()
-        epub_data = dialog.get_epub_data()
-
+        selected_path = new_settings.get("src", "").strip()
         if selected_path:
             down.downin.base_data.OUTFOLDER = selected_path
+            os.environ["minedown_setting_src"] = selected_path
             trans_view.OUT = selected_path
-            data["src"] = selected_path
 
-        down.downin.base_data.EXPORT_TEXT = raw_text
-        down.downin.base_data.ORIGIN_NAME = origin_name
-
-        data["theme"] = selected_theme
-        data["RAW_TEXT"] = raw_text
-        data["origin_name"] = origin_name
-        data["AI_PROMPT"] = ai_prompt
-        data["CENSOR_ADVANCED"] = censor_advanced
-        data["CENSOR_SHUFFLE"] = censor_shuffle
-        data["CENSOR_MODE"] = censor_mode
-        data["CENSOR_PAPAGO"] = censor_papago
-        if not epub_data is None:
-            data["epub_data"] = epub_data
+        down.downin.base_data.EXPORT_TEXT = new_settings.get("RAW_TEXT", False)
+        down.downin.base_data.ORIGIN_NAME = new_settings.get("origin_name", False)
 
         save_data(data)
 
-        trans_view.trans_ai.CUSTOM_AI_PROMPT = ai_prompt
-        trans_view.trans_ai.USE_ADVANCED_CENSOR = censor_advanced
-        trans_view.trans_ai.CENSOR_SHUFFLE = censor_shuffle
-        trans_view.trans_ai.CENSOR_EXTRACT_MODE = censor_mode
-        trans_view.trans_ai.CENSOR_PAPAGO = censor_papago
+        trans_view.trans_ai.CUSTOM_AI_PROMPT = new_settings.get("AI_PROMPT", "")
+        trans_view.trans_ai.USE_ADVANCED_CENSOR = new_settings.get("CENSOR_ADVANCED", False)
+        trans_view.trans_ai.CENSOR_SHUFFLE = new_settings.get("CENSOR_SHUFFLE", True)
+        trans_view.trans_ai.CENSOR_EXTRACT_MODE = new_settings.get("CENSOR_MODE", "word")
+        trans_view.trans_ai.CENSOR_PAPAGO = new_settings.get("CENSOR_PAPAGO", False)
 
-        if data["theme"] != data_iteam.THEME_NAME:
+        if data.get("theme") and data["theme"] != data_iteam.THEME_NAME:
             data_iteam.THEME_NAME = data["theme"]
             data_iteam.rest()
 

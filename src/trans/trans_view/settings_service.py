@@ -1,6 +1,7 @@
 from PySide6.QtWidgets import QMessageBox, QDialog
 from src.system.load_save import load_data, save_data
 import src.trans.preset as preset
+import src.trans.trans_ai as trans_ai
 from .model_utils import create_model_config, models_from_data
 from .ui_factory import set_combo_value
 
@@ -8,7 +9,16 @@ from .ui_factory import set_combo_value
 def load_app_settings(settings_panel, model_panel, status_callback, log_callback):
     data = load_data()
     api = str(data.get('api', '')).strip()
-    settings_panel.api_edit.setText(api)
+    api_keys = data.get('api_keys', [])
+    if not isinstance(api_keys, list):
+        api_keys = [api] if api else []
+    api_index = data.get('api_index', 0)
+
+    trans_ai.set_api_keys(api_keys, api_index)
+
+    current_api = trans_ai.API or api
+    settings_panel.api_edit.setText(current_api)
+    settings_panel.update_api_status_display(len(trans_ai.API_KEYS), trans_ai.API_INDEX)
 
     defaults = {
         'rpm': data.get('translate_rpm', 15),
@@ -33,13 +43,13 @@ def load_app_settings(settings_panel, model_panel, status_callback, log_callback
         model_panel.active_model_index = -1
         model_panel.select_model(0, save_current=False)
 
-    if not api:
+    if not current_api:
         settings_panel.setCurrentIndex(3)
         status_callback('Gemini API 키를 설정하세요.')
     else:
         settings_panel.setCurrentIndex(0)
         try:
-            model_panel.load_gemini_models(api)
+            model_panel.load_gemini_models(current_api)
         except Exception as e:
             log_callback(f'자동 모델 조회 실패: {e}')
 
@@ -56,8 +66,16 @@ def save_app_settings(settings_panel, model_panel, log_callback):
     try:
         data = load_data()
         first = configs[0]
+        
+        api_keys = data.get('api_keys', [])
+        if not isinstance(api_keys, list) or not api_keys:
+            api_keys = [api]
+        api_index = data.get('api_index', 0)
+
         data.update({
             'api': api,
+            'api_keys': api_keys,
+            'api_index': api_index,
             'translate_model': first['model'],
             'translate_models': configs,
             'translate_rpm': first['rpm'],
@@ -128,6 +146,6 @@ def load_app_preset(settings_panel, model_panel, parent_dialog, log_callback):
     settings_panel.update_glossary_button()
     settings_panel.preset_name_edit.setText(name)
     settings_panel.preset_status.setText(f'현재 프리셋: {name}')
-    model_panel.select_model(0, notify=True)
+    model_panel.select_model(0, save_current=False)
     log_callback(f'프리셋 불러오기 완료: {name}')
     return True

@@ -2,6 +2,8 @@ import sys
 from . import config
 from .config import (
     API,
+    API_KEYS,
+    API_INDEX,
     MODEL_NAME,
     CUSTOM_AI_PROMPT,
     USE_ADVANCED_CENSOR,
@@ -10,6 +12,15 @@ from .config import (
     CENSOR_PAPAGO,
     IMG_TAG_PATTERN,
     set_api_key,
+    set_api_keys,
+    set_api_index,
+    switch_to_next_api_key,
+    switch_api_key_safe,
+    set_cooldown,
+    get_cooldown_remaining,
+    wait_cooldown,
+    get_client,
+    refresh_client,
     rest,
     client,
 )
@@ -19,12 +30,25 @@ from .json_translator import TransAi_From_Json
 
 _CONFIG_VARS = {
     'API',
+    'API_KEYS',
+    'API_INDEX',
     'MODEL_NAME',
     'CUSTOM_AI_PROMPT',
     'USE_ADVANCED_CENSOR',
     'CENSOR_SHUFFLE',
     'CENSOR_EXTRACT_MODE',
     'CENSOR_PAPAGO',
+    'set_api_key',
+    'set_api_keys',
+    'set_api_index',
+    'switch_to_next_api_key',
+    'switch_api_key_safe',
+    'set_cooldown',
+    'get_cooldown_remaining',
+    'wait_cooldown',
+    'get_client',
+    'refresh_client',
+    'rest',
     'client',
 }
 

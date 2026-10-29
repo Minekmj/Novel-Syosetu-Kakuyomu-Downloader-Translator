@@ -16,6 +16,12 @@ class Data_set:
     
     def get_data(self, data_name: str, data_type):
         self.data_dict[self.src][data_name] = self.data.get(data_name, data_type)
+        try:
+            type_s = type(data_type)
+            if type_s == str or type_s == int or type_s == float:
+                os.environ[f"minedown_setting_{data_name}"] = str(self.data_dict[self.src][data_name])
+        except:
+            pass
         
     def get_data_api(self, data_name: str, key_path: str):
         raw_val = self.data.get(data_name, "")
@@ -23,6 +29,11 @@ class Data_set:
         if not raw_val:
             self.data_dict[self.src][data_name] = ""
             return
+
+        if isinstance(raw_val, list):
+            raw_str = json.dumps(raw_val, ensure_ascii=False)
+        else:
+            raw_str = str(raw_val)
 
         if not os.path.exists(key_path):
             key_dir = os.path.dirname(key_path)
@@ -36,7 +47,7 @@ class Data_set:
                 key = f.read().strip()
 
         fernet = Fernet(key)
-        encrypted_val = fernet.encrypt(str(raw_val).encode("utf-8")).decode("utf-8")
+        encrypted_val = fernet.encrypt(raw_str.encode("utf-8")).decode("utf-8")
         
         self.data_dict[self.src][data_name] = encrypted_val
 
@@ -47,6 +58,7 @@ def data_clean(data: dict):
     d.set_src(DATA_FILE_SYSTEM)
     d.get_data("src", "./out/")
     d.get_data("theme", "LAVENDER")
+    d.get_data("change_no_mark", False)
     d.get_data("RAW_TEXT", False)
     d.get_data("AI_PROMPT", "")
     d.get_data("origin_name", False)
@@ -84,8 +96,15 @@ def data_clean(data: dict):
     d.set_src(DATA_FILE_DICT)
     d.get_data("dictionary", {})
     
+    api_val = data.get("api", "")
+    api_keys_val = data.get("api_keys", [])
+    if not api_keys_val and api_val:
+        data["api_keys"] = [api_val]
+
     d.set_src(DATA_FILE_API)
     d.get_data_api("api", KEY_FILE_PATH)
+    d.get_data_api("api_keys", KEY_FILE_PATH)
+    d.get_data("api_index", 0)
     
     return d.data_dict
 
@@ -118,7 +137,14 @@ class Read_data:
         for k, v in api_data.items():
             if isinstance(v, str) and v.startswith("gAAAAA"):
                 try:
-                    decrypted_dict[k] = fernet.decrypt(v.encode("utf-8")).decode("utf-8")
+                    dec = fernet.decrypt(v.encode("utf-8")).decode("utf-8")
+                    if k == "api_keys" or (dec.startswith("[") and dec.endswith("]")):
+                        try:
+                            decrypted_dict[k] = json.loads(dec)
+                        except Exception:
+                            decrypted_dict[k] = dec
+                    else:
+                        decrypted_dict[k] = dec
                 except Exception:
                     decrypted_dict[k] = v
             else:

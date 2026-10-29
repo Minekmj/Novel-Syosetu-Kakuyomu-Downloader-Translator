@@ -33,7 +33,7 @@ class FilePanel(QWidget):
         layout.addLayout(file_row)
 
     def browse_file(self):
-        path, _ = QFileDialog.getOpenFileName(self, '번역할 파일 선택', './out/', '지원 파일 (*.txt *.json)')
+        path, _ = QFileDialog.getOpenFileName(self, '번역할 파일 선택', os.environ.get("minedown_setting_src", "./out/"), '지원 파일 (*.txt *.json)')
         if path:
             self.set_file(path)
 

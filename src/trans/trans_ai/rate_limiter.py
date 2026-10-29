@@ -1,20 +1,44 @@
 import asyncio
 import time
+from . import config
 
 
 class AsyncRateLimiter:
     def __init__(self, rpm):
         self.rpm = max(1, int(rpm))
-        self.interval = 60.0 / self.rpm + 0.1
-        self.lock = asyncio.Lock()
-        self.last_call = 0.0
+        self.interval = 60.0 / self.rpm
+        self._lock = None
+        self._loop = None
+        self.next_call = 0.0
+
+    def _get_lock(self):
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if self._lock is None or self._loop is not loop:
+            self._lock = asyncio.Lock()
+            self._loop = loop
+            self.next_call = 0.0
+        return self._lock
 
     async def wait(self):
-        async with self.lock:
-            now = time.time()
-            elapsed = now - self.last_call
+        while True:
+            await config.wait_cooldown()
 
-            if elapsed < self.interval:
-                await asyncio.sleep(self.interval - elapsed)
+            lock = self._get_lock()
+            async with lock:
+                now = time.time()
+                scheduled_time = max(now, self.next_call)
+                self.next_call = scheduled_time + self.interval
 
-            self.last_call = time.time()
+            sleep_duration = scheduled_time - now
+            if sleep_duration > 0:
+                await asyncio.sleep(sleep_duration)
+
+            if config.get_cooldown_remaining() <= 0:
+                break
+
+    def reset(self):
+        self.next_call = 0.0

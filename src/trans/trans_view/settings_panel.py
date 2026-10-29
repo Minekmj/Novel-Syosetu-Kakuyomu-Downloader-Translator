@@ -9,6 +9,7 @@ import src.trans.preset as preset
 from .ui_factory import (
     create_layout, create_label, create_button, create_combo, set_combo_value
 )
+from .api_dialog import ApiManagerDialog
 
 
 class SettingsPanel(QTabWidget):
@@ -45,7 +46,7 @@ class SettingsPanel(QTabWidget):
         options = [
             ('RPM', 'rpm_combo', ['1', '2', '3', '5', '7', '10', '15', '20', '30', '60'], '15'),
             ('Temperature', 'temp_combo', ['0.0', '0.1', '0.2', '0.3', '0.5', '0.7', '1.0'], '0.1'),
-            ('동시 작업', 'concurrency_combo', [str(i) for i in range(1, 16)], '4'),
+            ('동시 작업', 'concurrency_combo', [str(i) for i in range(1, 31)], '4'),
             ('청크 글자수', 'chars_combo', ['500', '1000', '2000', '3000', '4000', '5000', '7000', '10000', '15000', '20000', '30000'], '5000'),
             ('분할 시작', 'br_start_combo', ['0', '1', '2', '3', '4'], '0'),
             ('검열하기', 'censor_combo', ['사용', '사용 안함'], '사용')
@@ -108,9 +109,16 @@ class SettingsPanel(QTabWidget):
         self.api_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self.api_edit.setMinimumHeight(35)
         row.addWidget(self.api_edit, 1)
+
         self.api_show_btn = create_button('보기', self.toggle_api_visibility, w=58, checkable=True)
         row.addWidget(self.api_show_btn)
+
+        self.api_more_btn = create_button('더보기', self.open_api_manager_dialog, w=68)
+        row.addWidget(self.api_more_btn)
         tl.addLayout(row)
+
+        self.api_status_lbl = create_label('', 'secondaryInfo')
+        tl.addWidget(self.api_status_lbl)
         tl.addStretch(1)
 
         tab, tl = self._tab('검사', 'no_back-tabInspect')
@@ -199,13 +207,33 @@ class SettingsPanel(QTabWidget):
             self.api_edit.setEchoMode(QLineEdit.EchoMode.Password)
             self.api_show_btn.setText('보기')
 
+    def open_api_manager_dialog(self):
+        dialog = ApiManagerDialog(self)
+        if dialog.exec() == ApiManagerDialog.DialogCode.Accepted:
+            active_key, keys, idx = dialog.get_current_api_data()
+            self.api_edit.setText(active_key)
+            self.update_api_status_display(len(keys), idx)
+
+    def update_api_status_display(self, total_count=None, active_idx=None):
+        if total_count is None or active_idx is None:
+            import src.trans.trans_ai as trans_ai
+            total_count = len(trans_ai.API_KEYS)
+            active_idx = trans_ai.API_INDEX
+
+        if total_count > 1:
+            self.api_status_lbl.setText(f"등록된 API: 총 {total_count}개 / 현재 활성: [{active_idx}]")
+        elif total_count == 1:
+            self.api_status_lbl.setText("등록된 API: 1개 [0] 메인")
+        else:
+            self.api_status_lbl.setText("")
+
     def on_inspect_mode_changed(self, mode_text):
         is_ratio = mode_text == '비율 모드'
         self.inspect_ratio_widget.setVisible(is_ratio)
         self.inspect_count_widget.setVisible(not is_ratio)
 
     def run_japanese_inspection(self):
-        trs_dir = os.path.abspath(os.path.join('./out/', 'trs'))
+        trs_dir = os.path.abspath(os.path.join(os.environ.get("minedown_setting_src", "./out/"), 'trs'))
         if not os.path.exists(trs_dir):
             os.makedirs(trs_dir, exist_ok=True)
 

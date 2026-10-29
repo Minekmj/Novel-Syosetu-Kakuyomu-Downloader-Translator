@@ -30,6 +30,27 @@ from .chunk_utils import _is_stopped, adjust_split_mid
 from .validator import validate_translation_ratios, reset_or_retry_censor
 
 
+def _extract_retry_delay(err) -> float:
+    err_str = str(err)
+    m = re.search(r"retryDelay':\s*'(\d+)s'", err_str)
+    if m:
+        return float(m.group(1)) + 2.0
+    m2 = re.search(r"retry in (\d+(\.\d+)?)s", err_str)
+    if m2:
+        return float(m2.group(1)) + 2.0
+    return 45.0
+
+
+def _is_rate_limit_error(err):
+    msg = str(err).lower()
+    return any(k in msg for k in ("429", "resource_exhausted", "quota", "rate limit", "rate_limit", "exhausted"))
+
+
+def _is_connector_closed_error(err):
+    msg = str(err).lower()
+    return "connector is closed" in msg or "clientconnectorerror" in msg
+
+
 def _build_chunk_system_prompt(current_chunk, masked_chunk, raw, expected_img_count, is_censored, dicts, log_callback, prefix_log, check_i):
     if raw:
         system_prompt = SYSTEM_PROMPT_RAW
@@ -145,6 +166,9 @@ async def translate_chunk_safe_async(
         if log_callback and not (check_i and check_i()):
             log_callback(f'{prefix_log} 번역 시작: (라인 수: {len(lines)})')
 
+        cur_used_key = config.API
+        cur_client = config.get_client(cur_used_key)
+
         try:
             system_prompt = _build_chunk_system_prompt(
                 current_chunk, masked_chunk, raw, expected_img_count,
@@ -162,7 +186,7 @@ async def translate_chunk_safe_async(
                 config_params["thinking_config"] = thinking_cfg
 
             try:
-                response = await config.client.aio.models.generate_content(
+                response = await cur_client.aio.models.generate_content(
                     model=model_name,
                     contents=f'번역:\n{current_chunk}',
                     config=types.GenerateContentConfig(**config_params)
@@ -171,17 +195,31 @@ async def translate_chunk_safe_async(
                 raise ForceStopException()
             except Exception as api_err:
                 _is_stopped(check, check_i)
-                err_str = str(api_err).lower()
-                if thinking_cfg is not None and any(kw in err_str for kw in ("thinking", "unsupported", "invalid argument")):
+                if _is_connector_closed_error(api_err):
+                    if log_callback and not (check_i and check_i()):
+                        log_callback(f'{prefix_log} 알림: 세션 재연결 중...')
+                    config.refresh_client(cur_used_key)
+                    continue
+                elif thinking_cfg is not None and any(kw in str(api_err).lower() for kw in ("thinking", "unsupported", "invalid argument")):
                     if log_callback and not (check_i and check_i()):
                         log_callback(f'{prefix_log} 알림: 모델이 해당 추론 설정을 미지원하여 제외 후 일반 모드로 재시도합니다.')
                     cur_thinking_budget = None
                     config_params.pop("thinking_config", None)
-                    response = await config.client.aio.models.generate_content(
-                        model=model_name,
-                        contents=f'번역:\n{current_chunk}',
-                        config=types.GenerateContentConfig(**config_params)
-                    )
+                    continue
+                elif _is_rate_limit_error(api_err):
+                    delay = _extract_retry_delay(api_err)
+                    can_retry, new_idx, is_leader, wrapped = await config.switch_api_key_safe(cur_used_key, delay, log_callback)
+                    if can_retry:
+                        if log_callback and not (check_i and check_i()):
+                            if is_leader and not wrapped:
+                                log_callback(f'{prefix_log} 경고: Rate Limit 감지 -> 전체 API 키를 [{new_idx}]번으로 전환했습니다.')
+                        continue
+                    else:
+                        if log_callback and not (check_i and check_i()):
+                            log_callback(f'{prefix_log} 경고: Rate Limit 발생 (대기 시간: {int(delay)}초) -> {int(delay)}초 대기 후 재시도')
+                        await asyncio.sleep(delay)
+                        attempt += 1
+                        continue
                 else:
                     raise api_err
 
@@ -310,6 +348,12 @@ async def translate_chunk_safe_async(
                 if log_callback and not (check_i and check_i()):
                     log_callback(f'{prefix_log} 중지: 현재 API 요청 종료 후 중지')
                 return None, 0, True
+
+            if _is_connector_closed_error(e):
+                config.refresh_client(cur_used_key)
+                if log_callback and not (check_i and check_i()):
+                    log_callback(f'{prefix_log} 세션 재연결 완료 -> 재시도')
+                continue
 
             if log_callback and not (check_i and check_i()):
                 log_callback(f'{prefix_log} 오류: API 호출 중 예외 발생: {e} -> 재시도 (3배 대기)')

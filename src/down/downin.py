@@ -12,7 +12,8 @@ def extract_number(filename):
 
 def process_text_line(line):
     cleaned = line.strip()
-    cleaned = cleaned.replace('「', '“').replace('」', '”')
+    if os.environ.get("minedown_setting_change_no_mark", "False") == "False":
+        cleaned = cleaned.replace('「', '“').replace('」', '”')
     return cleaned
 
 def create_merged_txt(folder_path, output_txt_path, book_title, extract_number_fn=extract_number):

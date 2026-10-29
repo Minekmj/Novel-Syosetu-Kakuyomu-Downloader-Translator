@@ -972,3 +972,7 @@ QProgressBar::chunk {
     border-radius: 3px;
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #3b82f6, stop:1 #60a5fa);
 }
+
+QWidget#noback{
+    background: transparent;
+}

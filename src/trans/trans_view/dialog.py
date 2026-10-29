@@ -31,7 +31,7 @@ class TranslateDialog(QDialog):
 
         self.setWindowTitle('AI 번역')
         self.resize(920, 750)
-        self.setMinimumSize(920, 730)
+        self.setMinimumSize(720, 670)
         self.setAcceptDrops(True)
 
         self.init_ui()
@@ -279,6 +279,8 @@ class TranslateDialog(QDialog):
         self.start_btn.setText('번역 중지')
         self.progress_bar.setValue(0)
         self.percent_label.setText('0%')
+        
+        self.log_panel.reset_time()
 
         self.log_panel.add_log('')
         self.log_panel.add_log('=' * 55)
