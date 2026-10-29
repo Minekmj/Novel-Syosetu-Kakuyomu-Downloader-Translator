@@ -1,3 +1,5 @@
+import json
+
 import requests
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QThread, Signal, Qt, QSize, QTimer
 from PySide6.QtWidgets import (
@@ -7,13 +9,15 @@ from PySide6.QtWidgets import (
     QScrollArea, QFormLayout, QSplitter,  QFrame
 )
 from src.trans.trans import Translator
-from src.system.data import TAG_CATEGORIES
 import src.system.data as data_iteam
 from src.system.data import load_data
 
 import src.find.tag as tag_ui
 import src.find.detail as detail_ui
 import src.find.site_list as sl
+from src.system.src import get_resource_path
+
+TAG_CATEGORIES = json.load(open(get_resource_path("find/tag.json"), encoding="UTF-8"))
 
 istaiain = []
 

@@ -1,14 +1,19 @@
 from datetime import datetime, timedelta
-
 import requests
+from ..base import BaseSearchSite
+
 http_session = requests.Session()
 
-class MidnightSearch:
+
+class SyosetuApiSearchBase(BaseSearchSite):
+    API_URL = "https://api.syosetu.com/novelapi/api/"
+    BASE_NOVEL_URL = "https://ncode.syosetu.com/"
+    NOCGENRE = None
+
     HEADERS = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 "
-            "(KHTML, like Gecko) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
             "Chrome/120.0.0.0 Safari/537.36"
         )
     }
@@ -60,9 +65,8 @@ class MidnightSearch:
         "저자 이름": "wname",
     }
 
-    @staticmethod
-    def fetch_search_results(params):
-        api_url = "https://api.syosetu.com/novel18api/api/"
+    @classmethod
+    def fetch_search_results(cls, params):
         page = max(1, int(params.get("page", 1)))
 
         payload = {
@@ -71,10 +75,11 @@ class MidnightSearch:
             "st": (page - 1) * 20 + 1,
             "word": params.get("query", ""),
             "order": params.get("order", "hyoka"),
-            "nocgenre": 4,  # 4: 미드나이트 노벨즈 고정
         }
 
-        # 제외 단어
+        if cls.NOCGENRE is not None:
+            payload["nocgenre"] = cls.NOCGENRE
+
         exclude_words = params.get("exclude_words", [])
         if exclude_words:
             payload["notword"] = " ".join(
@@ -98,7 +103,7 @@ class MidnightSearch:
             payload["type"] = serial_status
 
         period_key = params.get("last_published")
-        days = MidnightSearch.LAST_PUBLISHED_PERIODS.get(
+        days = cls.LAST_PUBLISHED_PERIODS.get(
             period_key, period_key if isinstance(period_key, int) else None
         )
         if days:
@@ -112,7 +117,7 @@ class MidnightSearch:
             for i in inclusion_flags:
                 payload["is" + i] = 1
 
-        exlusion_flags = params.get("exlusion_flags", [])
+        exlusion_flags = params.get("exlusion_flags", []) or params.get("exclusion_flags", [])
         if exlusion_flags:
             for i in exlusion_flags:
                 payload["not" + i if i != "stop" else "stop"] = 1
@@ -124,9 +129,9 @@ class MidnightSearch:
 
         try:
             res = http_session.get(
-                api_url,
+                cls.API_URL,
                 params=payload,
-                headers=MidnightSearch.HEADERS,
+                headers=cls.HEADERS,
                 timeout=10,
             )
             res.raise_for_status()
@@ -148,36 +153,26 @@ class MidnightSearch:
                 ]
 
                 end_value = item.get("end", 1)
-                if end_value == 1:
-                    status = "연재중"
-                else:
-                    status = "완결"
+                status = "연재중" if end_value == 1 else "완결"
 
-                items.append(
-                    {
-                        "title": item.get("title", ""),
-                        "url": f"https://novel18.syosetu.com/{ncode}/",
-                        "stars": item.get("global_point", 0),
-                        "status_episodes": (
-                            f"총 {item.get('general_all_no', 0)}화 "
-                            f"({status})"
-                        ),
-                        "updated_at": item.get("general_lastup", "")[:10],
-                        "ncode": ncode,
-                        "story": item.get("story", "")
-                        + "_____1234_____"
-                        + ", ".join(keywords_list),
-                        "keywords": keywords_list,
-                    }
-                )
+                items.append({
+                    "title": item.get("title", ""),
+                    "url": f"{cls.BASE_NOVEL_URL}{ncode}/",
+                    "stars": item.get("global_point", 0),
+                    "status_episodes": f"총 {item.get('general_all_no', 0)}화 ({status})",
+                    "updated_at": item.get("general_lastup", "")[:10],
+                    "ncode": ncode,
+                    "story": item.get("story", "") + "_____1234_____" + ", ".join(keywords_list),
+                    "keywords": keywords_list,
+                })
 
             is_last_page = page * 20 >= all_count
             return {"is_last_page": is_last_page, "items": items}
 
         except Exception as e:
-            print(f"미드나이트 API 요청 에러: {e}")
+            print(f"[{cls.display_name or cls.__name__} API 요청 에러] {e}")
             return {"is_last_page": True, "items": []}
 
-    @staticmethod
-    def fetch_detail_description(work_url):
+    @classmethod
+    def fetch_detail_description(cls, work_url):
         return work_url

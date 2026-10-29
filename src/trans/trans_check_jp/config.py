@@ -1,0 +1,1 @@
+trans_ai = None  # 외부 삽입용

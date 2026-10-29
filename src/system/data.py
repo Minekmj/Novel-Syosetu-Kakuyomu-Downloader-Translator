@@ -2,7 +2,6 @@ import json
 import os
 
 from src.system.load_save import load_data, save_data
-from src.find.get import *
 
 import re
 

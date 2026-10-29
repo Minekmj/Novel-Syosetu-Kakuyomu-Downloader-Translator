@@ -1,13 +1,19 @@
 import json
 import re
-
+import urllib.parse
 from bs4 import BeautifulSoup
-import urllib
-
 import requests
+
+from ..base import BaseSearchSite, register_search
+
 http_session = requests.Session()
 
-class KakuyomuSearch:
+
+@register_search
+class KakuyomuSearch(BaseSearchSite):
+    site_id = "kakuyomu"
+    display_name = "카쿠요무"
+
     BASE_URL = "https://kakuyomu.jp/search"
 
     HEADERS = {
@@ -58,12 +64,12 @@ class KakuyomuSearch:
         "연재 중": "running",
         "완결": "completed",
     }
-    
+
     FLAG_INCLUSION_AND_EXLUSION = {
         "잔혹 묘사": "cruel",
         "폭력 묘사": "violent",
         "성 묘사": "sexual",
-        "서적 미디어화": "has_publication"
+        "서적 미디어화": "has_publication",
     }
 
     @staticmethod
@@ -181,50 +187,69 @@ class KakuyomuSearch:
                 updated_at = updated_at.replace("年", "년 ").replace("月", "월 ").replace("日", "일")
 
             processed_work_ids.add(work_id)
-            results.append(
-                {
-                    "work_id": work_id,
-                    "title": title_text,
-                    "url": f"https://kakuyomu.jp/works/{work_id}",
-                    "stars": stars,
-                    "status_episodes": status_episodes,
-                    "updated_at": updated_at
-                }
-            )
+            results.append({
+                "work_id": work_id,
+                "title": title_text,
+                "url": f"https://kakuyomu.jp/works/{work_id}",
+                "stars": stars,
+                "status_episodes": status_episodes,
+                "updated_at": updated_at,
+            })
 
         return {"is_last_page": len(results) == 0, "items": results}
 
     @classmethod
+    def fetch_search_results(cls, params):
+        url = cls.build_search_url(
+            query=params.get("query", ""),
+            genre_name=params.get("genre_val", ""),
+            exclude_words=params.get("exclude_words", []),
+            min_chars=params.get("min_chars"),
+            last_published=params.get("last_published"),
+            min_start=params.get("min_pt"),
+            serial_status=params.get("serial_status"),
+            order=params.get("order", "popular"),
+            inclusion_flag=params.get("inclusion_flags"),
+            exclusion_flag=params.get("exclusion_flags"),
+            page=params.get("page", 1),
+        )
+
+        try:
+            res = http_session.get(url, headers=cls.HEADERS, timeout=10)
+            res.raise_for_status()
+            return cls.parse_search_results(res.text)
+        except Exception as e:
+            print(f"[카쿠요무 검색 에러] {e}")
+            return {"is_last_page": True, "items": []}
+
+    @classmethod
     def fetch_detail_description(cls, work_url: str) -> str:
         try:
-           
             res = http_session.get(work_url, headers=cls.HEADERS, timeout=10)
             if res.status_code == 200:
                 soup = BeautifulSoup(res.text, "html.parser")
-
-               
                 next_data = soup.find("script", id="__NEXT_DATA__")
                 if next_data and next_data.string:
                     data = json.loads(next_data.string)
 
-                   
                     def find_key(obj, target_key):
                         if isinstance(obj, dict):
                             if target_key in obj:
                                 return obj[target_key]
                             for v in obj.values():
-                                res = find_key(v, target_key)
-                                if res:
-                                    return res
+                                r = find_key(v, target_key)
+                                if r:
+                                    return r
                         elif isinstance(obj, list):
                             for item in obj:
-                                res = find_key(item, target_key)
-                                if res:
-                                    return res
+                                r = find_key(item, target_key)
+                                if r:
+                                    return r
                         return None
 
                     intro_text = find_key(data, "introduction")
-                    lal = ', '.join(find_key(data, "tagLabels"))
+                    tags = find_key(data, "tagLabels") or []
+                    lal = ', '.join(tags) if isinstance(tags, (list, tuple)) else str(tags)
                     if intro_text:
                         return str(intro_text).strip() + "\n\n_____1234_____\n" + lal
 

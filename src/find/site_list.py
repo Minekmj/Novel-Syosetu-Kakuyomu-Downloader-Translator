@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QComboBox, QSizePolicy
 )
-from src.system.data import NaroSearch, KakuyomuSearch, MidnightSearch, NocturneSearch, SyosetuSearch, SyosetuSearch18
+from src.find.site import *
 from src.system.data import load_data, save_data
 
 def normalize_url(url):

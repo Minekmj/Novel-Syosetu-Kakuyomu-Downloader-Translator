@@ -11,8 +11,8 @@ from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
 from collections.abc import Callable
 
-import src.find.get as datas
-from src.find.get import KakuyomuSearch, NaroSearch, SyosetuSearch
+import src.find.site as datas
+from src.find.site import KakuyomuSearch, NaroSearch, SyosetuSearch
 from src.trans.trans_ai_utils import build_thinking_config
 
 from google import genai
