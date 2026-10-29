@@ -1,10 +1,10 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog, QFrame, QHBoxLayout, QLabel, QMessageBox,
-    QProgressBar, QPushButton, QScrollArea, QVBoxLayout, QWidget
+    QProgressBar, QPushButton, QScrollArea, QSizePolicy, QVBoxLayout, QWidget
 )
 from .text_cleaner import has_japanese
-from .widgets import AutoResizingTextEdit, SEMI_TRANS_BTN_STYLE, bind_height_sync
+from .widgets import AutoResizingTextEdit, SEMI_TRANS_BTN_STYLE
 from .workers import GlossaryExtractWorker, JapaneseTranslateWorker
 from .glossary_dialog import JapaneseGlossaryDialog
 from src.trans.trans_ai_utils import apply_japanese_corrections
@@ -24,6 +24,7 @@ class JapaneseCheckDialog(QDialog):
         ]
 
         self.editors = []
+        self.row_sync_list = []
         self.chunk_button_map = {}
         self.translate_worker = None
         self.extract_worker = None
@@ -32,6 +33,7 @@ class JapaneseCheckDialog(QDialog):
         self.glossary_dict = {}
         self.glossary_candidates = []
         self.is_extracting_glossary = True
+        self._last_resize_width = 0
 
         self.setWindowTitle(f"일본어 검사 - {self.title}")
         self.resize(880, 680)
@@ -91,6 +93,51 @@ class JapaneseCheckDialog(QDialog):
         valid_items.sort(key=lambda x: len(x[0]), reverse=True)
         return dict(valid_items)
 
+    def _sync_row_height(self, orig_edit, replace_edit, single_btn=None):
+        line_spacing = orig_edit.fontMetrics().lineSpacing()
+        min_h = max(50, line_spacing + 16)
+
+        def get_content_height(edit):
+            doc = edit.document()
+            vw = edit.viewport().width()
+            if vw > 30:
+                doc.setTextWidth(vw)
+            else:
+                approx_w = max(200, (self.width() - 160) // 2)
+                doc.setTextWidth(approx_w)
+            return int(doc.size().height())
+
+        h1 = get_content_height(orig_edit)
+        h2 = get_content_height(replace_edit)
+        content_h = max(h1, h2) + 12
+
+        max_limit = 200
+        target_h = max(min_h, min(content_h, max_limit))
+
+        orig_edit.setFixedHeight(target_h)
+        replace_edit.setFixedHeight(target_h)
+
+        if single_btn is not None:
+            single_btn.setFixedHeight(min(target_h, 40))
+
+        policy = Qt.ScrollBarPolicy.ScrollBarAsNeeded if content_h > max_limit else Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        orig_edit.setVerticalScrollBarPolicy(policy)
+        replace_edit.setVerticalScrollBarPolicy(policy)
+
+    def update_all_row_heights(self):
+        for orig_edit, replace_edit, single_btn in self.row_sync_list:
+            self._sync_row_height(orig_edit, replace_edit, single_btn)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.update_all_row_heights()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if abs(self.width() - self._last_resize_width) > 10:
+            self._last_resize_width = self.width()
+            self.update_all_row_heights()
+
     def init_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(18, 16, 18, 16)
@@ -142,7 +189,7 @@ class JapaneseCheckDialog(QDialog):
         container.setStyleSheet("QWidget#Fcon{background:transparent;}")
         container_layout = QVBoxLayout(container)
         container_layout.setContentsMargins(4, 4, 4, 4)
-        container_layout.setSpacing(8)
+        container_layout.setSpacing(6)
 
         last_chunk_key = None
         current_chunk_indices = []
@@ -162,7 +209,7 @@ class JapaneseCheckDialog(QDialog):
                 chunk_sep_box.setObjectName("chunkSepBox")
                 chunk_sep_box.setStyleSheet("QFrame{background:transparent;}")
                 sep_layout = QHBoxLayout(chunk_sep_box)
-                sep_layout.setContentsMargins(10, 5, 10, 5)
+                sep_layout.setContentsMargins(10, 8, 10, 4)
 
                 chunk_lbl = QLabel(f"[{self.title} - 청크 {chunk_display}]")
                 chunk_lbl.setStyleSheet("font-weight: bold; font-size: 13px; color: #4da6ff;")
@@ -182,12 +229,16 @@ class JapaneseCheckDialog(QDialog):
             row_widget = QWidget()
             row_widget.setObjectName("Fs")
             row_widget.setStyleSheet("QWidget#Fs{background:transparent;}")
+            row_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
             row_layout = QHBoxLayout(row_widget)
-            row_layout.setContentsMargins(4, 1, 4, 1)
+            row_layout.setContentsMargins(4, 2, 4, 2)
             row_layout.setSpacing(8)
 
             orig_edit = AutoResizingTextEdit(is_orig=True)
             orig_edit.setReadOnly(True)
+            orig_edit.setMinimumHeight(0)
+            orig_edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             orig_edit.setPlainText(item.get('original_text', '').rstrip('\n'))
             orig_edit.viewport().setStyleSheet('background: transparent;')
 
@@ -197,6 +248,8 @@ class JapaneseCheckDialog(QDialog):
             arrow_lbl.setStyleSheet("font-weight: bold; font-size: 13px; color: rgba(255, 255, 255, 0.4);")
 
             replace_edit = AutoResizingTextEdit(is_orig=False)
+            replace_edit.setMinimumHeight(0)
+            replace_edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             replace_edit.setPlainText(item.get('original_text', '').rstrip('\n'))
             replace_edit.viewport().setStyleSheet('background: transparent;')
 
@@ -205,12 +258,17 @@ class JapaneseCheckDialog(QDialog):
             single_btn.setFixedWidth(48)
             single_btn.clicked.connect(lambda chk=False, i=idx: self.translate_single(i))
 
-            bind_height_sync(orig_edit, replace_edit, single_btn)
+            replace_edit.textChanged.connect(
+                lambda oe=orig_edit, re=replace_edit, sb=single_btn: self._sync_row_height(oe, re, sb)
+            )
+
+            self._sync_row_height(orig_edit, replace_edit, single_btn)
+            self.row_sync_list.append((orig_edit, replace_edit, single_btn))
 
             row_layout.addWidget(orig_edit, 1)
             row_layout.addWidget(arrow_lbl, 0, Qt.AlignmentFlag.AlignVCenter)
             row_layout.addWidget(replace_edit, 1)
-            row_layout.addWidget(single_btn)
+            row_layout.addWidget(single_btn, 0, Qt.AlignmentFlag.AlignVCenter)
 
             container_layout.addWidget(row_widget)
             self.editors.append((item, replace_edit, single_btn))
@@ -291,6 +349,9 @@ class JapaneseCheckDialog(QDialog):
     def on_item_translated(self, idx: int, result_text: str):
         if 0 <= idx < len(self.editors):
             self.editors[idx][1].setPlainText(result_text)
+            if idx < len(self.row_sync_list):
+                oe, re, sb = self.row_sync_list[idx]
+                self._sync_row_height(oe, re, sb)
 
     def on_progress_changed(self, done: int, total: int):
         self.progress_bar.setValue(done)

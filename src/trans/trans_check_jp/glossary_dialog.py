@@ -1,9 +1,9 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog, QHBoxLayout, QLabel, QMessageBox,
-    QProgressBar, QPushButton, QScrollArea, QVBoxLayout, QWidget
+    QProgressBar, QPushButton, QScrollArea, QSizePolicy, QVBoxLayout, QWidget
 )
-from .widgets import AutoResizingTextEdit, SEMI_TRANS_BTN_STYLE, bind_height_sync
+from .widgets import AutoResizingTextEdit, SEMI_TRANS_BTN_STYLE
 from .workers import JapaneseTranslateWorker
 
 
@@ -12,13 +12,62 @@ class JapaneseGlossaryDialog(QDialog):
         super().__init__(parent_dialog)
         self.parent_dialog = parent_dialog
         self.editors = []
+        self.row_sync_list = []
         self.translate_worker = None
+        self._last_resize_width = 0
 
         self.setWindowTitle("단어집 및 일괄 치환")
         self.resize(880, 640)
         self.setMinimumSize(680, 480)
         self.init_ui()
         self.apply_custom_styles()
+
+    def _sync_row_height(self, orig_edit, replace_edit, buttons=None):
+        line_spacing = orig_edit.fontMetrics().lineSpacing()
+        min_h = max(38, line_spacing + 16)
+
+        def get_content_height(edit):
+            doc = edit.document()
+            vw = edit.viewport().width()
+            if vw > 30:
+                doc.setTextWidth(vw)
+            else:
+                approx_w = max(200, (self.width() - 200) // 2)
+                doc.setTextWidth(approx_w)
+            return int(doc.size().height())
+
+        h1 = get_content_height(orig_edit)
+        h2 = get_content_height(replace_edit)
+        content_h = max(h1, h2) + 12
+
+        max_limit = 200
+        target_h = max(min_h, min(content_h, max_limit))
+
+        orig_edit.setFixedHeight(target_h)
+        replace_edit.setFixedHeight(target_h)
+
+        if buttons:
+            btn_h = min(target_h, 40)
+            for btn in buttons:
+                btn.setFixedHeight(btn_h)
+
+        policy = Qt.ScrollBarPolicy.ScrollBarAsNeeded if content_h > max_limit else Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        orig_edit.setVerticalScrollBarPolicy(policy)
+        replace_edit.setVerticalScrollBarPolicy(policy)
+
+    def update_all_row_heights(self):
+        for orig_edit, replace_edit, btns in self.row_sync_list:
+            self._sync_row_height(orig_edit, replace_edit, btns)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.update_all_row_heights()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if abs(self.width() - self._last_resize_width) > 10:
+            self._last_resize_width = self.width()
+            self.update_all_row_heights()
 
     def init_ui(self):
         layout = QVBoxLayout(self)
@@ -66,7 +115,7 @@ class JapaneseGlossaryDialog(QDialog):
         container.setStyleSheet("QWidget#Fcon{background:transparent;}")
         container_layout = QVBoxLayout(container)
         container_layout.setContentsMargins(4, 4, 4, 4)
-        container_layout.setSpacing(8)
+        container_layout.setSpacing(6)
 
         for idx, word in enumerate(self.parent_dialog.glossary_candidates):
             current_val = self.parent_dialog.glossary_dict.get(word, word)
@@ -74,12 +123,16 @@ class JapaneseGlossaryDialog(QDialog):
             row_widget = QWidget()
             row_widget.setObjectName("Fs")
             row_widget.setStyleSheet("QWidget#Fs{background:transparent;}")
+            row_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
             row_layout = QHBoxLayout(row_widget)
-            row_layout.setContentsMargins(4, 1, 4, 1)
+            row_layout.setContentsMargins(4, 2, 4, 2)
             row_layout.setSpacing(8)
 
             orig_edit = AutoResizingTextEdit(is_orig=True)
             orig_edit.setReadOnly(True)
+            orig_edit.setMinimumHeight(0)
+            orig_edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             orig_edit.setPlainText(word)
             orig_edit.viewport().setStyleSheet('background: transparent;')
 
@@ -89,6 +142,8 @@ class JapaneseGlossaryDialog(QDialog):
             arrow_lbl.setStyleSheet("font-weight: bold; font-size: 13px; color: rgba(255, 255, 255, 0.4);")
 
             replace_edit = AutoResizingTextEdit(is_orig=False)
+            replace_edit.setMinimumHeight(0)
+            replace_edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             replace_edit.setPlainText(current_val)
             replace_edit.viewport().setStyleSheet('background: transparent;')
 
@@ -106,13 +161,19 @@ class JapaneseGlossaryDialog(QDialog):
             apply_btn.setFixedWidth(48)
             apply_btn.clicked.connect(lambda chk=False, i=idx: self.apply_single_word(i))
 
-            bind_height_sync(orig_edit, replace_edit, single_btn, apply_btn)
+            btns = [single_btn, apply_btn]
+            replace_edit.textChanged.connect(
+                lambda oe=orig_edit, re=replace_edit, b=btns: self._sync_row_height(oe, re, b)
+            )
+
+            self._sync_row_height(orig_edit, replace_edit, btns)
+            self.row_sync_list.append((orig_edit, replace_edit, btns))
 
             row_layout.addWidget(orig_edit, 1)
             row_layout.addWidget(arrow_lbl, 0, Qt.AlignmentFlag.AlignVCenter)
             row_layout.addWidget(replace_edit, 1)
-            row_layout.addWidget(single_btn)
-            row_layout.addWidget(apply_btn)
+            row_layout.addWidget(single_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+            row_layout.addWidget(apply_btn, 0, Qt.AlignmentFlag.AlignVCenter)
 
             container_layout.addWidget(row_widget)
             self.editors.append((word, replace_edit, single_btn, apply_btn))
@@ -184,6 +245,9 @@ class JapaneseGlossaryDialog(QDialog):
             orig_word = self.editors[idx][0]
             self.editors[idx][1].setPlainText(result_text)
             self.parent_dialog.update_glossary_entry(orig_word, result_text)
+            if idx < len(self.row_sync_list):
+                oe, re, btns = self.row_sync_list[idx]
+                self._sync_row_height(oe, re, btns)
 
     def on_progress_changed(self, done: int, total: int):
         self.progress_bar.setValue(done)
