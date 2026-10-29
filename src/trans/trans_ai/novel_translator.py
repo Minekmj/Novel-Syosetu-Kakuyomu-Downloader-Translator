@@ -46,6 +46,7 @@ async def _translate_light_novel_async(
             log_callback(f'에러: 모델 설정 오류: {e}')
         return 'error'
 
+    print(repair_chunk_boundaries(split_text_by_lines(text, max_chars=max_chars), raw=raw))
     chunks = repair_chunk_boundaries(split_text_by_lines(text, max_chars=max_chars), raw=raw)
     items = [
         TranslationItem(idx=i, source_text=chunk, orig_text=chunk, check_disk_cache=True, on_error='novel')

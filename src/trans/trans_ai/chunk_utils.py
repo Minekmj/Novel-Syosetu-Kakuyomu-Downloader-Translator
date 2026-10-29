@@ -69,6 +69,7 @@ def repair_chunk_boundaries(chunks, raw=False):
             i += 1
 
         return chunks
+    return chunks
 
 
 def adjust_split_mid(lines, mid, raw):
