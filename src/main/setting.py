@@ -266,7 +266,7 @@ class DownloadTab(BaseSettingsTab):
         down_layout.addWidget(self.origin_name_item.widget)
         
         self.no_change_text_item = self.register_item(
-            SettingCheckBox("change_no_mark", text="괄호 자동 변경 금지", default=False, parent=self)
+            SettingCheckBox("change_no_mark", text="따옴표 자동 변경 금지", default=False, parent=self)
         )
         down_layout.addWidget(self.no_change_text_item.widget)
 
