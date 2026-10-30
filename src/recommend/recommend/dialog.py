@@ -4,7 +4,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QSplitter, QMessageBox
 from src.main.thread_pyqt import RecommendWorker
 from .control_panel import RecommendControlPanel
-from .workspace_panel import RecommendWorkspacePanel
+from . import workspace_panel
 
 class NovelRecommendDialog(QDialog):
     def __init__(self, parent=None):
@@ -16,6 +16,9 @@ class NovelRecommendDialog(QDialog):
 
         self.recommend_worker = None
         self.init_ui()
+        
+    def set_value_detail_ui(ui):
+        workspace_panel.card.detail_ui = ui
 
     def init_ui(self):
         root = QVBoxLayout(self)
@@ -26,7 +29,7 @@ class NovelRecommendDialog(QDialog):
         self.splitter.setHandleWidth(8)
 
         self.control_panel = RecommendControlPanel(self)
-        self.workspace_panel = RecommendWorkspacePanel(self)
+        self.workspace_panel = workspace_panel.RecommendWorkspacePanel(self)
 
         self.control_panel.start_requested.connect(self.on_start_recommendation)
         self.control_panel.log_requested.connect(self.workspace_panel.append_info_card)

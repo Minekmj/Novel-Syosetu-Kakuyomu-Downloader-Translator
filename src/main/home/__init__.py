@@ -15,6 +15,6 @@ findsyou.detail_ui.DOWN = down.downin
 setting_ui.data_iteam = data_iteam
 trans_view.OUT = down.downin.base_data.OUTFOLDER
 
-recommend.detail_ui = findsyou.detail_ui
+recommend.NovelRecommendDialog.set_value_detail_ui(findsyou.detail_ui)
 
 from .main_window import MainWindow

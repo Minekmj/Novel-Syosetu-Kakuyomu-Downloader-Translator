@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QLabel, QPushButton, QFrame, QTabWidget
 )
 from .widgets import SmoothScrollArea
-from .card import RecommendedWorkCard
+from . import card as cd
 
 class RecommendWorkspacePanel(QWidget):
     def __init__(self, parent=None):
@@ -183,7 +183,7 @@ class RecommendWorkspacePanel(QWidget):
             self.cards_layout.insertWidget(self.cards_layout.count() - 1, note_card)
 
         for order, work in enumerate(works):
-            card = RecommendedWorkCard(work, order + 1, parent_dialog)
+            card = cd.RecommendedWorkCard(work, order + 1, parent_dialog)
             self.cards_layout.insertWidget(self.cards_layout.count() - 1, card)
 
         self.scroll_area.verticalScrollBar().setValue(0)

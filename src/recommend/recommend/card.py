@@ -161,6 +161,8 @@ class RecommendedWorkCard(QFrame):
         btn_box = QHBoxLayout()
         btn_box.setSpacing(6)
 
+        print(detail_ui)
+        
         if detail_ui:
             self.dialog_btn = QPushButton("상세보기")
             self.dialog_btn.setObjectName("subtleBtn")
