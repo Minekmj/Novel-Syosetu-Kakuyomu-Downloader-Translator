@@ -18,7 +18,7 @@ class NovelRecommendDialog(QDialog):
         self.init_ui()
         
     def set_value_detail_ui(ui):
-        workspace_panel.card.detail_ui = ui
+        workspace_panel.cd.detail_ui = ui
 
     def init_ui(self):
         root = QVBoxLayout(self)
