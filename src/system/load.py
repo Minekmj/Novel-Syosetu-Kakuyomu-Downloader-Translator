@@ -15,7 +15,7 @@ from src.system.config import *
 from src.system.load_save import load_data, save_data
 
 GITHUB_RELEASE_URL = "https://api.github.com/repos/Minekmj/Novel-Syosetu-Kakuyomu-Downloader-Translator/releases/latest"
-TARGET_EXE = "MineDownloder.exe"
+TARGET_EXE = "MineDownloader.exe"
 
 THEME_CONFIG = {
     "bg_color": "#263238",
