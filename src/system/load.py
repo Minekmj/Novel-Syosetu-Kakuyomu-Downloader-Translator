@@ -289,6 +289,8 @@ def download_update(root, sub_label, asset, callback):
             os.replace(temp_path, save_path)
             update_status(root, sub_label, "다운로드 완료! 프로그램을 종료합니다.")
 
+            root.after(1200, root.destroy)
+
         except Exception as e:
             print(f"[다운로드 오류]: {e}")
             if os.path.exists(temp_path):
