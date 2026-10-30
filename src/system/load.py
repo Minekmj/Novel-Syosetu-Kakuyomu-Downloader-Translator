@@ -287,18 +287,7 @@ def download_update(root, sub_label, asset, callback):
                     return
 
             os.replace(temp_path, save_path)
-            update_status(root, sub_label, "다운로드 완료! 프로그램을 재시작합니다.")
-
-            def restart():
-                try:
-                    flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
-                    subprocess.Popen([save_path], close_fds=True)
-                    cleanup_cmd = f'ping 127.0.0.1 -n 2 > nul & del /f /q "{old_path}"'
-                    subprocess.Popen(cleanup_cmd, shell=True, creationflags=flags)
-                finally:
-                    root.destroy()
-
-            root.after(1200, restart)
+            update_status(root, sub_label, "다운로드 완료! 프로그램을 종료합니다.")
 
         except Exception as e:
             print(f"[다운로드 오류]: {e}")
