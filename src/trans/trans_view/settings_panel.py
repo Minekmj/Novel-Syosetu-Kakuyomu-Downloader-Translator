@@ -46,7 +46,7 @@ class SettingsPanel(QTabWidget):
         options = [
             ('RPM', 'rpm_combo', ['1', '2', '3', '5', '7', '10', '15', '20', '30', '60'], '15'),
             ('Temperature', 'temp_combo', ['0.0', '0.1', '0.2', '0.3', '0.5', '0.7', '1.0'], '0.1'),
-            ('동시 작업', 'concurrency_combo', [str(i) for i in range(1, 31)], '4'),
+            ('동시 작업', 'concurrency_combo', [str(i) for i in range(1, 61)], '4'),
             ('청크 글자수', 'chars_combo', ['500', '1000', '2000', '3000', '4000', '5000', '7000', '10000', '15000', '20000', '30000'], '5000'),
             ('분할 시작', 'br_start_combo', ['0', '1', '2', '3', '4'], '0'),
             ('검열하기', 'censor_combo', ['사용', '사용 안함'], '사용')
