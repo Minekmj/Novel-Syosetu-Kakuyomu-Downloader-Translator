@@ -88,9 +88,7 @@ def draw_rounded_rect(canvas, x1, y1, x2, y2, radius=14, fill="", outline=""):
     image = image.resize((w, h), Image.Resampling.LANCZOS)
 
     photo = ImageTk.PhotoImage(image)
-    if not hasattr(canvas, "_rounded_images"):
-        canvas._rounded_images = []
-    canvas._rounded_images.append(photo)
+    canvas._rounded_images = [photo]
     return canvas.create_image(x1, y1, image=photo, anchor="nw")
 
 

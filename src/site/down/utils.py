@@ -64,8 +64,7 @@ def prepare_title_path(book_title: str, raw_title: str, base_data):
         book_title = raw_title
     r_book_title = clean_raw_title(book_title)
     r_book_title = re.sub(r'[\\/:*?"<>|]', "_", r_book_title).strip()
-    if base_data and hasattr(base_data, "sanitize_file_name"):
-        r_book_title = base_data.sanitize_file_name(r_book_title)
+    r_book_title = base_data.sanitize_file_name(r_book_title)
 
     outfolder = os.environ.get("minedown_setting_src", "./out/")
     title_path = os.path.join(outfolder, "list", r_book_title)

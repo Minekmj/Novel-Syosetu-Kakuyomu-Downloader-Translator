@@ -3,6 +3,7 @@ from PySide6.QtWidgets import (
     QDialog, QMessageBox
 )
 from PySide6.QtGui import QKeyEvent, QKeySequence
+import src.system.load_save as ld
 
 import os
 import json
@@ -202,17 +203,14 @@ class PresetLoadDialog(QDialog):
             del self.presets[name]
 
         parent = self.parent()
-        settings_file = parent.SETTINGS_FILE
         try:
-            data = {}
-            if os.path.exists(settings_file):
-                with open(settings_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
+            data = ld.load_data()
+            
             if 'pre' in data and isinstance(data['pre'], dict):
                 if name in data['pre']:
                     del data['pre'][name]
-                with open(settings_file, 'w', encoding='utf-8') as f:
-                    json.dump(data, f, ensure_ascii=False, indent=4)
+                ld.save_data(data)
+                
         except Exception as e:
             QMessageBox.critical(self, '저장 오류', f'프리셋 삭제 저장 중 오류가 발생했습니다: {e}')
 
@@ -228,9 +226,7 @@ class PresetLoadDialog(QDialog):
         self.selected_name = ''
 
         if parent is not None:
-            if hasattr(parent, 'preset_status') and hasattr(parent, 'preset_name_edit'):
-                if parent.preset_name_edit.text().strip() == name:
-                    parent.preset_name_edit.clear()
-                    parent.preset_status.setText('현재 프리셋 없음')
-            if hasattr(parent, 'add_log'):
-                parent.log_panel.add_log(f"프리셋 삭제 완료: {name}")
+            if parent.settings_panel.preset_name_edit.text().strip() == name:
+                parent.settings_panel.preset_name_edit.clear()
+                parent.settings_panel.preset_status.setText('현재 프리셋 없음')
+            parent.log_panel.add_log(f"프리셋 삭제 완료: {name}")

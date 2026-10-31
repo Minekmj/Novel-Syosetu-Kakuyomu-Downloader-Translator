@@ -122,8 +122,7 @@ class TranslateDialog(QDialog):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if hasattr(self, 'status_label'):
-            self.status_label.setMaximumWidth(int(self.width() * 0.4))
+        self.status_label.setMaximumWidth(int(self.width() * 0.4))
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():

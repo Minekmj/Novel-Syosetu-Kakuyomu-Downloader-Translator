@@ -104,16 +104,15 @@ class LogPanel(QWidget):
 
     def toggle_log_follow(self, checked):
         self.log_follow_enabled = bool(checked)
-        if hasattr(self, 'log_follow_btn'):
-            self.log_follow_btn.setText('로그 추적 ON' if self.log_follow_enabled else '로그 추적 OFF')
-            self.log_follow_btn.setChecked(self.log_follow_enabled)
+        self.log_follow_btn.setText('로그 추적 ON' if self.log_follow_enabled else '로그 추적 OFF')
+        self.log_follow_btn.setChecked(self.log_follow_enabled)
 
-        if self.log_follow_enabled and hasattr(self, 'log_edit'):
+        if self.log_follow_enabled:
             scrollbar = self.log_edit.verticalScrollBar()
             scrollbar.setValue(scrollbar.maximum())
 
     def scroll_to_bottom(self):
-        if not self.log_follow_enabled or not hasattr(self, 'log_edit'):
+        if not self.log_follow_enabled:
             return
 
         scrollbar = self.log_edit.verticalScrollBar()
