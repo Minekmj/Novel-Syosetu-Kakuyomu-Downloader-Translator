@@ -14,7 +14,6 @@ from .ui_factory import create_layout, create_button, create_label
 from src.ai import AiRoute, AiTarget
 
 OLLAMA_DOWNLOAD_URL = "https://ollama.com/download"
-
 VERIFIED_OLLAMA_MODELS = AiRoute.get_popular_models(AiTarget.OLLAMA)
 
 
@@ -27,10 +26,10 @@ class OllamaStatusCheckThread(QThread):
 
     def run(self):
         try:
-            r = requests.get(f"{self.host}/api/version", timeout=1.5)
+            r = requests.get(f"{self.host}/api/version", timeout=5.0)
             if r.status_code == 200:
                 ver = r.json().get("version", "")
-                tags_resp = requests.get(f"{self.host}/api/tags", timeout=1.5)
+                tags_resp = requests.get(f"{self.host}/api/tags", timeout=5.0)
                 installed_models = []
                 if tags_resp.status_code == 200:
                     installed_models = [m.get("name", "") for m in tags_resp.json().get("models", [])]
@@ -51,6 +50,7 @@ class OllamaPullThread(QThread):
         self.model_name = model_name
 
     def run(self):
+        resp = None
         try:
             url = f"{self.host}/api/pull"
             resp = requests.post(
@@ -89,6 +89,9 @@ class OllamaPullThread(QThread):
             self.finished_signal.emit(True, f"'{self.model_name}' 다운로드 완료")
         except Exception as e:
             self.finished_signal.emit(False, f"다운로드 실패: {e}")
+        finally:
+            if resp is not None:
+                resp.close()
 
 
 class OllamaManagerDialog(QDialog):
@@ -181,8 +184,13 @@ class OllamaManagerDialog(QDialog):
 
         bot_row = create_layout('h')
         bot_row.addStretch(1)
-        save_btn = create_button("적용 및 닫기", self.save_and_close, "primaryBtn", h=36, w=100)
-        bot_row.addWidget(save_btn)
+        self.save_btn = create_button("적용 및 닫기", self.save_and_close, "primaryBtn", h=36, w=100)
+        
+        self.save_btn.setAutoDefault(False)
+        self.save_btn.setDefault(False)
+        self.download_btn.setAutoDefault(False)
+        
+        bot_row.addWidget(self.save_btn)
         root.addLayout(bot_row)
 
         QTimer.singleShot(150, self.check_server_status)
@@ -278,9 +286,6 @@ class OllamaManagerDialog(QDialog):
             self.download_btn.setText("다운로드")
             self.delete_model_btn.setEnabled(False)
 
-    def check_local_model_installed(self):
-        self.check_server_status()
-
     def start_ollama_server(self):
         bin_path = self.find_ollama_executable()
         if not bin_path:
@@ -336,7 +341,7 @@ class OllamaManagerDialog(QDialog):
         self.pull_status_lbl.setText(msg)
         if success:
             QMessageBox.information(self, "완료", msg)
-            self.check_server_status()
+            QTimer.singleShot(1500, self.check_server_status)
         else:
             QMessageBox.critical(self, "다운로드 실패", msg)
 

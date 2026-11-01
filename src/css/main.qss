@@ -978,3 +978,93 @@ QProgressBar::chunk {
 QWidget#noback{
     background: transparent;
 }
+
+QSlider {
+    background: transparent;
+}
+
+QSlider::groove:horizontal {
+    height: 5px;
+    background: |surface_input||;
+    border: 1px solid |border_subtle||;
+    border-radius: 3px;
+}
+
+QSlider::sub-page:horizontal {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 |primary_bg||,
+        stop:0.5 |primary_hover||,
+        stop:1 |text_url||);
+    border-radius: 3px;
+}
+
+QSlider::add-page:horizontal {
+    background: |surface_input||;
+    border-radius: 3px;
+}
+
+QSlider::handle:horizontal {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 |text_primary||,
+        stop:1 |primary_hover||);
+    border: 1px solid |border_input_focus||;
+    width: 13px;
+    height: 13px;
+    margin: -5px 0px;
+    border-radius: 7px;
+}
+
+QSlider::handle:horizontal:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 |primary_hover||,
+        stop:1 |text_url||);
+    border: 1px solid |text_url||;
+}
+
+QSlider::handle:horizontal:pressed {
+    background: |text_url||;
+    border: 1px solid |primary_hover||;
+}
+
+QSlider::groove:vertical {
+    width: 5px;
+    background: |surface_input||;
+    border: 1px solid |border_subtle||;
+    border-radius: 3px;
+}
+
+QSlider::sub-page:vertical {
+    background: qlineargradient(x1:0, y1:1, x2:0, y2:0,
+        stop:0 |primary_bg||,
+        stop:0.5 |primary_hover||,
+        stop:1 |text_url||);
+    border-radius: 3px;
+}
+
+QSlider::add-page:vertical {
+    background: |surface_input||;
+    border-radius: 3px;
+}
+
+QSlider::handle:vertical {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 |text_primary||,
+        stop:1 |primary_hover||);
+    border: 1px solid |border_input_focus||;
+    width: 13px;
+    height: 13px;
+    margin: 0px -5px;
+    border-radius: 7px;
+}
+
+QSlider::handle:vertical:hover {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 |primary_hover||,
+        stop:1 |text_url||);
+    border: 1px solid |text_url||;
+}
+
+QSlider::handle:vertical:pressed {
+    background: |text_url||;
+    border: 1px solid |primary_hover||;
+}

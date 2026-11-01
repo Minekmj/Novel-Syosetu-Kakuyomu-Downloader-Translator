@@ -111,7 +111,7 @@ class ModelPanel(QWidget):
             indicator.setAlignment(Qt.AlignmentFlag.AlignCenter)
             rl.addWidget(indicator)
 
-            row_target_combo = create_combo(target_list, AiRoute.get_target_name(target_int), h=32)
+            row_target_combo = create_combo(target_list, AiRoute.get_target_name(target_int), h=50)
             row_target_combo.setFixedWidth(82)
             row_target_combo.setToolTip('이 모델의 AI 종류 변경')
             row_target_combo.activated.connect(lambda _, idx=i, c=row_target_combo: self.change_selected_target(idx, c.currentIndex()))
@@ -129,10 +129,10 @@ class ModelPanel(QWidget):
             row_model_combo.activated.connect(lambda _, idx=i, c=row_model_combo: self.change_selected_model(idx, c.currentText()))
             rl.addWidget(row_model_combo, 1)
 
-            select = create_button('선택', lambda _, idx=i: self.select_model(idx), 'modelSelectBtn', 32, 48)
+            select = create_button('선택', lambda _, idx=i: self.select_model(idx), 'modelSelectBtn', 50, 48)
             select.setToolTip('이 모델의 파라미터 편집')
 
-            delete = create_button('삭제', lambda _, idx=i: self.delete_model(idx), 'modelDeleteBtn', 32, 44)
+            delete = create_button('삭제', lambda _, idx=i: self.delete_model(idx), 'modelDeleteBtn', 50, 44)
             delete.setToolTip('이 모델 삭제')
 
             rl.addWidget(select)
