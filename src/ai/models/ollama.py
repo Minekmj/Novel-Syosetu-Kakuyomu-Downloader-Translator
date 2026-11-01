@@ -159,7 +159,8 @@ class OllamaModel(BaseAiModel):
             "stream": False,
             "options": {
                 "temperature": temperature,
-                "top_p": top_p
+                "top_p": top_p,
+                "num_predict": -1
             }
         }
         if system_instruction:
