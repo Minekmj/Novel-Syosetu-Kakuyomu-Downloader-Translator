@@ -38,8 +38,6 @@ class ModelPanel(QWidget):
         model_row.addWidget(self.target_add_combo)
 
         self.model_add_combo = create_combo([], h=35)
-        self.model_add_combo.setEditable(True)
-        self.model_add_combo.setPlaceholderText('모델명 선택 또는 직접 입력')
         model_row.addWidget(self.model_add_combo, 1)
 
         model_row.addWidget(create_button('추가', self.add_selected_model, w=54))
@@ -115,13 +113,12 @@ class ModelPanel(QWidget):
 
             row_target_combo = create_combo(target_list, AiRoute.get_target_name(target_int), h=32)
             row_target_combo.setFixedWidth(82)
-            row_target_combo.setToolTip('이 모델의 AI 제공자 변경')
+            row_target_combo.setToolTip('이 모델의 AI 종류 변경')
             row_target_combo.activated.connect(lambda _, idx=i, c=row_target_combo: self.change_selected_target(idx, c.currentIndex()))
             rl.addWidget(row_target_combo)
 
             row_model_combo = create_combo([], h=32)
             row_model_combo.setObjectName('modelRowCombo')
-            row_model_combo.setEditable(True)
 
             available = self._get_available_models_for_target(target_int)
             if name and name not in available:
@@ -169,7 +166,7 @@ class ModelPanel(QWidget):
             self.select_model(index, save_current=False)
 
         self.log_requested.emit(
-            f"제공자 변경: [{AiRoute.get_target_name(old_target)}] → [{AiRoute.get_target_name(new_target_idx)}] ({self.selected_models[index]['model']})"
+            f"종류 변경: [{AiRoute.get_target_name(old_target)}] → [{AiRoute.get_target_name(new_target_idx)}] ({self.selected_models[index]['model']})"
         )
 
     def change_selected_model(self, index, new_model):
@@ -187,7 +184,7 @@ class ModelPanel(QWidget):
             if i == index:
                 continue
             if (int(config.get('ai_target', 0)), str(config.get('model', '')).strip().casefold()) == new_key:
-                QMessageBox.warning(self, '모델 중복', f"'{new_model}'은 해당 제공자에 이미 등록된 모델입니다.")
+                QMessageBox.warning(self, '모델 중복', f"'{new_model}'은 해당 종류에 이미 등록된 모델입니다.")
                 self.rebuild_model_list()
                 return
 

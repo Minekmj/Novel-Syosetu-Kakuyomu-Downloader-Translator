@@ -252,7 +252,8 @@ QComboBox {
     border: |border_input||;
     border-radius: 5px;
     min-height: 34px;
-    padding: 0px 28px 0px 10px;
+    min-width: 80px;
+    padding: 0px 18px 0px 8px;
     font-size: 9pt;
     |dv_combo||
 }
@@ -269,16 +270,16 @@ QComboBox:focus {
 QComboBox::drop-down {
     subcontrol-origin: padding;
     subcontrol-position: top right;
-    width: 24px;
+    width: 16px;
     background: transparent;
     border: none;
     |dv_combo_dropdown||
 }
 
 QComboBox::down-arrow {
-    width: 10px;
-    height: 10px;
-    margin-right: 6px;
+    width: 8px;
+    height: 8px;
+    margin-right: 4px;
     |dv_combo_arrow||
 }
 
@@ -287,7 +288,7 @@ QComboBox QAbstractItemView {
     color: |combo_text||;
     border: 1px solid |border_default||;
     border-radius: |radius_input||;
-    padding: 4px;
+    padding: 0px;
     outline: none;
     selection-background-color: transparent;
     |dv_combo_view||
@@ -296,6 +297,7 @@ QComboBox QAbstractItemView {
 QComboBox QAbstractItemView::item {
     min-height: 26px;
     padding: 4px 10px;
+    margin: 2px 4px;
     border-radius: 4px;
     color: |combo_text||;
     |dv_combo_item||

@@ -10,6 +10,12 @@ from .ui_factory import create_layout, create_button, create_label, clear_layout
 
 
 class ApiManagerDialog(QDialog):
+    def __new__(cls, parent=None, ai_target: int = AiTarget.GEMINI):
+        if int(ai_target) == int(AiTarget.OLLAMA):
+            from .api_dialog_ollma import OllamaManagerDialog
+            return OllamaManagerDialog(parent)
+        return super().__new__(cls)
+
     def __init__(self, parent=None, ai_target: int = AiTarget.GEMINI):
         super().__init__(parent)
         self.ai_target = int(ai_target)
@@ -115,20 +121,17 @@ class ApiManagerDialog(QDialog):
         for i, key in enumerate(self.api_keys):
             row_widget = QWidget()
             row_widget.setObjectName("object_api")
-
             row_layout = create_layout('h', (4, 4, 4, 4), spacing=8, parent=row_widget)
 
             rb = QRadioButton()
             rb.setObjectName("object_api")
-
             rb.setChecked(i == self.selected_index)
             rb.toggled.connect(lambda checked, idx=i: self.on_radio_toggled(idx, checked))
             self.button_group.addButton(rb, i)
             row_layout.addWidget(rb)
 
             label_text = f"[{i}] 메인" if i == 0 else f"[{i}] 추가"
-            idx_label = create_label(label_text, width=64)
-            row_layout.addWidget(idx_label)
+            row_layout.addWidget(create_label(label_text, width=64))
 
             masked_key = key[:6] + "..." + key[-4:] if len(key) > 10 else key
             key_display = QLineEdit(masked_key)
@@ -151,9 +154,7 @@ class ApiManagerDialog(QDialog):
     def add_api_key(self):
         new_key = self.new_key_edit.text().strip()
         if not new_key:
-            QMessageBox.warning(self, "알림", "추가할 API 키를 입력하세요.")
             return
-
         if new_key in self.api_keys:
             QMessageBox.warning(self, "알림", "이미 등록된 API 키입니다.")
             return
@@ -165,13 +166,11 @@ class ApiManagerDialog(QDialog):
     def delete_key(self, idx):
         if not (0 <= idx < len(self.api_keys)):
             return
-
         self.api_keys.pop(idx)
         if self.selected_index >= len(self.api_keys):
             self.selected_index = max(0, len(self.api_keys) - 1)
         elif self.selected_index == idx:
             self.selected_index = min(idx, max(0, len(self.api_keys) - 1))
-
         self.rebuild_key_list()
 
     def save_and_close(self):

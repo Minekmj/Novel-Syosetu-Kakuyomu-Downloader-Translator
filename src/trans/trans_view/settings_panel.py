@@ -4,7 +4,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QTabWidget, QWidget, QLineEdit, QComboBox, QSizePolicy, QFileDialog, QMessageBox
 )
-from src.ai import AiRoute
+from src.ai import AiRoute, AiTarget
 from src.trans.trans_ai_utils import inspect_json_japanese
 import src.trans.trans_check_jp as check_jp
 import src.trans.preset as preset
@@ -213,7 +213,9 @@ class SettingsPanel(QTabWidget):
         if not lbl:
             return
         t_name = AiRoute.get_target_name(target)
-        if total_count > 1:
+        if int(target) == int(AiTarget.OLLAMA):
+            lbl.setText(f"{t_name} 로컬 엔드포인트 설정 완료")
+        elif total_count > 1:
             lbl.setText(f"등록된 {t_name} API: 총 {total_count}개 / 현재 활성: [{active_idx}]")
         elif total_count == 1:
             lbl.setText(f"등록된 {t_name} API: 1개 [0] 메인")

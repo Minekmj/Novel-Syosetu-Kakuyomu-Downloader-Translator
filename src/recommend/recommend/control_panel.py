@@ -69,8 +69,6 @@ class RecommendControlPanel(QWidget):
 
         self.model_combo = QComboBox()
         self.model_combo.setFixedHeight(34)
-        self.model_combo.setEditable(True)
-        self.model_combo.setPlaceholderText("모델명 선택 또는 직접 입력")
         model_box.addWidget(self.model_combo, stretch=1)
 
         self.refresh_model_btn = QPushButton("조회")
