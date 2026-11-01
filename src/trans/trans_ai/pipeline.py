@@ -107,7 +107,8 @@ async def run_translation_batch(
                     check_i=check_i,
                     br_start=worker.br_start,
                     isno_x=worker.isno_x,
-                    thinking_budget=worker.thinking_budget
+                    thinking_budget=worker.thinking_budget,
+                    ai_target=worker.ai_target
                 )
 
                 if result_ignore or result_text is None or _is_stopped(check, check_i):

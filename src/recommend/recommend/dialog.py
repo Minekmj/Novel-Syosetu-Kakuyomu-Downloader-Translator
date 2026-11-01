@@ -2,9 +2,11 @@ from typing import Dict, Any
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QSplitter, QMessageBox
+from src.ai import AiRoute
 from src.main.thread_pyqt import RecommendWorker
 from .control_panel import RecommendControlPanel
 from . import workspace_panel
+
 
 class NovelRecommendDialog(QDialog):
     def __init__(self, parent=None):
@@ -16,7 +18,7 @@ class NovelRecommendDialog(QDialog):
 
         self.recommend_worker = None
         self.init_ui()
-        
+
     def set_value_detail_ui(ui):
         workspace_panel.cd.detail_ui = ui
 
@@ -43,19 +45,29 @@ class NovelRecommendDialog(QDialog):
 
         root.addWidget(self.splitter)
 
-    def on_start_recommendation(self, api_key: str, model: str, condition: str, top_k: int, user_data: dict):
+    def on_start_recommendation(
+        self,
+        api_key: str,
+        model: str,
+        condition: str,
+        top_k: int,
+        user_data: dict,
+        ai_target: int
+    ):
         if self.recommend_worker and self.recommend_worker.isRunning():
             QMessageBox.warning(self, "알림", "추천 작업이 진행 중입니다.")
             return
 
+        target_name = AiRoute.get_target_name(ai_target)
+
         self.workspace_panel.clear_result_cards()
         self.control_panel.set_running(True)
-        self.workspace_panel.set_status("AI 분석 중...")
+        self.workspace_panel.set_status(f"[{target_name}] AI 분석 중...")
         self.workspace_panel.set_tab_index(1)
 
-        self.workspace_panel.append_ai_speech_card("<center><b>새 추천 시작</b></center>")
+        self.workspace_panel.append_ai_speech_card("<center><b>새 추천 세션 시작</b></center>")
         self.workspace_panel.append_info_card(
-            f"추천 세션 가동: 모델 {model}, 상위 {top_k}작품 선별, 기존 목록 {len(user_data['list'])}개 참조"
+            f"추천 세션 가동: [{target_name}] 모델 {model}, 상위 {top_k}작품 선별, 기존 목록 {len(user_data['list'])}개 참조"
         )
 
         self.recommend_worker = RecommendWorker(
@@ -63,8 +75,10 @@ class NovelRecommendDialog(QDialog):
             model=model,
             condition=condition,
             top_k=top_k,
-            user_data=user_data
+            user_data=user_data,
+            ai_target=ai_target
         )
+
         self.recommend_worker.log_signal.connect(self.on_worker_log)
         self.recommend_worker.finished_signal.connect(self.on_recommendation_finished)
         self.recommend_worker.error_signal.connect(self.on_recommendation_failed)

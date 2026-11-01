@@ -1,12 +1,13 @@
+import os
+import json
 from PySide6.QtWidgets import (
     QListWidget, QListWidgetItem, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QLabel,
     QDialog, QMessageBox
 )
 from PySide6.QtGui import QKeyEvent, QKeySequence
 import src.system.load_save as ld
+from src.ai import AiRoute
 
-import os
-import json
 
 class PasteOnlyLineEdit(QLineEdit):
     def keyPressEvent(self, event: QKeyEvent):
@@ -147,23 +148,51 @@ class PresetLoadDialog(QDialog):
         if isinstance(models, dict):
             models = [models]
 
-        model_names = []
+        model_displays = []
         for model in models:
             if isinstance(model, dict):
                 model_name = model.get('model') or model.get('name') or ''
+                t_val = model.get('ai_target', model.get('target', preset.get('ai_target')))
             else:
                 model_name = str(model)
+                t_val = preset.get('ai_target')
+
             model_name = str(model_name).strip()
-            if model_name and model_name.casefold() not in {x.casefold() for x in model_names}:
-                model_names.append(model_name)
+            if not model_name:
+                continue
 
-        if not model_names:
+            if t_val is not None:
+                try:
+                    target_int = int(t_val)
+                except (ValueError, TypeError):
+                    target_int = AiRoute.detect_target(model_name)
+            else:
+                target_int = AiRoute.detect_target(model_name)
+
+            target_name = AiRoute.get_target_name(target_int)
+            display_str = f"[{target_name}] {model_name}"
+
+            if display_str.casefold() not in {x.casefold() for x in model_displays}:
+                model_displays.append(display_str)
+
+        if not model_displays:
             model_name = preset.get('model') or preset.get('model_name') or ''
+            model_name = str(model_name).strip()
             if model_name:
-                model_names.append(str(model_name).strip())
+                t_val = preset.get('ai_target')
+                if t_val is not None:
+                    try:
+                        target_int = int(t_val)
+                    except (ValueError, TypeError):
+                        target_int = AiRoute.detect_target(model_name)
+                else:
+                    target_int = AiRoute.detect_target(model_name)
 
-        for model_name in model_names:
-            item = QListWidgetItem(model_name)
+                target_name = AiRoute.get_target_name(target_int)
+                model_displays.append(f"[{target_name}] {model_name}")
+
+        for display in model_displays:
+            item = QListWidgetItem(display)
             self.model_list.addItem(item)
 
     def accept_selected(self, *args):
@@ -205,12 +234,10 @@ class PresetLoadDialog(QDialog):
         parent = self.parent()
         try:
             data = ld.load_data()
-            
             if 'pre' in data and isinstance(data['pre'], dict):
                 if name in data['pre']:
                     del data['pre'][name]
                 ld.save_data(data)
-                
         except Exception as e:
             QMessageBox.critical(self, '저장 오류', f'프리셋 삭제 저장 중 오류가 발생했습니다: {e}')
 
@@ -226,7 +253,9 @@ class PresetLoadDialog(QDialog):
         self.selected_name = ''
 
         if parent is not None:
-            if parent.settings_panel.preset_name_edit.text().strip() == name:
-                parent.settings_panel.preset_name_edit.clear()
-                parent.settings_panel.preset_status.setText('현재 프리셋 없음')
-            parent.log_panel.add_log(f"프리셋 삭제 완료: {name}")
+            if hasattr(parent, 'settings_panel'):
+                if parent.settings_panel.preset_name_edit.text().strip() == name:
+                    parent.settings_panel.preset_name_edit.clear()
+                    parent.settings_panel.preset_status.setText('현재 프리셋 없음')
+            if hasattr(parent, 'log_panel'):
+                parent.log_panel.add_log(f"프리셋 삭제 완료: {name}")

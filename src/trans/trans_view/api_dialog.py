@@ -1,18 +1,21 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QLineEdit, QPushButton, QScrollArea, QFrame, QRadioButton,
+    QDialog, QWidget, QLineEdit, QScrollArea, QFrame, QRadioButton,
     QButtonGroup, QMessageBox
 )
+from src.ai import AiRoute, AiTarget
 from src.system.load_save import load_data, save_data
 import src.trans.trans_ai as trans_ai
 from .ui_factory import create_layout, create_button, create_label, clear_layout
 
 
 class ApiManagerDialog(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, ai_target: int = AiTarget.GEMINI):
         super().__init__(parent)
-        self.setWindowTitle("Gemini API 키 관리")
+        self.ai_target = int(ai_target)
+        self.target_name = AiRoute.get_target_name(self.ai_target)
+
+        self.setWindowTitle(f"{self.target_name} API 키 관리")
         self.resize(520, 480)
         self.setMinimumSize(460, 400)
 
@@ -23,20 +26,25 @@ class ApiManagerDialog(QDialog):
         self.init_ui()
         self.rebuild_key_list()
 
+    def _get_key_names(self):
+        return AiRoute.get_storage_keys(self.ai_target)
+
     def load_keys(self):
         data = load_data()
-        raw_keys = data.get("api_keys", [])
+        single_k, list_k, idx_k = self._get_key_names()
+
+        raw_keys = data.get(list_k, [])
         if isinstance(raw_keys, list):
             self.api_keys = [str(k).strip() for k in raw_keys if str(k).strip()]
         else:
             self.api_keys = []
 
-        single_api = str(data.get("api", "")).strip()
+        single_api = str(data.get(single_k, "")).strip()
         if not self.api_keys and single_api:
             self.api_keys = [single_api]
 
         try:
-            self.selected_index = int(data.get("api_index", 0))
+            self.selected_index = int(data.get(idx_k, 0))
         except (ValueError, TypeError):
             self.selected_index = 0
 
@@ -48,12 +56,12 @@ class ApiManagerDialog(QDialog):
     def init_ui(self):
         root = create_layout('v', (16, 16, 16, 16), spacing=12, parent=self)
 
-        add_group_label = create_label("추가 API", "optionLabel")
+        add_group_label = create_label(f"추가 {self.target_name} API", "optionLabel")
         root.addWidget(add_group_label)
 
         add_row = create_layout('h', spacing=8)
         self.new_key_edit = QLineEdit()
-        self.new_key_edit.setPlaceholderText("새 Gemini API 키를 입력하세요")
+        self.new_key_edit.setPlaceholderText(f"새 {self.target_name} API 키를 입력하세요")
         self.new_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self.new_key_edit.setMinimumHeight(35)
         add_row.addWidget(self.new_key_edit, 1)
@@ -66,7 +74,7 @@ class ApiManagerDialog(QDialog):
         desc_lbl.setWordWrap(True)
         root.addWidget(desc_lbl)
 
-        list_title = create_label("등록된 API 키 목록", "subLabel")
+        list_title = create_label(f"등록된 {self.target_name} API 키 목록", "subLabel")
         root.addWidget(list_title)
 
         self.scroll_area = QScrollArea()
@@ -107,12 +115,12 @@ class ApiManagerDialog(QDialog):
         for i, key in enumerate(self.api_keys):
             row_widget = QWidget()
             row_widget.setObjectName("object_api")
-            
+
             row_layout = create_layout('h', (4, 4, 4, 4), spacing=8, parent=row_widget)
 
             rb = QRadioButton()
             rb.setObjectName("object_api")
-            
+
             rb.setChecked(i == self.selected_index)
             rb.toggled.connect(lambda checked, idx=i: self.on_radio_toggled(idx, checked))
             self.button_group.addButton(rb, i)
@@ -167,11 +175,15 @@ class ApiManagerDialog(QDialog):
         self.rebuild_key_list()
 
     def save_and_close(self):
-        trans_ai.set_api_keys(self.api_keys, self.selected_index)
+        single_k, list_k, idx_k = self._get_key_names()
+
+        if self.ai_target == int(AiTarget.GEMINI):
+            trans_ai.set_api_keys(self.api_keys, self.selected_index)
+
         data = load_data()
-        data["api_keys"] = self.api_keys
-        data["api_index"] = self.selected_index
-        data["api"] = self.api_keys[self.selected_index] if self.api_keys else ""
+        data[list_k] = self.api_keys
+        data[idx_k] = self.selected_index
+        data[single_k] = self.api_keys[self.selected_index] if self.api_keys else ""
         save_data(data)
         self.accept()
 

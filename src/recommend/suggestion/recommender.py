@@ -3,26 +3,36 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 from collections.abc import Callable
 
+from src.ai import AiRoute
 from src.find.site import KakuyomuSearch, NaroSearch, SyosetuSearch
-from .ai_client import GeminiAIClient
+from .ai_client import SuggestionAIClient
 from .executor import SearchExecutor
 from .agent import SearchAgent
 from .ranker import CandidateRanker
 from .utils import PrintIo, normalize_url
 
+
 class NovelRecommender:
     def __init__(
         self,
-        gemini_api_key: Optional[str] = None,
-        model: str = "gemini-3.1-flash-lite",
+        api_key: Optional[str] = None,
+        model: Optional[str] = None,
         user_data: dict = {"list": {"없음": {"src": "None"}}},
-        log: Callable = None
+        log: Callable = None,
+        ai_target: Optional[int] = None,
+        ai_route: Optional[AiRoute] = None
     ):
-        self.ai = GeminiAIClient(api_key=gemini_api_key, model=model)
+        chosen_model = model or AiRoute.DEFAULT_MODEL
+        chosen_target = ai_target if ai_target is not None else AiRoute.detect_target(chosen_model)
+
+        self.ai = SuggestionAIClient(
+            api_key=api_key,
+            model=chosen_model,
+            ai_target=chosen_target,
+            ai_route=ai_route
+        )
         self.executor = SearchExecutor()
-        self.user_data = user_data
-        if user_data == {'list': {}}:
-            self.user_data = {"list": {"없음": {"src": "None"}}}
+        self.user_data = user_data if user_data != {'list': {}} else {"list": {"없음": {"src": "None"}}}
         self.log = log or (lambda *args, **kwargs: None)
 
         self.site_meta = {
@@ -101,7 +111,7 @@ class NovelRecommender:
                 PrintIo(msg)
                 return {"error": msg, "recommended_works": []}
 
-            self.log("info", "Ai를 시작하는 중...")
+            self.log("info", "AI 추천 탐색을 시작하는 중...")
 
             candidates = self.agent.run_search_loop(
                 history_items=history_items,
@@ -113,7 +123,7 @@ class NovelRecommender:
             PrintIo(f"\n[최종 탐색 결산] 중복 제외 총 {len(candidates)}개의 고유 신작 후보 확보")
             PrintIo(f"[플랫폼별 검색 성공 횟수]: {self.site_success_counts}")
 
-            self.log("info", f"검색 종료. {len(candidates)}개의 작품 중 {top_k}개 선별")
+            self.log("info", f"검색 종료. {len(candidates)}개의 작품 중 최적작 {top_k}개 선별 중...")
 
             final_result = self.ranker.rerank_and_synthesize(
                 history_items=history_items,

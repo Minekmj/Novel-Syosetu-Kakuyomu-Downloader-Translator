@@ -2,13 +2,16 @@ import json
 import os
 import re
 
-from google.genai import types
+try:
+    from google.genai import types
+except ImportError:
+    types = None
 
-import src.down.down as down
 from src.trans.prom import *
-
 import src.glossary.glossary_text as glossary_text
+
 extract_glossary = glossary_text.extract_glossary
+
 
 def split_text_by_lines(text, max_chars=5000):
     lines = text.splitlines(keepends=True)
@@ -35,6 +38,7 @@ JP_PATTERN = re.compile(
     r'[\u3040-\u309f\u30a0-\u30fb\u30fd-\u30ff\u31f0-\u31ff\uff65-\uff6f\uff71-\uff9f\u4e00-\u9fff\uf900-\ufaff\u3005\u3006]'
 )
 
+
 def get_japanese_ratio(text):
     if not text:
         return 0.0
@@ -45,6 +49,7 @@ def get_japanese_ratio(text):
 
     jp_chars = len(JP_PATTERN.findall(clean_text))
     return jp_chars / len(clean_text) * 100
+
 
 def get_korean_ratio(text):
     if not text:
@@ -174,8 +179,8 @@ def apply_japanese_corrections(json_path, corrections):
 
         title = data.get('name', 'restored')
         max_chars = data.get('chunk', 5000)
-        out = down.downin.base_data.OUTFOLDER + '/'
-        safe = re.sub('[\\\\/:*?"<>|]', '_', title).strip()
+        out = os.environ.get('minedown_setting_src', './out/')
+        safe = re.sub(r'[\\/:*?"<>|]', '_', title).strip()
         ai_dir = f'{out}trs\\ai_down_{safe}_{max_chars}'
 
         grouped = {}
@@ -224,7 +229,8 @@ def apply_japanese_corrections(json_path, corrections):
 
     except Exception as e:
         return False, 0, str(e)
-    
+
+
 def build_dynamic_glossary(chunk, dictionary, max_chars=GLOSSARY_MAX_CHARS):
     if not dictionary:
         return ''
@@ -272,84 +278,14 @@ def restore_img_placeholders(text, img_tags):
 
 
 def build_thinking_config(thinking_val, model_name=""):
-    if thinking_val is None:
-        return None
+    from src.ai.models.gemini import build_thinking_config as _btc
+    return _btc(thinking_val, model_name)
 
-    val = str(thinking_val).strip().upper()
-    if val in ('기본값', 'NONE', '', 'DEFAULT'):
-        return None
-
-    level = None
-    for candidate in ('MINIMAL', 'LOW', 'MEDIUM', 'HIGH'):
-        if candidate in val:
-            level = candidate
-            break
-
-    digits = re.findall(r'-?\d+', val)
-    raw_number = int(digits[0]) if digits else None
-
-    m = str(model_name).lower()
-
-    if 'gemma-4' in m:
-        target_level = 'HIGH' if level == 'HIGH' or (raw_number is not None and raw_number > 0) else 'MINIMAL'
-        return types.ThinkingConfig(thinking_level=target_level)
-
-    if 'gemini-3' in m:
-        def _get_level_enum(name):
-            try:
-                return getattr(types.ThinkingLevel, name)
-            except AttributeError:
-                return name
-
-        is_pro = 'pro' in m
-
-        if level == 'MINIMAL':
-            target_level = 'LOW' if is_pro else 'MINIMAL'
-        elif level in ('LOW', 'MEDIUM', 'HIGH'):
-            target_level = level
-        elif raw_number == 0:
-            target_level = 'LOW' if is_pro else 'MINIMAL'
-        else:
-            target_level = 'LOW'
-
-        return types.ThinkingConfig(thinking_level=_get_level_enum(target_level))
-
-    if 'gemini-4' in m:
-        def _get_level_enum(name):
-            try:
-                return getattr(types.ThinkingLevel, name)
-            except AttributeError:
-                return name
-
-        if level == 'MINIMAL':
-            target_level = 'LOW' if is_pro else 'MINIMAL'
-        elif level in ('LOW', 'MEDIUM', 'HIGH'):
-            target_level = level
-        elif raw_number == 0:
-            target_level = 'LOW' if is_pro else 'MINIMAL'
-        else:
-            target_level = 'LOW'
-
-        return types.ThinkingConfig(thinking_level=_get_level_enum(target_level))
-
-    if 'gemini-2.5' in m:
-        budget_map = {
-            'MINIMAL': 0,
-            'LOW': 1024,
-            'MEDIUM': 2048,
-            'HIGH': 4096
-        }
-        if level in budget_map:
-            return types.ThinkingConfig(thinking_budget=budget_map[level])
-        if raw_number is not None:
-            return types.ThinkingConfig(thinking_budget=raw_number)
-        return types.ThinkingConfig(thinking_budget=1024)
-
-    return None
 
 def detect_raw_text(text):
     lines = text.splitlines()
     return len(lines) >= 3 and lines[2].strip().lower() == '(raw)'
+
 
 def prepare_raw_text(text):
     lines = text.splitlines(keepends=True)
@@ -384,7 +320,8 @@ def save_translation_json(
     file_path,
     raw=False,
     br_start=0,
-    thinking_budget=None
+    thinking_budget=None,
+    ai_target=None
 ):
     data = {}
     count = max(
@@ -408,6 +345,8 @@ def save_translation_json(
     data['br_start'] = br_start
     if thinking_budget is not None:
         data['thinking_budget'] = thinking_budget
+    if ai_target is not None:
+        data['ai_target'] = int(ai_target)
 
     with open(file_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
@@ -418,12 +357,8 @@ def save_translation_txt(
     title,
     file_path
 ):
-    data = {}
-    for i, text in enumerate(translated_parts):
-        data[str(i)] = text
-    data['name'] = title
-
     with open(file_path, 'w', encoding='utf-8') as f:
         f.write(title + '\n' + ''.join(p for p in translated_parts if p))
-        
+
+
 glossary_text.get_japanese_ratio = get_japanese_ratio

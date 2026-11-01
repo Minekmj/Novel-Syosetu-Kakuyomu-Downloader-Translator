@@ -2,14 +2,13 @@ import ast
 import asyncio
 from collections import Counter
 import re
-from google.genai import types
+from typing import Optional
 
-client = None
+from src.ai import AiRoute, AiTarget
 from src.trans.prompt_sanitizer import get_safety_settings
-
 from src.glossary.glossary import extract_glossary_sample as _extract_glossary_sample
 
-get_japanese_ratio = None # 주입용
+get_japanese_ratio = None  # 참조용
 
 
 class AsyncRateLimiter:
@@ -25,6 +24,23 @@ class AsyncRateLimiter:
             if elapsed < self.interval:
                 await asyncio.sleep(self.interval - elapsed)
             self.last_called = asyncio.get_running_loop().time()
+
+
+def _get_route(model: Optional[str] = None, ai_target: Optional[int] = None):
+    if model:
+        target = int(ai_target) if ai_target is not None else AiRoute.detect_target(model)
+        resolved_model = model
+    else:
+        target = int(ai_target) if ai_target is not None else AiRoute.DEFAULT_TARGET
+        resolved_model = AiRoute.get_default_model(target)
+
+    try:
+        from src.trans.trans_ai import config as trans_config
+        route = trans_config.ai_route
+    except Exception:
+        route = AiRoute(ai_target=target)
+
+    return route, target, resolved_model
 
 
 def _split_glossary_text(text, chunk):
@@ -87,6 +103,7 @@ def _is_korean_text(text):
 
 VALID_CATEGORIES = {"이름", "고유명사", "일반", "제도", "명칭"}
 
+
 def _parse_glossary_response(response_text, log_callback=None):
     result = {}
     if not response_text:
@@ -146,25 +163,26 @@ def _parse_glossary_response(response_text, log_callback=None):
 def _is_blocked_by_safety(response=None, exception=None) -> bool:
     if exception is not None:
         err_msg = str(exception).lower()
-        if "safety" in err_msg or "blocked" in err_msg:
-            return True
+        return "safety" in err_msg or "blocked" in err_msg
 
-    if response is not None:
+    raw = getattr(response, "raw_response", response)
+    if raw is not None:
         try:
-            if response.candidates:
-                finish_reason = getattr(response.candidates[0], "finish_reason", None)
+            if hasattr(raw, "candidates") and raw.candidates:
+                finish_reason = getattr(raw.candidates[0], "finish_reason", None)
                 if finish_reason and "SAFETY" in str(finish_reason).upper():
                     return True
         except Exception:
             pass
 
         try:
-            _ = response.text
+            _ = getattr(raw, "text", None)
         except Exception as e:
             if "safety" in str(e).lower() or "blocked" in str(e).lower():
                 return True
 
     return False
+
 
 SYSTEM_PROMPT_EXTRACTION = """당신은 일본어 라이트노벨 전문 용어집 추출기입니다.
 
@@ -215,26 +233,32 @@ FILTER_SYSTEM_PROMPT = """당신은 라이트노벨 번역용 용어집 정리 �
 - 절대로 설명이나 마크다운을 붙이지 마십시오.
 """
 
+
 async def _call_chunk_api_once(
     chunk_text,
     chunk_idx,
     total_chunks,
     rate_limiter: AsyncRateLimiter,
     log_callback=None,
-    model='gemini-3.5-flash-lite',
+    model=None,
+    ai_target=None,
 ):
     await rate_limiter.wait()
+    route, target, model_name = _get_route(model, ai_target)
+
+    setting = {
+        "ai_target": target,
+        "model_name": model_name,
+        "system_instruction": SYSTEM_PROMPT_EXTRACTION,
+        "temperature": 0.1,
+        "top_p": 0.8,
+        "safety_settings": get_safety_settings(),
+    }
 
     try:
-        response = await client.aio.models.generate_content(
-            model=model,
-            contents=f"다음 일본어 본문에서 용어집을 추출하십시오.\n\n{chunk_text}",
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT_EXTRACTION,
-                temperature=0.1,
-                top_p=0.8,
-                safety_settings=get_safety_settings(),
-            ),
+        response = await route.send_text(
+            message=f"다음 일본어 본문에서 용어집을 추출하십시오.\n\n{chunk_text}",
+            setting=setting
         )
 
         if _is_blocked_by_safety(response=response):
@@ -254,6 +278,11 @@ async def _call_chunk_api_once(
                 log_callback(f"[용어집 {chunk_idx}/{total_chunks}] 검열 예외 감지 ({e}) -> 영구 포기")
             return False, None, True
 
+        if route.is_connection_error(e):
+            route.refresh_client()
+            if log_callback:
+                log_callback(f"[용어집 {chunk_idx}/{total_chunks}] 세션 연결 끊김 -> 재연결 완료")
+
         if log_callback:
             log_callback(f"[용어집 {chunk_idx}/{total_chunks}] 일시 오류: {e} (다른 청크로 순서 양보)")
         return False, None, False
@@ -263,7 +292,8 @@ async def _filter_system_and_terms_async(
     terms_to_check,
     rate_limiter: AsyncRateLimiter,
     log_callback=None,
-    model='gemini-2.5-flash',
+    model=None,
+    ai_target=None,
 ):
     if not terms_to_check:
         return {}
@@ -274,17 +304,21 @@ async def _filter_system_and_terms_async(
         log_callback(f"[2차 검증] {len(terms_to_check)}개 항목 중 당연한 일반 어휘 필터링 시작...")
 
     await rate_limiter.wait()
+    route, target, model_name = _get_route(model, ai_target)
+
+    setting = {
+        "ai_target": target,
+        "model_name": model_name,
+        "system_instruction": FILTER_SYSTEM_PROMPT,
+        "temperature": 0.0,
+        "top_p": 0.8,
+        "safety_settings": get_safety_settings(),
+    }
 
     try:
-        response = await client.aio.models.generate_content(
-            model=model,
-            contents=f"다음 목록 중 제외할 너무 당연한 일반 단어를 골라내십시오.\n\n{terms_list_str}",
-            config=types.GenerateContentConfig(
-                system_instruction=FILTER_SYSTEM_PROMPT,
-                temperature=0.0,
-                top_p=0.8,
-                safety_settings=get_safety_settings(),
-            ),
+        response = await route.send_text(
+            message=f"다음 목록 중 제외할 너무 당연한 일반 단어를 골라내십시오.\n\n{terms_list_str}",
+            setting=setting
         )
 
         if _is_blocked_by_safety(response=response):
@@ -318,14 +352,16 @@ async def _filter_system_and_terms_async(
             log_callback(f"[2차 검증 오류] {e} (해당 항목 원본 유지)")
         return terms_to_check
 
+
 async def _extract_glossary_async(
     all_text,
     paserent,
     chunk,
     log_callback=None,
-    model='gemini-3.5-flash-lite',
+    model=None,
     RPM=5,
-    max_retries=2
+    max_retries=2,
+    ai_target=None,
 ):
     if not all_text:
         if log_callback:
@@ -350,9 +386,10 @@ async def _extract_glossary_async(
     if not chunks:
         return {}
 
+    route, target, resolved_model = _get_route(model, ai_target)
     total_chunks = len(chunks)
     if log_callback:
-        log_callback(f"용어집 분석 시작: 총 {total_chunks}개 청크 (RPM {RPM} 모델 {model})")
+        log_callback(f"용어집 분석 시작: 총 {total_chunks}개 청크 (타깃: {target}, 모델: {resolved_model}, RPM: {RPM})")
 
     rate_limiter = AsyncRateLimiter(rpm=RPM)
     pending_queue = list(enumerate(chunks, 1))
@@ -377,7 +414,8 @@ async def _extract_glossary_async(
                 total_chunks=total_chunks,
                 rate_limiter=rate_limiter,
                 log_callback=log_callback,
-                model=model,
+                model=resolved_model,
+                ai_target=target,
             )
 
             if is_censored:
@@ -413,8 +451,8 @@ async def _extract_glossary_async(
 
         best_target, _ = Counter(targets).most_common(1)[0]
         best_category, _ = Counter(categories).most_common(1)[0]
-        
-        if get_japanese_ratio(best_category) != 0:
+
+        if get_japanese_ratio and get_japanese_ratio(best_category) != 0:
             continue
 
         if best_category == "일반":
@@ -436,13 +474,14 @@ async def _extract_glossary_async(
         terms_to_check=check_glossary,
         rate_limiter=rate_limiter,
         log_callback=log_callback,
-        model=model,
+        model=resolved_model,
+        ai_target=target,
     )
 
     final_glossary = {**safe_glossary, **filtered_terms}
 
     if log_callback:
-        log_callback(f"최종 용어집 확정: 총 {len(final_glossary)}개 {len(safe_glossary)}개 + 검증 통과 {len(filtered_terms)}개)")
+        log_callback(f"최종 용어집 확정: 총 {len(final_glossary)}개 (확정 {len(safe_glossary)}개 + 검증 통과 {len(filtered_terms)}개)")
 
     return final_glossary
 
@@ -452,8 +491,9 @@ def extract_glossary(
     paserent=10,
     chunk=5000,
     log_callback=None,
-    model='gemini-3.5-flash-lite',
-    RPM=5
+    model=None,
+    RPM=5,
+    ai_target=None,
 ):
     return asyncio.run(
         _extract_glossary_async(
@@ -462,6 +502,7 @@ def extract_glossary(
             chunk=chunk,
             log_callback=log_callback,
             model=model,
-            RPM=RPM
+            RPM=RPM,
+            ai_target=ai_target,
         )
     )

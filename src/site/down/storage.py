@@ -64,7 +64,6 @@ class EpisodeStorage:
 
     @staticmethod
     def update_progress(progress_state, total_count, label_callback):
-        # 진행률
         with progress_state["lock"]:
             progress_state["done"] += 1
             done = progress_state["done"]

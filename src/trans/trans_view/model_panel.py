@@ -1,6 +1,8 @@
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QSizePolicy, QWidget, QScrollArea, QFrame, QMessageBox
+from src.ai import AiRoute, AiTarget
 from src.main.thread_pyqt import ModelLoadThread
+from .model_utils import TARGET_NAMES
 from .ui_factory import (
     create_layout, create_label, create_button, create_combo,
     set_combo_value, clear_layout
@@ -17,6 +19,7 @@ class ModelPanel(QWidget):
         self.active_model_index = -1
         self.model_load_thread = None
         self.settings_panel = None
+        self._cached_gemini_models = []
         self.init_ui()
 
     def set_settings_panel(self, settings_panel):
@@ -26,12 +29,21 @@ class ModelPanel(QWidget):
         layout = create_layout('v', (0, 0, 0, 0), spacing=8, parent=self)
 
         model_row = create_layout('h')
-        model_row.addWidget(create_label('모델', width=36))
+        model_row.addWidget(create_label('모델', width=32))
+
+        target_list = [AiRoute.get_target_name(t) for t in sorted(AiRoute.TARGET_NAMES.keys())]
+        self.target_add_combo = create_combo(target_list, AiRoute.get_target_name(AiRoute.DEFAULT_TARGET), h=35)
+        self.target_add_combo.setFixedWidth(85)
+        self.target_add_combo.currentIndexChanged.connect(self.on_add_target_changed)
+        model_row.addWidget(self.target_add_combo)
+
         self.model_add_combo = create_combo([], h=35)
-        self.model_add_combo.setPlaceholderText('Gemini 모델 선택')
+        self.model_add_combo.setEditable(True)
+        self.model_add_combo.setPlaceholderText('모델명 선택 또는 직접 입력')
         model_row.addWidget(self.model_add_combo, 1)
-        model_row.addWidget(create_button('추가', self.add_selected_model, w=56))
-        self.refresh_model_btn = create_button('새로고침', None, w=76)
+
+        model_row.addWidget(create_button('추가', self.add_selected_model, w=54))
+        self.refresh_model_btn = create_button('조회', self.on_manual_refresh_clicked, w=54)
         model_row.addWidget(self.refresh_model_btn)
         layout.addLayout(model_row)
 
@@ -48,46 +60,82 @@ class ModelPanel(QWidget):
         self.model_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.model_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.model_scroll.setWidget(self.model_list_container)
-        self.model_scroll.setFixedHeight(112)
+        self.model_scroll.setFixedHeight(115)
         layout.addWidget(self.model_scroll)
 
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
 
+        self.on_add_target_changed(AiRoute.DEFAULT_TARGET)
+
+    def on_add_target_changed(self, target_idx):
+        target_idx = int(target_idx)
+        models = self._get_available_models_for_target(target_idx)
+
+        self.model_add_combo.clear()
+        self.model_add_combo.addItems(models)
+
+        default_model = AiRoute.get_default_model(target_idx)
+        if default_model in models:
+            self.model_add_combo.setCurrentText(default_model)
+        elif models:
+            self.model_add_combo.setCurrentIndex(0)
+
+        self.refresh_model_btn.setEnabled(target_idx == int(AiTarget.GEMINI))
+
+    def _get_available_models_for_target(self, target_idx: int):
+        base_models = list(AiRoute.get_popular_models(target_idx))
+        if target_idx == int(AiTarget.GEMINI) and self._cached_gemini_models:
+            for gm in self._cached_gemini_models:
+                if gm not in base_models:
+                    base_models.append(gm)
+        return base_models
+
+    def on_manual_refresh_clicked(self):
+        if self.settings_panel:
+            api_key = self.settings_panel.gemini_api_edit.text().strip()
+            self.load_gemini_models(api_key, manual=True)
+
     def rebuild_model_list(self):
         clear_layout(self.model_list_layout)
-        available = self._available_model_names()
+        target_list = [AiRoute.get_target_name(t) for t in sorted(AiRoute.TARGET_NAMES.keys())]
 
         for i, item in enumerate(self.selected_models):
             name = str(item.get('model', '')).strip()
+            target_int = int(item.get('ai_target', AiRoute.DEFAULT_TARGET))
 
             row = QWidget()
             row.setObjectName('no_back-modelRow')
             row.setFixedHeight(38)
 
-            rl = create_layout('h', (2, 1, 2, 1), 5, row)
+            rl = create_layout('h', (2, 1, 2, 1), 4, row)
 
             indicator = create_label('●' if i == self.active_model_index else '', 'modelActiveIndicator', 12)
             indicator.setAlignment(Qt.AlignmentFlag.AlignCenter)
             rl.addWidget(indicator)
 
-            combo = create_combo([], h=36)
-            combo.setObjectName('modelRowCombo')
-            combo.setToolTip('클릭하여 이 모델을 다른 Gemini 모델로 변경')
+            row_target_combo = create_combo(target_list, AiRoute.get_target_name(target_int), h=32)
+            row_target_combo.setFixedWidth(82)
+            row_target_combo.setToolTip('이 모델의 AI 제공자 변경')
+            row_target_combo.activated.connect(lambda _, idx=i, c=row_target_combo: self.change_selected_target(idx, c.currentIndex()))
+            rl.addWidget(row_target_combo)
 
-            models = list(available)
+            row_model_combo = create_combo([], h=32)
+            row_model_combo.setObjectName('modelRowCombo')
+            row_model_combo.setEditable(True)
 
-            if name and name not in models:
-                models.insert(0, name)
+            available = self._get_available_models_for_target(target_int)
+            if name and name not in available:
+                available.insert(0, name)
 
-            combo.addItems(models)
-            combo.setCurrentText(name)
-            combo.activated.connect(lambda _, idx=i, c=combo: self.change_selected_model(idx, c.currentText()))
-            rl.addWidget(combo, 1)
+            row_model_combo.addItems(available)
+            row_model_combo.setCurrentText(name)
+            row_model_combo.activated.connect(lambda _, idx=i, c=row_model_combo: self.change_selected_model(idx, c.currentText()))
+            rl.addWidget(row_model_combo, 1)
 
-            select = create_button('선택', lambda _, idx=i: self.select_model(idx), 'modelSelectBtn', 36, 54)
-            select.setToolTip('이 모델의 설정을 편집')
+            select = create_button('선택', lambda _, idx=i: self.select_model(idx), 'modelSelectBtn', 32, 48)
+            select.setToolTip('이 모델의 파라미터 편집')
 
-            delete = create_button('삭제', lambda _, idx=i: self.delete_model(idx), 'modelDeleteBtn', 36, 54)
+            delete = create_button('삭제', lambda _, idx=i: self.delete_model(idx), 'modelDeleteBtn', 32, 44)
             delete.setToolTip('이 모델 삭제')
 
             rl.addWidget(select)
@@ -97,125 +145,60 @@ class ModelPanel(QWidget):
         self.model_list_layout.addStretch(1)
         self.update_active_model_display()
 
-    def _available_model_names(self):
-        names = []
-        for i in range(self.model_add_combo.count()):
-            name = self.model_add_combo.itemText(i).strip()
-            if name and name.casefold() not in {x.casefold() for x in names}:
-                names.append(name)
-        return names
-
-    def load_gemini_models(self, api_key):
-        if not api_key:
-            QMessageBox.warning(self, '알림', 'Gemini API 키를 먼저 입력하세요.')
-            return False
-
-        self.refresh_model_btn.setEnabled(False)
-        self.status_requested.emit('Gemini 모델 목록을 불러오는 중...')
-
-        try:
-            self.model_load_thread = ModelLoadThread(api_key)
-            self.model_load_thread.finished.connect(self.on_models_loaded)
-            self.model_load_thread.start()
-            return True
-        except NameError:
-            self.refresh_model_btn.setEnabled(True)
-            return False
-
-    def on_models_loaded(self, model_names, error_msg):
-        self.refresh_model_btn.setEnabled(True)
-
-        if error_msg:
-            self.log_requested.emit(f"모델 조회 실패: {error_msg}")
-            QMessageBox.critical(self, '모델 조회 실패', error_msg)
+    def change_selected_target(self, index, new_target_idx):
+        if not (0 <= index < len(self.selected_models)):
             return
 
-        current = self.model_add_combo.currentText()
-        self.model_add_combo.clear()
-        self.model_add_combo.addItems(model_names)
-
-        if current:
-            index = self.model_add_combo.findText(current)
-            if index >= 0:
-                self.model_add_combo.setCurrentIndex(index)
-        elif model_names:
-            self.model_add_combo.setCurrentIndex(0)
-
-        if self.selected_models:
-            current_active = self.active_model_index
-            self.rebuild_model_list()
-
-            if 0 <= current_active < len(self.selected_models):
-                self.active_model_index = current_active
-                self.select_model(current_active)
-
-        if model_names:
-            self.log_requested.emit(f"텍스트 생성이 가능한 Gemini 모델 {len(model_names)}개를 불러왔습니다.")
-            self.status_requested.emit('Gemini 모델 목록을 불러왔습니다.')
-        else:
-            self.log_requested.emit('사용 가능한 Gemini 텍스트 모델을 찾지 못했습니다.')
-            self.status_requested.emit('사용 가능한 모델이 없습니다.')
-
-    def add_selected_model(self):
-        model = self.model_add_combo.currentText().strip()
-
-        if not model:
-            QMessageBox.warning(self, '알림', '추가할 모델을 선택하세요.')
+        old_target = int(self.selected_models[index].get('ai_target', 0))
+        if old_target == new_target_idx:
             return
 
-        model_key = model.casefold()
+        self.selected_models[index]['ai_target'] = new_target_idx
 
-        if any(str(x.get('model', '')).strip().casefold() == model_key for x in self.selected_models):
-            QMessageBox.warning(self, '알림', '이미 추가된 모델입니다.')
-            return
+        current_model = str(self.selected_models[index].get('model', '')).strip()
+        if AiRoute.detect_target(current_model) == old_target:
+            self.selected_models[index]['model'] = AiRoute.get_default_model(new_target_idx)
 
-        self.selected_models.append({
-            'model': model,
-            'rpm': 15,
-            'temperature': 0.1,
-            'concurrency': 4,
-            'br_start': 0,
-            'isno_x': False,
-            'thinking_budget': '기본값'
-        })
+        defaults = AiRoute.get_default_config(new_target_idx)
+        self.selected_models[index]['rpm'] = defaults['rpm']
+        self.selected_models[index]['concurrency'] = defaults['concurrency']
 
-        new_index = len(self.selected_models) - 1
-        self.active_model_index = new_index
         self.rebuild_model_list()
-        self.select_model(new_index)
-        self.log_requested.emit(f"모델 추가: {model}")
+
+        if index == self.active_model_index:
+            self.select_model(index, save_current=False)
+
+        self.log_requested.emit(
+            f"제공자 변경: [{AiRoute.get_target_name(old_target)}] → [{AiRoute.get_target_name(new_target_idx)}] ({self.selected_models[index]['model']})"
+        )
 
     def change_selected_model(self, index, new_model):
-        if index < 0 or index >= len(self.selected_models):
+        if not (0 <= index < len(self.selected_models)):
             return
 
         new_model = str(new_model).strip()
-
         if not new_model:
             return
 
-        new_key = new_model.casefold()
+        target_idx = int(self.selected_models[index].get('ai_target', 0))
+        new_key = (target_idx, new_model.casefold())
 
         for i, config in enumerate(self.selected_models):
             if i == index:
                 continue
-
-            old = str(config.get('model', '')).strip()
-
-            if old.casefold() == new_key:
-                QMessageBox.warning(self, '모델 중복', f"'{new_model}'은 이미 사용 중인 모델입니다.")
+            if (int(config.get('ai_target', 0)), str(config.get('model', '')).strip().casefold()) == new_key:
+                QMessageBox.warning(self, '모델 중복', f"'{new_model}'은 해당 제공자에 이미 등록된 모델입니다.")
                 self.rebuild_model_list()
                 return
 
         old_model = str(self.selected_models[index].get('model', '')).strip()
-
         if old_model == new_model:
             return
 
         self.selected_models[index]['model'] = new_model
 
         if index == self.active_model_index and self.settings_panel:
-            self.settings_panel.selected_model_edit.setText(new_model)
+            self.settings_panel.selected_model_edit.setText(f"[{AiRoute.get_target_name(target_idx)}] {new_model}")
 
         current_active = self.active_model_index
         self.rebuild_model_list()
@@ -224,10 +207,42 @@ class ModelPanel(QWidget):
             self.active_model_index = current_active
             self.update_active_model_display()
 
-        self.log_requested.emit(f"모델 변경: {old_model} → {new_model}")
+        self.log_requested.emit(f"모델 변경: {old_model} → [{AiRoute.get_target_name(target_idx)}] {new_model}")
+
+    def add_selected_model(self):
+        target_idx = self.target_add_combo.currentIndex()
+        model = self.model_add_combo.currentText().strip()
+
+        if not model:
+            QMessageBox.warning(self, '알림', '추가할 모델명을 입력하거나 선택하세요.')
+            return
+
+        model_key = (target_idx, model.casefold())
+
+        if any((int(x.get('ai_target', 0)), str(x.get('model', '')).strip().casefold()) == model_key for x in self.selected_models):
+            QMessageBox.warning(self, '알림', '이미 추가된 모델입니다.')
+            return
+
+        defaults = AiRoute.get_default_config(target_idx)
+        self.selected_models.append({
+            'ai_target': target_idx,
+            'model': model,
+            'rpm': defaults['rpm'],
+            'temperature': defaults['temperature'],
+            'concurrency': defaults['concurrency'],
+            'br_start': defaults['br_start'],
+            'isno_x': defaults['isno_x'],
+            'thinking_budget': defaults['thinking_budget']
+        })
+
+        new_index = len(self.selected_models) - 1
+        self.active_model_index = new_index
+        self.rebuild_model_list()
+        self.select_model(new_index)
+        self.log_requested.emit(f"모델 추가: [{AiRoute.get_target_name(target_idx)}] {model}")
 
     def delete_model(self, index):
-        if index < 0 or index >= len(self.selected_models):
+        if not (0 <= index < len(self.selected_models)):
             return
 
         if len(self.selected_models) <= 1:
@@ -235,6 +250,7 @@ class ModelPanel(QWidget):
             return
 
         model = self.selected_models[index].get('model', '')
+        target_int = int(self.selected_models[index].get('ai_target', 0))
         self.selected_models.pop(index)
 
         if self.active_model_index == index:
@@ -247,19 +263,21 @@ class ModelPanel(QWidget):
         if self.selected_models:
             self.select_model(self.active_model_index)
 
-        self.log_requested.emit(f"모델 삭제: {model}")
+        self.log_requested.emit(f"모델 삭제: [{AiRoute.get_target_name(target_int)}] {model}")
 
     def update_active_model_display(self):
         if not self.settings_panel:
             return
         if 0 <= self.active_model_index < len(self.selected_models):
-            model = str(self.selected_models[self.active_model_index].get('model', '')).strip()
-            self.settings_panel.selected_model_edit.setText(model)
+            m = self.selected_models[self.active_model_index]
+            target_name = AiRoute.get_target_name(int(m.get('ai_target', 0)))
+            model_text = str(m.get('model', '')).strip()
+            self.settings_panel.selected_model_edit.setText(f"[{target_name}] {model_text}")
         else:
             self.settings_panel.selected_model_edit.clear()
 
     def select_model(self, index, save_current=True):
-        if not 0 <= index < len(self.selected_models):
+        if not (0 <= index < len(self.selected_models)):
             return
 
         if save_current:
@@ -269,7 +287,10 @@ class ModelPanel(QWidget):
         model = self.selected_models[index]
 
         if self.settings_panel:
-            self.settings_panel.selected_model_edit.setText(str(model.get('model', '')))
+            target_int = int(model.get('ai_target', 0))
+            target_name = AiRoute.get_target_name(target_int)
+
+            self.settings_panel.selected_model_edit.setText(f"[{target_name}] {model.get('model', '')}")
             set_combo_value(self.settings_panel.rpm_combo, model.get('rpm', 15))
             set_combo_value(self.settings_panel.temp_combo, model.get('temperature', 0.1))
             set_combo_value(self.settings_panel.concurrency_combo, model.get('concurrency', 4))
@@ -284,7 +305,7 @@ class ModelPanel(QWidget):
         self.rebuild_model_list()
 
     def update_active_model(self, *args):
-        if not self.settings_panel or self.active_model_index < 0 or self.active_model_index >= len(self.selected_models):
+        if not self.settings_panel or not (0 <= self.active_model_index < len(self.selected_models)):
             return
 
         try:
@@ -301,6 +322,7 @@ class ModelPanel(QWidget):
         self.update_active_model()
         return [
             {
+                'ai_target': int(x.get('ai_target', 0)),
                 'model': str(x.get('model', '')).strip(),
                 'rpm': int(x.get('rpm', 15)),
                 'temperature': float(x.get('temperature', 0.1)),
@@ -312,3 +334,53 @@ class ModelPanel(QWidget):
             for x in self.selected_models
             if str(x.get('model', '')).strip()
         ]
+
+    def load_gemini_models(self, api_key, manual=False):
+        if not api_key:
+            if manual:
+                QMessageBox.warning(self, '알림', 'Gemini API 키를 먼저 입력하세요.')
+            return False
+
+        self.refresh_model_btn.setEnabled(False)
+        self.status_requested.emit('Gemini 모델 목록을 자동으로 조회하는 중...')
+
+        try:
+            self.model_load_thread = ModelLoadThread(api_key)
+            self.model_load_thread.finished.connect(lambda names, err: self.on_models_loaded(names, err, manual))
+            self.model_load_thread.start()
+            return True
+        except Exception as e:
+            self.refresh_model_btn.setEnabled(True)
+            if manual:
+                self.log_requested.emit(f"모델 조회 실패: {e}")
+            return False
+
+    def on_models_loaded(self, model_names, error_msg, manual=False):
+        self.refresh_model_btn.setEnabled(True)
+
+        if error_msg:
+            if manual:
+                self.log_requested.emit(f"모델 조회 실패: {error_msg}")
+                QMessageBox.critical(self, '모델 조회 실패', error_msg)
+            return
+
+        self._cached_gemini_models = list(model_names)
+
+        if self.target_add_combo.currentIndex() == int(AiTarget.GEMINI):
+            current = self.model_add_combo.currentText()
+            models = self._get_available_models_for_target(AiTarget.GEMINI)
+
+            self.model_add_combo.clear()
+            self.model_add_combo.addItems(models)
+
+            if current and current in models:
+                self.model_add_combo.setCurrentText(current)
+            elif AiRoute.DEFAULT_MODEL in models:
+                self.model_add_combo.setCurrentText(AiRoute.DEFAULT_MODEL)
+            elif models:
+                self.model_add_combo.setCurrentIndex(0)
+
+        self.rebuild_model_list()
+
+        self.log_requested.emit(f"Gemini 모델 목록 조회 완료 ({len(model_names)}개 모델)")
+        self.status_requested.emit('Gemini 모델 목록 자동 갱신 완료')

@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
 from src.system.data import open_folder, load_data, save_data
 from src.main.thread_pyqt import TranslateThread, trans_ai
 from src.trans.trans_glossary import DictionaryDialog
+from .model_utils import TARGET_NAMES
 
 from .elided_label import ElidedLabel
 from .ui_factory import create_layout, create_button, create_label
@@ -97,8 +98,10 @@ class TranslateDialog(QDialog):
         self.file_panel.file_selected.connect(self.on_file_selected)
         self.settings_panel.params_changed.connect(self.model_panel.update_active_model)
 
-        self.model_panel.refresh_model_btn.clicked.connect(self.load_gemini_models)
-        self.settings_panel.api_edit.textChanged.connect(lambda v: trans_ai.set_api_key(v) if v else None)
+        default_edit = self.settings_panel.api_edits.get(trans_ai.AI_TARGET)
+        if default_edit:
+            default_edit.textChanged.connect(lambda v: trans_ai.set_api_key(v) if v else None)
+
         self.settings_panel.dictionary_btn.clicked.connect(self.open_dictionary_dialog)
         self.settings_panel.preset_save_btn.clicked.connect(self.save_preset)
         self.settings_panel.preset_load_btn.clicked.connect(self.load_preset)
@@ -184,13 +187,15 @@ class TranslateDialog(QDialog):
 
         model_name = ''
         rpm = 15
+        ai_target = trans_ai.AI_TARGET
         if 0 <= self.model_panel.active_model_index < len(self.model_panel.selected_models):
             m = self.model_panel.selected_models[self.model_panel.active_model_index]
             model_name = m.get('model', '')
             rpm = int(m.get('rpm', 15))
+            ai_target = m.get('ai_target', trans_ai.AI_TARGET)
 
         try:
-            dialog = DictionaryDialog(self, self.file_title, self.current_dictionary, model_name, rpm)
+            dialog = DictionaryDialog(self, self.file_title, self.current_dictionary, model_name, rpm, ai_target=ai_target)
             if dialog.exec() != QDialog.DialogCode.Accepted:
                 return
 
@@ -206,12 +211,6 @@ class TranslateDialog(QDialog):
         except NameError:
             pass
 
-    def load_gemini_models(self):
-        api = self.settings_panel.api_edit.text().strip()
-        if not self.model_panel.load_gemini_models(api):
-            self.settings_panel.setCurrentIndex(3)
-            self.settings_panel.api_edit.setFocus()
-
     def load_settings(self):
         load_app_settings(
             self.settings_panel, self.model_panel,
@@ -220,7 +219,7 @@ class TranslateDialog(QDialog):
 
     def save_settings(self):
         if not save_app_settings(self.settings_panel, self.model_panel, self.log_panel.add_log):
-            QMessageBox.warning(self, '알림', 'API 키와 Gemini 모델을 확인하세요.')
+            QMessageBox.warning(self, '알림', '모델 설정을 확인하세요.')
             return False
         return True
 
@@ -241,12 +240,6 @@ class TranslateDialog(QDialog):
 
         if not self.file_path:
             QMessageBox.warning(self, '알림', 'TXT 또는 JSON 파일을 선택하세요.')
-            return
-
-        api = self.settings_panel.api_edit.text().strip()
-        if not api:
-            QMessageBox.warning(self, '알림', 'Gemini API 키를 먼저 설정하세요.')
-            self.settings_panel.setCurrentIndex(3)
             return
 
         model_configs = self.model_panel.get_model_configs()
@@ -270,6 +263,7 @@ class TranslateDialog(QDialog):
         br_starts = tuple(x['br_start'] for x in model_configs)
         isno_xs = tuple(x['isno_x'] for x in model_configs)
         thinking_budgets = tuple(x.get('thinking_budget', '기본값') for x in model_configs)
+        ai_targets = tuple(x.get('ai_target', 0) for x in model_configs)
         dict_data = dict(self.current_dictionary) if self.settings_panel.glossary_enabled else {}
 
         self.is_trans = True
@@ -278,17 +272,17 @@ class TranslateDialog(QDialog):
         self.start_btn.setText('번역 중지')
         self.progress_bar.setValue(0)
         self.percent_label.setText('0%')
-        
-        self.log_panel.reset_time()
 
+        self.log_panel.reset_time()
         self.log_panel.add_log('')
         self.log_panel.add_log('=' * 55)
         self.log_panel.add_log('번역 시작')
 
         for i, config in enumerate(model_configs, 1):
+            t_name = TARGET_NAMES.get(config.get('ai_target', 0), 'AI')
             censor_state = "건너뜀" if config['isno_x'] else "적용"
             self.log_panel.add_log(
-                f"모델 {i}: {config['model']} / RPM {config['rpm']} / Temp {config['temperature']} / "
+                f"모델 {i}: [{t_name}] {config['model']} / RPM {config['rpm']} / Temp {config['temperature']} / "
                 f"동시 {config['concurrency']} / 분할시작 {config['br_start']} / 검열: {censor_state} / "
                 f"추론: {config.get('thinking_budget', '기본값')}"
             )
@@ -298,6 +292,15 @@ class TranslateDialog(QDialog):
         self.log_panel.add_log('용어집: ' + (f"활성 ({len(dict_data)}개)" if self.settings_panel.glossary_enabled else '비활성'))
         self.log_panel.add_log('=' * 55)
 
+        thread_kwargs = {
+            'dicts': dict_data,
+            'check': self.get_out,
+            'check_i': self.get_out_i,
+            'br_start': br_starts,
+            'isno_x': isno_xs,
+            'thinking_budget': thinking_budgets,
+        }
+
         try:
             self.thread = TranslateThread(
                 self.file_path,
@@ -306,12 +309,8 @@ class TranslateDialog(QDialog):
                 temperatures,
                 concurrencies,
                 max_chars,
-                dicts=dict_data,
-                check=self.get_out,
-                check_i=self.get_out_i,
-                br_start=br_starts,
-                isno_x=isno_xs,
-                thinking_budget=thinking_budgets
+                ai_target=ai_targets,
+                **thread_kwargs
             )
             self.thread.progress_changed.connect(self.update_progress)
             self.thread.log_changed.connect(self.log_panel.add_log)
@@ -327,7 +326,7 @@ class TranslateDialog(QDialog):
             return
         self.is_stop = True
         self.log_panel.add_log('중지: 번역 중지 요청 중... 작업 종료 후 중지')
-        self.start_btn.setText('중지 중... (다시 눌를 시 강제 번역 종료)')
+        self.start_btn.setText('중지 중... (다시 누를 시 강제 번역 종료)')
 
     def stop_trans_i(self):
         if not self.is_trans:

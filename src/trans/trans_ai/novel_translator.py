@@ -30,8 +30,11 @@ async def _translate_light_novel_async(
     check_i=None,
     br_start=0,
     isno_x=False,
-    thinking_budget=None
+    thinking_budget=None,
+    ai_target=None
 ):
+    target = config.AI_TARGET if ai_target is None else ai_target
+
     if config.API == '':
         if log_callback:
             log_callback('에러: API 키가 설정되지 않았습니다.')
@@ -39,14 +42,13 @@ async def _translate_light_novel_async(
 
     try:
         workers = _create_model_workers(
-            model_name, rpm, max_concurrent, temperature, br_start, isno_x, thinking_budget
+            model_name, rpm, max_concurrent, temperature, br_start, isno_x, thinking_budget, ai_target=target
         )
     except Exception as e:
         if log_callback:
             log_callback(f'에러: 모델 설정 오류: {e}')
         return 'error'
 
-    print(repair_chunk_boundaries(split_text_by_lines(text, max_chars=max_chars), raw=raw))
     chunks = repair_chunk_boundaries(split_text_by_lines(text, max_chars=max_chars), raw=raw)
     items = [
         TranslationItem(idx=i, source_text=chunk, orig_text=chunk, check_disk_cache=True, on_error='novel')
@@ -59,11 +61,11 @@ async def _translate_light_novel_async(
     safe = re.sub(r'[\\/:*?"<>|]', '_', title).strip()
 
     model_info = ', '.join(
-        f'{worker.model_name}(RPM={worker.rpm},동시={worker.max_concurrent},온도={worker.temperature},분할={worker.br_start},검열건너뜀={worker.isno_x},추론={worker.thinking_budget})'
+        f'{worker.model_name}(Target={worker.ai_target},RPM={worker.rpm},동시={worker.max_concurrent},'
+        f'온도={worker.temperature},분할={worker.br_start},검열건너뜀={worker.isno_x},추론={worker.thinking_budget})'
         for worker in workers
     )
     msg = f'총 {len(chunks)}개 청크 분할 완료 (청크 크기: {max_chars}). 사용 모델: {model_info}, RAW: {raw}'
-    print(msg)
     if log_callback and not (check_i and check_i()):
         log_callback(msg)
 
@@ -118,7 +120,8 @@ def translate_light_novel(
     check_i=None,
     br_start=0,
     isno_x=False,
-    thinking_budget=None
+    thinking_budget=None,
+    ai_target=None
 ):
     return asyncio.run(
         _translate_light_novel_async(
@@ -137,7 +140,8 @@ def translate_light_novel(
             check_i,
             br_start,
             isno_x,
-            thinking_budget
+            thinking_budget,
+            ai_target=ai_target
         )
     )
 
@@ -145,7 +149,7 @@ def translate_light_novel(
 def TransAi_All(
     txt: str,
     max_chars=5000,
-    model_name='gemini-3.5-flash-Lite',
+    model_name='gemini-2.5-flash-lite',
     rpm=15,
     temperature=0.1,
     max_concurrent=4,
@@ -156,7 +160,8 @@ def TransAi_All(
     check_i=None,
     br_start=0,
     isno_x=False,
-    thinking_budget=None
+    thinking_budget=None,
+    ai_target=None
 ):
     try:
         raw = detect_raw_text(txt)
@@ -190,7 +195,8 @@ def TransAi_All(
                 check_i=check_i,
                 br_start=br_start,
                 isno_x=isno_x,
-                thinking_budget=thinking_budget
+                thinking_budget=thinking_budget,
+                ai_target=ai_target
             )
 
             if trans_out == 'ignore':
@@ -249,7 +255,8 @@ def TransAi_All(
             check_i=check_i,
             br_start=br_start,
             isno_x=isno_x,
-            thinking_budget=thinking_budget
+            thinking_budget=thinking_budget,
+            ai_target=ai_target
         )
 
         if trans_out == 'ignore':

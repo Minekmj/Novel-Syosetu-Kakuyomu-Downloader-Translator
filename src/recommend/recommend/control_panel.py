@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
@@ -6,12 +6,14 @@ from PySide6.QtWidgets import (
     QLabel, QLineEdit, QTextEdit, QPushButton, QComboBox, QCheckBox,
     QListWidget, QListWidgetItem, QMessageBox
 )
+from src.ai import AiRoute, AiTarget
 from src.system.data import load_data, save_data
 from src.main.thread_pyqt import ModelLoadThread
 from .widgets import SmoothListWidget
 
+
 class RecommendControlPanel(QWidget):
-    start_requested = Signal(str, str, str, int, dict)
+    start_requested = Signal(str, str, str, int, dict, int)
     log_requested = Signal(str)
 
     def __init__(self, parent=None):
@@ -37,8 +39,17 @@ class RecommendControlPanel(QWidget):
 
         api_box = QHBoxLayout()
         api_box.setSpacing(6)
+
+        self.target_combo = QComboBox()
+        self.target_combo.setFixedHeight(34)
+        self.target_combo.setFixedWidth(85)
+        for target_id, name in sorted(AiRoute.TARGET_NAMES.items()):
+            self.target_combo.addItem(name, target_id)
+        self.target_combo.currentIndexChanged.connect(self.on_target_combo_changed)
+        api_box.addWidget(self.target_combo)
+
         self.api_key_edit = QLineEdit()
-        self.api_key_edit.setPlaceholderText("Gemini API Key")
+        self.api_key_edit.setPlaceholderText("API Key")
         self.api_key_edit.setEchoMode(QLineEdit.Password)
         self.api_key_edit.setFixedHeight(34)
         self.api_key_edit.textChanged.connect(self.on_api_key_changed)
@@ -47,7 +58,7 @@ class RecommendControlPanel(QWidget):
         self.api_toggle_btn = QPushButton("보기")
         self.api_toggle_btn.setCheckable(True)
         self.api_toggle_btn.setObjectName("subtleBtn")
-        self.api_toggle_btn.setFixedSize(54, 34)
+        self.api_toggle_btn.setFixedSize(50, 34)
         self.api_toggle_btn.setCursor(Qt.PointingHandCursor)
         self.api_toggle_btn.clicked.connect(self.toggle_api_visibility)
         api_box.addWidget(self.api_toggle_btn)
@@ -55,21 +66,22 @@ class RecommendControlPanel(QWidget):
 
         model_box = QHBoxLayout()
         model_box.setSpacing(6)
+
         self.model_combo = QComboBox()
         self.model_combo.setFixedHeight(34)
-        self.model_combo.setEditable(False)
-        self.model_combo.addItem("gemini-3.5-flash-lite")
+        self.model_combo.setEditable(True)
+        self.model_combo.setPlaceholderText("모델명 선택 또는 직접 입력")
         model_box.addWidget(self.model_combo, stretch=1)
 
-        self.refresh_model_btn = QPushButton("새로고침")
+        self.refresh_model_btn = QPushButton("조회")
         self.refresh_model_btn.setObjectName("subtleBtn")
-        self.refresh_model_btn.setFixedSize(68, 34)
+        self.refresh_model_btn.setFixedSize(60, 34)
         self.refresh_model_btn.setCursor(Qt.PointingHandCursor)
         self.refresh_model_btn.clicked.connect(self.fetch_gemini_models)
         model_box.addWidget(self.refresh_model_btn)
         layout.addLayout(model_box)
 
-        model_desc = QLabel("라이트 계열 모델을 추천합니다. 반복 작업으로 인해 무료 티어 시 제한이 빨리 찾아 옵니다.")
+        model_desc = QLabel("라이트 계열 모델을 추천합니다. 반복 작업으로 인해 무료 티어 시 제한이 빨리 찾아옵니다.")
         model_desc.setObjectName("lbl_url")
         model_desc.setStyleSheet("font-size: 11px; line-height: 1.3;")
         model_desc.setWordWrap(True)
@@ -110,7 +122,7 @@ class RecommendControlPanel(QWidget):
         )
         layout.addWidget(self.history_list_widget)
 
-        list_desc = QLabel("Ai 추천 시 반영할 목록 입니다. 작품을 선택하여 반영 혹은 반영하지 않음을 선택 할 수 있습니다.\n작품 좌측 표시를 트리거 하세요.")
+        list_desc = QLabel("AI 추천 시 반영할 목록입니다. 작품을 선택하여 반영 여부를 결정할 수 있습니다.")
         list_desc.setObjectName("lbl_url")
         list_desc.setStyleSheet("font-size: 11px; line-height: 1.3;")
         list_desc.setWordWrap(True)
@@ -137,7 +149,7 @@ class RecommendControlPanel(QWidget):
         self.top_k_combo.setCurrentIndex(1)
         rec_count_box.addWidget(self.top_k_combo, stretch=1)
         layout.addLayout(rec_count_box)
-
+        
         self.start_btn = QPushButton("추천 시작")
         self.start_btn.setObjectName("primaryBtn")
         self.start_btn.setFixedHeight(44)
@@ -145,14 +157,57 @@ class RecommendControlPanel(QWidget):
         self.start_btn.clicked.connect(self.start_recommendation)
         layout.addWidget(self.start_btn)
 
+    def get_current_target(self) -> int:
+        data = self.target_combo.currentData()
+        return int(data) if data is not None else AiRoute.DEFAULT_TARGET
+
+    def on_target_combo_changed(self, index: int):
+        target = self.get_current_target()
+        target_name = AiRoute.get_target_name(target)
+        self.api_key_edit.setPlaceholderText(f"{target_name} API Key 또는 Endpoint")
+
+        user_data = load_data()
+        single_k, list_k, _ = AiRoute.get_storage_keys(target)
+        saved_api = str(user_data.get(single_k, "")).strip()
+        if not saved_api:
+            keys = user_data.get(list_k, [])
+            if isinstance(keys, list) and keys:
+                saved_api = str(keys[0]).strip()
+
+        self.api_key_edit.blockSignals(True)
+        self.api_key_edit.setText(saved_api)
+        self.api_key_edit.blockSignals(False)
+
+        popular_models = AiRoute.get_popular_models(target)
+        self.model_combo.clear()
+        self.model_combo.addItems(popular_models)
+
+        def_model = AiRoute.get_default_model(target)
+        if def_model in popular_models:
+            self.model_combo.setCurrentText(def_model)
+        elif popular_models:
+            self.model_combo.setCurrentIndex(0)
+
+        self.refresh_model_btn.setEnabled(target == int(AiTarget.GEMINI))
+        if target == int(AiTarget.GEMINI) and saved_api:
+            QTimer.singleShot(100, self.fetch_gemini_models)
+
     def load_initial_data(self):
         user_data = load_data()
-        saved_api = user_data.get("api", "").strip()
-        if saved_api:
-            self.api_key_edit.blockSignals(True)
-            self.api_key_edit.setText(saved_api)
-            self.api_key_edit.blockSignals(False)
-            QTimer.singleShot(100, self.fetch_gemini_models)
+
+        saved_target = user_data.get("translate_ai_target", AiRoute.DEFAULT_TARGET)
+        try:
+            curr_target = int(saved_target)
+        except (ValueError, TypeError):
+            curr_target = AiRoute.DEFAULT_TARGET
+
+        t_idx = self.target_combo.findData(curr_target)
+        if t_idx >= 0:
+            self.target_combo.setCurrentIndex(t_idx)
+        else:
+            self.target_combo.setCurrentIndex(0)
+
+        self.on_target_combo_changed(self.target_combo.currentIndex())
 
         raw_list = user_data.get("list", {})
         self.history_list_widget.clear()
@@ -174,7 +229,7 @@ class RecommendControlPanel(QWidget):
 
     def on_api_key_changed(self):
         key = self.api_key_edit.text().strip()
-        if len(key) >= 20:
+        if len(key) >= 20 and self.get_current_target() == int(AiTarget.GEMINI):
             self.api_timer.start()
 
     def toggle_api_visibility(self, checked: bool):
@@ -203,6 +258,9 @@ class RecommendControlPanel(QWidget):
             item.setCheckState(target_state)
 
     def fetch_gemini_models(self):
+        if self.get_current_target() != int(AiTarget.GEMINI):
+            return
+
         api_key = self.api_key_edit.text().strip()
         if not api_key:
             return
@@ -224,21 +282,21 @@ class RecommendControlPanel(QWidget):
             return
 
         if models:
+            current = self.model_combo.currentText()
+            all_models = list(models)
+            for pm in AiRoute.get_popular_models(AiTarget.GEMINI):
+                if pm not in all_models:
+                    all_models.append(pm)
+
             self.model_combo.clear()
-            self.model_combo.addItems(models)
+            self.model_combo.addItems(all_models)
 
-            matched_idx = -1
-            priority_targets = ["gemini-3.5-flash-lite", "3.5-lite", "gemini-3.1-flash-lite", "flash-lite"]
-            for target in priority_targets:
-                for idx, name in enumerate(models):
-                    if target in name.lower():
-                        matched_idx = idx
-                        break
-                if matched_idx != -1:
-                    break
-
-            if matched_idx != -1:
-                self.model_combo.setCurrentIndex(matched_idx)
+            if current and current in all_models:
+                self.model_combo.setCurrentText(current)
+            elif AiRoute.DEFAULT_MODEL in all_models:
+                self.model_combo.setCurrentText(AiRoute.DEFAULT_MODEL)
+            elif all_models:
+                self.model_combo.setCurrentIndex(0)
 
             self.log_requested.emit(f"Gemini 모델 {len(models)}개를 불러왔습니다.")
 
@@ -248,12 +306,18 @@ class RecommendControlPanel(QWidget):
 
     def start_recommendation(self):
         api_key = self.api_key_edit.text().strip()
-        if not api_key:
-            QMessageBox.warning(self, "알림", "Gemini API 키를 입력하세요.")
+        target = self.get_current_target()
+        target_name = AiRoute.get_target_name(target)
+
+        if not api_key and target != int(AiTarget.OLLAMA):
+            QMessageBox.warning(self, "알림", f"{target_name} API 키를 입력하세요.")
             self.api_key_edit.setFocus()
             return
 
-        model = self.model_combo.currentText().strip() or "gemini-3.5-flash-lite"
+        model = self.model_combo.currentText().strip() or AiRoute.get_default_model(target)
+        detected_target = AiRoute.detect_target(model)
+        final_target = detected_target if detected_target != AiRoute.DEFAULT_TARGET else target
+
         condition = self.prompt_edit.toPlainText().strip()
         top_k = self.top_k_combo.currentData() or 5
 
@@ -270,7 +334,13 @@ class RecommendControlPanel(QWidget):
             user_data["list"] = selected_works
 
         saved = load_data()
-        saved["api"] = api_key
+        single_k, list_k, _ = AiRoute.get_storage_keys(target)
+        saved[single_k] = api_key
+        keys_list = saved.get(list_k, [])
+        if not isinstance(keys_list, list) or not keys_list:
+            saved[list_k] = [api_key] if api_key else []
+        elif api_key and api_key not in keys_list:
+            saved[list_k].insert(0, api_key)
         save_data(saved)
 
-        self.start_requested.emit(api_key, model, condition, top_k, user_data)
+        self.start_requested.emit(api_key, model, condition, top_k, user_data, final_target)

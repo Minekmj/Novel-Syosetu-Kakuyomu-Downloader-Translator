@@ -1,21 +1,23 @@
 import json
-from typing import List, Dict, Any, Optional, Set
+from typing import List, Dict, Any, Optional
 from collections.abc import Callable
 
-from .ai_client import GeminiAIClient
 from .executor import SearchExecutor
 from .specs import PLATFORM_SPEC_TEXT, build_search_params
 from .utils import PrintIo, normalize_url, extract_json_from_response, site_delay_all
 
+from .ai_client import SuggestionAIClient
+
 class SearchAgent:
     def __init__(
         self,
-        ai_client: GeminiAIClient,
+        ai_client: SuggestionAIClient,
         executor: SearchExecutor,
         site_meta: Dict[str, Any],
         site_success_counts: Dict[str, int],
         log_callback: Optional[Callable] = None
     ):
+        self.ai = ai_client
         self.ai = ai_client
         self.executor = executor
         self.site_meta = site_meta
@@ -96,13 +98,13 @@ class SearchAgent:
 위 정보를 바탕으로 아래 JSON 규격으로만 응답하세요:
 {{
   "ai_thought": "현재 후보군 상태, 사용자 요청 조건 및 금기 사항 분석, 이번 라운드에 발주할 검색 전략",
-  "decision": "CONTINUE",  // 후보가 충분히 검증되었으면 "FINISH", 더 필요하면 "CONTINUE"
+  "decision": "CONTINUE",
   "actions": [
     {{
-      "site": "kakuyomu",  // "kakuyomu", "naro", "hameln"
-      "reason": "구체적인 전략적 선정 사유", //다만 조건들을 나열하는 것이 아니라 자연스럽게 설명하는 것이며 일본어 태그를 말할 시 한국어로 말 해준다. "decision"의 상태를 직접적으로 말하는 것이아니라 '속행', '끝' 이런식으로 일반 사용자가 들을 수 있도록 한다.
+      "site": "kakuyomu",
+      "reason": "구체적인 전략적 선정 사유",
       "page": 1,
-      "query": [],  // 핵심 일본어 태그 0~2개. 매우 상세히 알고 싶으면 3개 이상(이 때는 대중적인 태그를 사용하여야 함.)
+      "query": [],
       "genre": "romance",
       "order": "popular",
       "serial_status": "running",
@@ -112,12 +114,11 @@ class SearchAgent:
       "exclude_words": [],
       "inclusion_flags": [],
       "exclusion_flags": [],
-      "origin": "原作：オリジナル",  // 하멜른 전용
+      "origin": "原作：オリジナル",
     }}
   ]
 }}
 * CONTINUE일 때는 반드시 1~3개의 action을 지시하세요.
-* action은 보통 사이트를 골고루 넣지만 같은 사이트를 여러번하여도 좋습니다.
 * 70개 이상 많은 작품이 있을 시 더이상 검색을 하지 말고 "FINISH"를 무조건 사용해야 합니다. [매우중요]
 * 무조건 70개 이상일 때만 멈추는 것이 아니라 70개 보다 작은 수의 작품이라도 이정도면 충분하다고 판단되면 "FINISH" 해도 좋습니다.
 """
@@ -147,9 +148,9 @@ class SearchAgent:
         system_instruction = (
             "당신은 일본 웹소설 1차 사전 스크리닝 심사관입니다.\n"
             "목표1: 제목, 키워드(태그), 간이 줄거리를 보고 사용자의 특별 요청 조건과 독자 취향에 맞는지 냉철하게 판정하는 것입니다.\n"
-            "목표2: 작품 후보를 줄이는 역할을 하며 25개 이상의 매우 많은 작품일 경우 최대 20개의 작품만 '줄거리'로 판정 할 수 있고, 5개만 '의심' 판정 할 수 있습니다. 그리고 남은 작품은 전부 '버려'로 지정합니다. 이 때 최선의 선택을 하여야 합니다.\n\n"
+            "목표2: 작품 후보를 줄이는 역할을 하며 25개 이상의 매우 많은 작품일 경우 최대 20개의 작품만 '줄거리'로 판정 할 수 있고, 5개만 '의심' 판정 할 수 있습니다. 그리고 남은 작품은 전부 '버려'로 지정합니다.\n\n"
             "★ 판정 상태 (정확히 다음 3가지 중 하나로 판정):\n"
-            "1. '버려': 사용자의 금기 조건이 확인되거나, 질적으로 부적합한 경우. 또는 사용자가 싫어할 것으로 예상이 되거나 절대 선택될 일이 없는 작품 -> 상세 조회 없이 즉시 폐기.\n"
+            "1. '버려': 사용자의 금기 조건이 확인되거나, 질적으로 부적합한 경우 -> 상세 조회 없이 즉시 폐기.\n"
             "2. '줄거리': 요청 조건과 취향에 부합하는 명백한 핵심 키워드가 확인되어 정밀 검토할 가치가 매우 높은 경우.\n"
             "3. '의심': 제목이나 미리보기만으로는 적합성을 단정하기 어려워 상세 줄거리를 확인할 필요가 있는 경우.\n"
         )
@@ -179,7 +180,7 @@ class SearchAgent:
   "triage_results": [
     {{
       "id": 0,
-      "status": "줄거리",  // "줄거리", "의심", "버려" 중 하나
+      "status": "줄거리",
     }}
   ]
 }}
@@ -215,14 +216,14 @@ class SearchAgent:
     def run_search_loop(
         self,
         history_items: List[Dict[str, Any]],
-        read_urls: Set[str],
+        read_urls: set,
         user_custom_prompt: Optional[str],
         top_k: int = 5
     ) -> List[Dict[str, Any]]:
         PrintIo("=== AI 자율 에이전트 다회차 탐색 가동 ===")
 
         all_candidates: Dict[str, Dict[str, Any]] = {}
-        discarded_urls: Set[str] = set()
+        discarded_urls: set = set()
         search_history_logs: List[Dict[str, Any]] = []
 
         max_agent_rounds = 7
@@ -355,7 +356,7 @@ class SearchAgent:
                     round_idx -= 1
                     round_miss += 1
                 continue
-            
+
             round_miss = 0
 
             PrintIo(f"[1차 스크리닝] 신규 발굴 {len(round_pending_items)}작품 대상 적합성 사전 심사")

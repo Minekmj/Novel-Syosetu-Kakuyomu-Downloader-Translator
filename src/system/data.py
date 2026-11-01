@@ -1,22 +1,21 @@
 import json
 import os
-
-from src.system.load_save import load_data, save_data
-
 import re
-
-import src.system.theme as theme
-from src.system.load_save import load_data, save_data
+import platform
+import subprocess
 
 from PySide6.QtGui import QColor
 
+import src.system.theme as theme
+from src.system.load_save import load_data, save_data
+from src.system.src import get_resource_path
+
 THEME_DATA = theme.THEME_DATA
-
 THEME_NAME = "LAVENDER"
-
 MINIMAL_DARK_THEME = ""
 
 VAR_PATTERN = re.compile(r"\|([a-zA-Z0-9_]+)\|\|")
+
 
 def build_qss(template_qss: str, theme_dict: dict) -> str:
     preprocessed = {}
@@ -33,14 +32,11 @@ def build_qss(template_qss: str, theme_dict: dict) -> str:
 
     return VAR_PATTERN.sub(lambda m: preprocessed.get(m.group(1), ""), template_qss)
 
-from src.system.src import get_resource_path
-
 
 def rest():
     global THEME_NAME, MINIMAL_DARK_THEME
 
     THEME_NAME = load_data().get("theme", "LAVENDER")
-
     css_file_path = get_resource_path("css/main.qss")
 
     try:
@@ -51,9 +47,8 @@ def rest():
         if theme_dict is None:
             theme_dict = theme.THEMES.get("LAVENDER")
             THEME_NAME = "LAVENDER"
-        
-        MINIMAL_DARK_THEME = build_qss(qss_content, theme_dict)
 
+        MINIMAL_DARK_THEME = build_qss(qss_content, theme_dict)
         raw_color = get_item_background_color("CardFrame_ui", MINIMAL_DARK_THEME)
 
         def replace_color_to_rgba(match):
@@ -70,46 +65,44 @@ def rest():
 
     except FileNotFoundError:
         print(f"CSS 파일을 찾을 수 없습니다: {css_file_path}")
-        
+
+
 def return_theme():
-    th = "#000000"
-    th = getattr(theme, f"COLORS_{THEME_NAME.replace(' ', '_')}", "#000000")
-    return th
+    return getattr(theme, f"COLORS_{THEME_NAME.replace(' ', '_')}", "#000000")
+
 
 def get_item_background_color(item, MINIMAL_DARK_THEME):
     th = str(MINIMAL_DARK_THEME)
     data = th[th.find(item):]
     return re.search(r'background-color\s*:\s*([^;]+);', data).group(1).strip()
 
+
 def change_item_background_color(item, MINIMAL_DARK_THEME, new_color):
     th = str(MINIMAL_DARK_THEME)
-    
     item_index = th.find(item)
     if item_index == -1:
         return th
-    
+
     prefix = th[:item_index]
     target_data = th[item_index:]
-    
+
     updated_data = re.sub(
         r'(background-color\s*:\s*)[^;]+(;)',
         rf'\g<1>{new_color}\2',
         target_data,
         count=1
     )
-    
+
     return prefix + updated_data
 
-import platform
-import subprocess
+
 def open_folder(path):
-    
     if path == "./out/":
         path = os.path.join(os.getcwd(), "out")
-    
+
     if not path or not os.path.exists(path):
         return
-    
+
     try:
         if platform.system() == "Windows":
             os.startfile(path)

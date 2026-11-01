@@ -1,11 +1,12 @@
 import json
 from typing import List, Dict, Any, Optional
-from .ai_client import GeminiAIClient
+from .ai_client import SuggestionAIClient
 from .utils import PrintIo, extract_json_from_response
 
 class CandidateRanker:
-    def __init__(self, ai_client: GeminiAIClient):
+    def __init__(self, ai_client: SuggestionAIClient):
         self.ai = ai_client
+        ...
 
     def rerank_and_synthesize(
         self,
@@ -14,7 +15,7 @@ class CandidateRanker:
         candidates: List[Dict[str, Any]],
         top_k: int = 5
     ) -> Dict[str, Any]:
-        PrintIo(f"[행동] Gemini 2차: 수집된 {len(candidates)}개 후보 중 최적의 {top_k}작품 심층 리랭킹 및 평가")
+        PrintIo(f"[행동] AI 2차: 수집된 {len(candidates)}개 후보 중 최적의 {top_k}작품 심층 리랭킹 및 평가")
 
         if not candidates:
             return {"curator_note": "조건에 부합하는 신작 소설을 발굴하지 못했습니다.", "recommended_works": []}
@@ -72,7 +73,7 @@ class CandidateRanker:
 
 위 후보작 중에서 독자의 취향 및 특별 요청 조건에 가장 알맞은 최상위 {top_k}작품을 선별하여 아래 JSON 규격으로 반환하세요:
 {{
-  "curator_note": "독자에게 전하는 종합 코멘트 (특별 요청 사항 반영 내역 및 엄격한 선별 기준 설명 3문장)", //다만 조건들을 나열하는 것이 아니라 자연스럽게 설명하는 것이며 일본어 태그를 말할 시 한국어로 말 해준다.
+  "curator_note": "독자에게 전하는 종합 코멘트 (특별 요청 사항 반영 내역 및 엄격한 선별 기준 설명 3문장)",
   "recommended_works": [
     {{
       "candidate_id": 0,

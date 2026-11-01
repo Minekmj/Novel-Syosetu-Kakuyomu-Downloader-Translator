@@ -1,18 +1,18 @@
+import os
 import re
 import threading
+from typing import Optional
 
-from src.recommend.suggestion import NovelRecommender
-import src.trans.trans_ai as trans_ai
 from PySide6.QtCore import QObject, QThread, Signal
+from src.ai import AiRoute, AiTarget
 import src.find.findsyou as findsyou
-import os
-from google import genai
-
+from src.recommend.suggestion import NovelRecommender
 from src.trans.trans import Translator
+import src.trans.trans_ai as trans_ai
 
 DOWN = None
-
 STOP_CLICK = False
+
 
 class ClickWatcher(QObject):
     update_address = Signal(str)
@@ -44,7 +44,8 @@ class ClickWatcher(QObject):
         if self.thread and self.thread.is_alive() and threading.current_thread() is not self.thread:
             self.thread.join(timeout=1)
         self.thread = None
-            
+
+
 class DownloadThread(QThread):
     finished_signal = Signal(bool, str)
 
@@ -65,8 +66,9 @@ class DownloadThread(QThread):
         except Exception as e:
             self.finished_signal.emit(False, str(e))
 
+
 class EpubConvertThread(QThread):
-    finished_signal = Signal(bool, str, str) 
+    finished_signal = Signal(bool, str, str)
 
     def __init__(self, txt_paths):
         super().__init__()
@@ -76,12 +78,12 @@ class EpubConvertThread(QThread):
         try:
             for path in self.txt_paths:
                 DOWN.create_epub_from_merged_txt(path)
-            
-            output_dir = os.path.join(DOWN.downin.base_data.OUTFOLDER, "epub")
 
+            output_dir = os.path.join(DOWN.downin.base_data.OUTFOLDER, "epub")
             self.finished_signal.emit(True, "EPUB 변환이 완료되었습니다.", output_dir)
         except Exception as e:
             self.finished_signal.emit(False, str(e), "")
+
 
 class FetchNewNumberWorker(QThread):
     finished = Signal(tuple)
@@ -103,15 +105,30 @@ class FetchNewNumberWorker(QThread):
                     self.finished.emit((str(num), ""))
         except Exception:
             self.finished.emit(("오류", ""))
-            
+
+
 class TranslateThread(QThread):
     progress_changed = Signal(int, int, str)
     log_changed = Signal(str)
     finished_signal = Signal(bool, str, str)
 
-    def __init__(self, file_path, model_name, rpm, temperature, max_concurrent, max_chars, dicts, check, check_i, br_start, isno_x, thinking_budget=None):
+    def __init__(
+        self,
+        file_path,
+        model_name,
+        rpm,
+        temperature,
+        max_concurrent,
+        max_chars,
+        dicts,
+        check,
+        check_i,
+        br_start,
+        isno_x,
+        thinking_budget=None,
+        ai_target=None
+    ):
         super().__init__()
-
         self.file_path = file_path
         self.model_name = model_name
         self.rpm = rpm
@@ -124,6 +141,7 @@ class TranslateThread(QThread):
         self.br_start = br_start
         self.isno_x = isno_x
         self.thinking_budget = thinking_budget
+        self.ai_target = ai_target
 
     def run(self):
         try:
@@ -158,7 +176,8 @@ class TranslateThread(QThread):
                     check_i=self.check_i,
                     br_start=self.br_start,
                     isno_x=self.isno_x,
-                    thinking_budget=self.thinking_budget
+                    thinking_budget=self.thinking_budget,
+                    ai_target=self.ai_target
                 )
 
             else:
@@ -166,22 +185,17 @@ class TranslateThread(QThread):
 
                 with open(self.file_path, "r", encoding="utf-8") as f:
                     text = f.read()
-                    
-                first_line = text.splitlines()[0].strip()
+
+                first_line = text.splitlines()[0].strip() if text.splitlines() else ""
                 if first_line and set(first_line) == {"="}:
                     filepath = self.file_path
-                    
                     ff = os.path.basename(os.path.dirname(filepath))
-
                     filename = os.path.splitext(os.path.basename(filepath))[0]
-
                     if filename.startswith("["):
                         s = re.sub(r"^\[.*?[\]\"'\)]\s*", "", filename)
                     else:
                         s = filename
-
                     result = f"{ff}\n{s}\n(raw)\n+---+\n"
-
                     text = result + text
 
                 trans_ai.TransAi_All(
@@ -198,97 +212,61 @@ class TranslateThread(QThread):
                     check_i=self.check_i,
                     br_start=self.br_start,
                     isno_x=self.isno_x,
-                    thinking_budget=self.thinking_budget
+                    thinking_budget=self.thinking_budget,
+                    ai_target=self.ai_target
                 )
+
             if not self.check():
                 output_dir = os.path.join(DOWN.downin.base_data.OUTFOLDER, "epub")
-
                 self.log_changed.emit("=" * 60)
                 self.log_changed.emit("번역 완료")
                 self.log_changed.emit(f"출력 폴더: {output_dir}")
                 self.log_changed.emit("=" * 60)
-
-                self.finished_signal.emit(
-                    True,
-                    "번역이 완료되었습니다.",
-                    output_dir
-                )
+                self.finished_signal.emit(True, "번역이 완료되었습니다.", output_dir)
             else:
                 self.log_changed.emit("=" * 60)
                 self.log_changed.emit("번역 중지")
                 self.log_changed.emit("=" * 60)
-    
                 self.finished_signal.emit(False, "번역이 중지 되었습니다.", "")
 
         except Exception as e:
             import traceback
-
             error_text = traceback.format_exc()
-
             self.log_changed.emit("=" * 60)
             self.log_changed.emit("번역 중 오류 발생")
             self.log_changed.emit(error_text)
             self.log_changed.emit("=" * 60)
-
             self.finished_signal.emit(False, str(e), "")
 
-class ModelLoadThread(QThread):
-    finished = Signal(list, str) 
 
-    def __init__(self, api_key):
+class ModelLoadThread(QThread):
+    finished = Signal(list, str)
+
+    def __init__(self, api_key: str, ai_target: Optional[int] = None):
         super().__init__()
         self.api_key = api_key
+        self.ai_target = ai_target
 
     def run(self):
         try:
-            client = genai.Client(api_key=self.api_key)
-            models = client.models.list()
-            model_names = []
-            
-            for model in models:
-                name = model.name
-                if not name:
-                    continue
-                
-                if name.startswith("models/"):
-                    name = name.replace("models/", "", 1)
-                
-                m = name.lower()
-                if not (m.startswith("gemini") or m.startswith("gemma")):
-                    continue
-                    
-                exclude_keywords = [
-                    "embedding", "robotics", "tts", "audio", "image", 
-                    "omni", "computer-use", "customtools", "live", "transcribe", "nano",
-                    "3.1-flash-lite-preview", "3-pro-preview", "3.7-flash", "2.5"
-                ]
-                if any(keyword in name.lower() for keyword in exclude_keywords):
-                    continue
-
-                supported_methods = getattr(model, "supported_generation_methods", None)
-                if supported_methods and "generateContent" not in supported_methods:
-                    continue
-                
-                model_names.append(name)
-            try:
-                model_names.remove("gemini-3.5-flash")
-            except:
-                pass
-            self.finished.emit(sorted(set(model_names)), "")
+            model_names = AiRoute.fetch_models(api_key=self.api_key, target=self.ai_target)
+            self.finished.emit(model_names, "")
         except Exception as e:
             self.finished.emit([], str(e))
-            
+
+
 class GlossaryExtractThread(QThread):
     log_signal = Signal(str)
     finished_signal = Signal(dict, str)
 
-    def __init__(self, all_text, paserent, chunk, model, rpm, parent=None):
+    def __init__(self, all_text, paserent, chunk, model, rpm, parent=None, ai_target=None):
         super().__init__(parent)
         self.all_text = all_text
         self.paserent = paserent
         self.chunk = chunk
         self.model = model
         self.rpm = rpm
+        self.ai_target = ai_target
 
     def run(self):
         try:
@@ -305,23 +283,19 @@ class GlossaryExtractThread(QThread):
                 chunk=self.chunk,
                 log_callback=log_callback,
                 model=self.model,
-                RPM=self.rpm
+                RPM=self.rpm,
+                ai_target=self.ai_target
             )
 
             if not isinstance(result, dict):
                 result = {}
 
-            self.finished_signal.emit(
-                result,
-                ""
-            )
+            self.finished_signal.emit(result, "")
 
         except Exception as e:
-            self.finished_signal.emit(
-                {},
-                str(e)
-            )
-            
+            self.finished_signal.emit({}, str(e))
+
+
 class TitleTranslateWorker(QThread):
     finished = Signal(str)
 
@@ -342,13 +316,22 @@ class RecommendWorker(QThread):
     finished_signal = Signal(dict)
     error_signal = Signal(str)
 
-    def __init__(self, api_key: str, model: str, condition: str, top_k: int, user_data: dict):
+    def __init__(
+        self,
+        api_key: str,
+        model: str,
+        condition: str,
+        top_k: int,
+        user_data: dict,
+        ai_target: Optional[int] = None
+    ):
         super().__init__()
         self.api_key = api_key
         self.model = model
         self.condition = condition
         self.top_k = top_k
         self.user_data = user_data
+        self.ai_target = ai_target
 
     def run(self):
         try:
@@ -359,10 +342,11 @@ class RecommendWorker(QThread):
                 self.log_signal.emit(l_type, str(text))
 
             recommender = NovelRecommender(
-                gemini_api_key=self.api_key,
+                api_key=self.api_key,
                 model=self.model,
                 user_data=self.user_data,
-                log=log_callback
+                log=log_callback,
+                ai_target=self.ai_target
             )
 
             result = recommender.run_recommendation(

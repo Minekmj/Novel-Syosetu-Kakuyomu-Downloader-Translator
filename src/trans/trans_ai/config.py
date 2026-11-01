@@ -2,7 +2,8 @@ import asyncio
 import re
 import time
 import weakref
-from google import genai
+
+from src.ai import AiRoute, AiTarget
 from src.system.load_save import load_data, save_data
 from src.trans.trans_ai_utils import glossary_text, extract_glossary
 
@@ -10,7 +11,8 @@ API = ''
 API_KEYS = []
 API_INDEX = 0
 
-MODEL_NAME = 'gemini-3.5-flash-lite'
+AI_TARGET = AiRoute.DEFAULT_TARGET
+MODEL_NAME = AiRoute.DEFAULT_MODEL
 CUSTOM_AI_PROMPT = ''
 
 USE_ADVANCED_CENSOR = False  
@@ -20,10 +22,10 @@ CENSOR_PAPAGO = False
 
 IMG_TAG_PATTERN = re.compile(r'-img-:[^\s\r\n]+')
 
-_LOOP_CLIENT_POOLS = weakref.WeakKeyDictionary()
 _LOOP_LOCKS = weakref.WeakKeyDictionary()
-_SYNC_CLIENT_POOL = {}
 _cooldown_until = 0.0
+
+ai_route = AiRoute(ai_target=AI_TARGET, api=API)
 
 
 class ForceStopException(Exception):
@@ -59,42 +61,12 @@ def _get_switch_lock():
     return _LOOP_LOCKS[loop]
 
 
-def get_client(api_key: str = None) -> genai.Client:
-    target_key = (api_key if api_key is not None else API).strip() or "None"
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = None
-
-    if loop is not None:
-        if loop not in _LOOP_CLIENT_POOLS:
-            _LOOP_CLIENT_POOLS[loop] = {}
-        pool = _LOOP_CLIENT_POOLS[loop]
-        if target_key not in pool:
-            pool[target_key] = genai.Client(api_key=target_key)
-        return pool[target_key]
-    else:
-        if target_key not in _SYNC_CLIENT_POOL:
-            _SYNC_CLIENT_POOL[target_key] = genai.Client(api_key=target_key)
-        return _SYNC_CLIENT_POOL[target_key]
+def get_client(api_key: str = None):
+    return ai_route.get_raw_client(api_key)
 
 
-def refresh_client(api_key: str = None) -> genai.Client:
-    target_key = (api_key if api_key is not None else API).strip() or "None"
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = None
-
-    new_client = genai.Client(api_key=target_key)
-    if loop is not None:
-        if loop not in _LOOP_CLIENT_POOLS:
-            _LOOP_CLIENT_POOLS[loop] = {}
-        _LOOP_CLIENT_POOLS[loop][target_key] = new_client
-    else:
-        _SYNC_CLIENT_POOL[target_key] = new_client
-
-    return new_client
+def refresh_client(api_key: str = None):
+    return ai_route.refresh_client(api_key)
 
 
 class _ClientProxy:
@@ -106,9 +78,16 @@ client = _ClientProxy()
 glossary_text.client = client
 
 
+def set_ai_target(target: int):
+    global AI_TARGET
+    AI_TARGET = target
+    ai_route.set_target(target)
+
+
 def set_api_key(api_key):
     global API, API_KEYS, API_INDEX
     API = api_key.strip() or ''
+    ai_route.set_api(API)
     if API:
         if not API_KEYS:
             API_KEYS = [API]
@@ -134,6 +113,7 @@ def set_api_keys(keys, active_index=0):
     else:
         API_INDEX = max(0, min(int(active_index), len(API_KEYS) - 1))
         API = API_KEYS[API_INDEX]
+    ai_route.set_api(API)
     data = load_data()
     data['api'] = API
     data['api_keys'] = API_KEYS
@@ -147,6 +127,7 @@ def set_api_index(index):
         return False
     API_INDEX = max(0, min(int(index), len(API_KEYS) - 1))
     API = API_KEYS[API_INDEX]
+    ai_route.set_api(API)
     data = load_data()
     data['api'] = API
     data['api_index'] = API_INDEX
@@ -170,18 +151,12 @@ async def switch_api_key_safe(failed_key: str, wait_seconds: float = 0, log_call
             wrapped = (next_index <= API_INDEX)
             API_INDEX = next_index
             API = API_KEYS[API_INDEX]
+            ai_route.set_api(API)
             data = load_data()
             data['api'] = API
             data['api_keys'] = API_KEYS
             data['api_index'] = API_INDEX
             save_data(data)
-
-            # if wrapped:
-                # sleep_sec = max(wait_seconds, 55.0)
-                # set_cooldown(sleep_sec)
-                # if log_callback:
-                #     log_callback(f"[API 쿨다운] 모든 API 키(총 {len(API_KEYS)}개) 소진. 전체 작업을 {int(sleep_sec)}초간 일괄 일시정지 후 [0]번 키부터 재개합니다...")
-                # await wait_cooldown()
 
             return True, API_INDEX, True, wrapped
         else:
@@ -194,6 +169,7 @@ def switch_to_next_api_key():
         return False
     API_INDEX = (API_INDEX + 1) % len(API_KEYS)
     API = API_KEYS[API_INDEX]
+    ai_route.set_api(API)
     data = load_data()
     data['api'] = API
     data['api_index'] = API_INDEX
@@ -227,6 +203,8 @@ def rest():
     else:
         API_INDEX = 0
         API = single_api
+
+    ai_route.set_api(API)
 
 
 rest()

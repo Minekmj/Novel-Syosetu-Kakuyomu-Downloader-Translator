@@ -2,8 +2,10 @@ import asyncio
 import json
 import os
 import re
+from src.ai import AiTarget
 from src.trans.trans_ai_utils import get_japanese_ratio
 import src.down.down as down
+from . import config
 from .config import ForceStopException
 from .model_worker import _create_model_workers
 from .chunk_utils import _is_stopped
@@ -59,8 +61,11 @@ async def _TransAi_From_Json_async(
     check_i=None,
     br_start=0,
     isno_x=False,
-    thinking_budget=None
+    thinking_budget=None,
+    ai_target=None
 ):
+    target = config.AI_TARGET if ai_target is None else ai_target
+
     if _is_stopped(check, check_i):
         if log_callback and not (check_i and check_i()):
             log_callback('JSON 복원 중지: 작업 시작 전 중지되었습니다.')
@@ -81,7 +86,7 @@ async def _TransAi_From_Json_async(
 
     try:
         workers = _create_model_workers(
-            model_name, rpm, max_concurrent, temperature, br_start, isno_x, thinking_budget
+            model_name, rpm, max_concurrent, temperature, br_start, isno_x, thinking_budget, ai_target=target
         )
     except Exception as e:
         if log_callback and not (check_i and check_i()):
@@ -94,7 +99,8 @@ async def _TransAi_From_Json_async(
     )))
 
     model_info = ', '.join(
-        f'{worker.model_name}(RPM={worker.rpm},동시={worker.max_concurrent},온도={worker.temperature},분할={worker.br_start},검열건너뜀={worker.isno_x},추론={worker.thinking_budget})'
+        f'{worker.model_name}(Target={worker.ai_target},RPM={worker.rpm},동시={worker.max_concurrent},'
+        f'온도={worker.temperature},분할={worker.br_start},검열건너뜀={worker.isno_x},추론={worker.thinking_budget})'
         for worker in workers
     )
     msg = f'[{title}] JSON 로드 완료 (청크 크기: {max_chars}, 총 {len(chunk_indices)}개 청크 비동기 복원) / 사용 모델: {model_info} / RAW: {raw}'
@@ -194,7 +200,7 @@ async def _TransAi_From_Json_async(
 
 def TransAi_From_Json(
     json_path,
-    model_name='gemini-3.5-flash-Lite',
+    model_name='gemini-2.5-flash-lite',
     rpm=15,
     temperature=0.1,
     max_concurrent=4,
@@ -205,7 +211,8 @@ def TransAi_From_Json(
     check_i=None,
     br_start=0,
     isno_x=False,
-    thinking_budget=None
+    thinking_budget=None,
+    ai_target=None
 ):
     try:
         return asyncio.run(
@@ -222,7 +229,8 @@ def TransAi_From_Json(
                 check_i,
                 br_start,
                 isno_x,
-                thinking_budget
+                thinking_budget,
+                ai_target=ai_target
             )
         )
     except (ForceStopException, asyncio.CancelledError):

@@ -221,7 +221,6 @@ def create_cover_image(build_dir, book_title):
         overlay = overlay.filter(ImageFilter.GaussianBlur(OVERLAY_BLUR_RADIUS))
         image = Image.alpha_composite(image.convert("RGBA"), overlay).convert("RGB")
 
-    # 10. 파일 저장
     cover_dir = os.path.join(build_dir, OUTPUT_SUBDIR)
     os.makedirs(cover_dir, exist_ok=True)
     cover_image_path = os.path.join(cover_dir, OUTPUT_FILENAME)

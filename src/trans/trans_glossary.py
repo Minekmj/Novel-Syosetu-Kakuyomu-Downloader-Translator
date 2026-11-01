@@ -1,13 +1,15 @@
+import os
+import json
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QLabel,
-    QDialog, QMessageBox, QComboBox,QScrollArea, QWidget
+    QDialog, QMessageBox, QComboBox, QScrollArea, QWidget
 )
 from PySide6.QtCore import Qt
 
-import os
-import json
-
+from src.ai import AiTarget
+import src.trans.trans_ai.config as trans_config
 from src.main.thread_pyqt import GlossaryExtractThread
+
 
 class GlossaryAiDialog(QDialog):
     def __init__(self, parent=None):
@@ -85,13 +87,14 @@ class GlossaryAiDialog(QDialog):
 
 
 class DictionaryDialog(QDialog):
-    def __init__(self, parent=None, title='', dictionary=None, model='gemini-3.5-flash-lite', rpm=5):
+    def __init__(self, parent=None, title='', dictionary=None, model=None, rpm=5, ai_target=None):
         super().__init__(parent)
         self.title = title
         self.dictionary = dictionary if isinstance(dictionary, dict) else {}
         self.rows = []
-        self.model = model
+        self.model = model or trans_config.MODEL_NAME
         self.rpm = rpm
+        self.ai_target = trans_config.AI_TARGET if ai_target is None else ai_target
         self.setWindowTitle('용어집 설정')
         self.resize(620, 560)
         self.setMinimumSize(500, 450)
@@ -259,7 +262,7 @@ class DictionaryDialog(QDialog):
         if parent is None:
             return ''
 
-        path = parent.file_path
+        path = getattr(parent, 'file_path', '')
         if not path or not os.path.exists(path):
             return ''
 
@@ -274,7 +277,8 @@ class DictionaryDialog(QDialog):
                 return self.extract_json_source_text(data)
 
         except Exception as e:
-            parent.log_panel.add_log(f"AI 용어집 원문 읽기 실패: {e}")
+            if hasattr(parent, 'log_panel'):
+                parent.log_panel.add_log(f"AI 용어집 원문 읽기 실패: {e}")
 
         return ''
 
@@ -333,8 +337,9 @@ class DictionaryDialog(QDialog):
 
     def open_ai_glossary_dialog(self):
         parent = self.parent()
-        parent.log_panel.reset_time()
-        
+        if hasattr(parent, 'log_panel'):
+            parent.log_panel.reset_time()
+
         all_text = self.read_source_text()
 
         if not all_text.strip():
@@ -354,32 +359,31 @@ class DictionaryDialog(QDialog):
             chunk,
             self.model,
             self.rpm,
-            self
+            self,
+            ai_target=self.ai_target
         )
-
         self.ai_glossary_thread.log_signal.connect(self.on_ai_glossary_log)
         self.ai_glossary_thread.finished_signal.connect(self.on_ai_glossary_finished)
         self.ai_glossary_thread.start()
 
+
     def on_ai_glossary_log(self, text):
         parent = self.parent()
-
-        parent.log_panel.add_log(f"[AI 용어집] {text}")
+        if hasattr(parent, 'log_panel'):
+            parent.log_panel.add_log(f"[AI 용어집] {text}")
 
     def on_ai_glossary_finished(self, glossary, error):
+        parent = self.parent()
+
         if error:
-            parent = self.parent()
-
-            parent.log_panel.add_log(f"[AI 용어집] 추출 실패: {error}")
-
+            if hasattr(parent, 'log_panel'):
+                parent.log_panel.add_log(f"[AI 용어집] 추출 실패: {error}")
             QMessageBox.critical(self, 'AI 용어집 오류', error)
             return
 
         if not glossary:
-            parent = self.parent()
-
-            parent.log_panel.add_log('[AI 용어집] 추출된 용어가 없습니다.')
-
+            if hasattr(parent, 'log_panel'):
+                parent.log_panel.add_log('[AI 용어집] 추출된 용어가 없습니다.')
             QMessageBox.information(self, 'AI 용어집', '추출된 용어가 없습니다.')
             return
 
@@ -401,9 +405,8 @@ class DictionaryDialog(QDialog):
             self.add_row(source, target)
             added += 1
 
-        parent = self.parent()
-
-        parent.log_panel.add_log(f"[AI 용어집] 추출 완료: {len(glossary)}개 / 추가: {added}개 / 기존 용어: {skipped}개")
+        if hasattr(parent, 'log_panel'):
+            parent.log_panel.add_log(f"[AI 용어집] 추출 완료: {len(glossary)}개 / 추가: {added}개 / 기존 용어: {skipped}개")
 
         QMessageBox.information(
             self,
