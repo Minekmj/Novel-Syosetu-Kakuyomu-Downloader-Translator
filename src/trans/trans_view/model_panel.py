@@ -19,7 +19,8 @@ class ModelPanel(QWidget):
         self.active_model_index = -1
         self.model_load_thread = None
         self.settings_panel = None
-        self._cached_gemini_models = []
+        self._cached_models = {}
+        self._load_queue = []
         self.init_ui()
 
     def set_settings_panel(self, settings_panel):
@@ -29,7 +30,6 @@ class ModelPanel(QWidget):
         layout = create_layout('v', (0, 0, 0, 0), spacing=8, parent=self)
 
         model_row = create_layout('h')
-        model_row.addWidget(create_label('모델', width=32))
 
         target_list = [AiRoute.get_target_name(t) for t in sorted(AiRoute.TARGET_NAMES.keys())]
         self.target_add_combo = create_combo(target_list, AiRoute.get_target_name(AiRoute.DEFAULT_TARGET), h=35)
@@ -78,20 +78,30 @@ class ModelPanel(QWidget):
         elif models:
             self.model_add_combo.setCurrentIndex(0)
 
-        self.refresh_model_btn.setEnabled(target_idx == int(AiTarget.GEMINI))
+        self.refresh_model_btn.setEnabled(True)
 
     def _get_available_models_for_target(self, target_idx: int):
         base_models = list(AiRoute.get_popular_models(target_idx))
-        if target_idx == int(AiTarget.GEMINI) and self._cached_gemini_models:
-            for gm in self._cached_gemini_models:
-                if gm not in base_models:
-                    base_models.append(gm)
-        return base_models
+        return_models = []
+        target_name = AiRoute.get_target_name(target_idx)
+        if target_name not in self._cached_models:
+            if self.settings_panel:
+                api_key = self.settings_panel.api_edits[target_idx].text().strip()
+                self.load_models(api_key, target_idx, manual=False)
+        data = self._cached_models.get(target_name, [])
+        if data:
+            for m in data:
+                return_models.append(m)
+        if not return_models:
+            return_models = base_models
+        return return_models
 
-    def on_manual_refresh_clicked(self):
+    def on_manual_refresh_clicked(self, target_idx=None):
+        if target_idx is None or isinstance(target_idx, bool) or target_idx < 0:
+            target_idx = self.get_current_target()
         if self.settings_panel:
-            api_key = self.settings_panel.gemini_api_edit.text().strip()
-            self.load_gemini_models(api_key, manual=True)
+            api_key = self.settings_panel.api_edits[target_idx].text().strip()
+            self.load_models(api_key, target_idx, manual=True)
 
     def rebuild_model_list(self):
         clear_layout(self.model_list_layout)
@@ -207,7 +217,7 @@ class ModelPanel(QWidget):
         self.log_requested.emit(f"모델 변경: {old_model} → [{AiRoute.get_target_name(target_idx)}] {new_model}")
 
     def add_selected_model(self):
-        target_idx = self.target_add_combo.currentIndex()
+        target_idx = self.get_current_target()
         model = self.model_add_combo.currentText().strip()
 
         if not model:
@@ -332,52 +342,87 @@ class ModelPanel(QWidget):
             if str(x.get('model', '')).strip()
         ]
 
-    def load_gemini_models(self, api_key, manual=False):
-        if not api_key:
+    def load_models(self, api_key="", target_idx: int = -1, manual=False):
+        if target_idx < 0:
+            target_idx = self.get_current_target()
+                   
+        if not api_key and target_idx != int(AiTarget.OLLAMA):
             if manual:
-                QMessageBox.warning(self, '알림', 'Gemini API 키를 먼저 입력하세요.')
+                QMessageBox.warning(self, '알림', 'API 키를 먼저 입력하세요.')
             return False
+
+        for item in self._load_queue:
+            if item['target_idx'] == target_idx:
+                item['api_key'] = api_key
+                item['manual'] = item['manual'] or manual
+                self._process_next_load()
+                return True
+
+        self._load_queue.append({
+            'api_key': api_key,
+            'target_idx': target_idx,
+            'manual': manual
+        })
+
+        self._process_next_load()
+        return True
+
+    def _process_next_load(self):
+        if self.model_load_thread is not None and self.model_load_thread.isRunning():
+            return
+
+        if not self._load_queue:
+            self.refresh_model_btn.setEnabled(True)
+            return
+
+        task = self._load_queue.pop(0)
+        api_key = task['api_key']
+        target_idx = task['target_idx']
+        manual = task['manual']
 
         self.refresh_model_btn.setEnabled(False)
-        self.status_requested.emit('Gemini 모델 목록을 자동으로 조회하는 중...')
+        name = AiRoute.get_target_name(target_idx)
+        self.status_requested.emit(f'{name} 모델 목록을 자동으로 조회하는 중...')
 
         try:
-            self.model_load_thread = ModelLoadThread(api_key)
-            self.model_load_thread.finished.connect(lambda names, err: self.on_models_loaded(names, err, manual))
+            self.model_load_thread = ModelLoadThread(api_key, target_idx)
+            self.model_load_thread.finished.connect(
+                lambda names, err: self.on_models_loaded(names, err, target_idx, manual)
+            )
             self.model_load_thread.start()
-            return True
         except Exception as e:
-            self.refresh_model_btn.setEnabled(True)
             if manual:
                 self.log_requested.emit(f"모델 조회 실패: {e}")
-            return False
+            self.model_load_thread = None
+            self._process_next_load()
 
-    def on_models_loaded(self, model_names, error_msg, manual=False):
-        self.refresh_model_btn.setEnabled(True)
+    def get_current_target(self):
+        return self.target_add_combo.currentIndex()
 
+    def on_models_loaded(self, model_names, error_msg, target_idx: int, manual=False):
         if error_msg:
             if manual:
                 self.log_requested.emit(f"모델 조회 실패: {error_msg}")
                 QMessageBox.critical(self, '모델 조회 실패', error_msg)
-            return
+        else:
+            self._cached_models[AiRoute.get_target_name(target_idx)] = list(model_names)
+            
+            if self.get_current_target() == target_idx:
+                current = self.model_add_combo.currentText()
+                models = self._get_available_models_for_target(target_idx)
 
-        self._cached_gemini_models = list(model_names)
+                self.model_add_combo.clear()
+                self.model_add_combo.addItems(models)
 
-        if self.target_add_combo.currentIndex() == int(AiTarget.GEMINI):
-            current = self.model_add_combo.currentText()
-            models = self._get_available_models_for_target(AiTarget.GEMINI)
+                if current and current in models:
+                    self.model_add_combo.setCurrentText(current)
+                elif AiRoute.DEFAULT_MODEL in models:
+                    self.model_add_combo.setCurrentText(AiRoute.DEFAULT_MODEL)
+                elif models:
+                    self.model_add_combo.setCurrentIndex(0)
 
-            self.model_add_combo.clear()
-            self.model_add_combo.addItems(models)
+            self.rebuild_model_list()
+            self.log_requested.emit(f"모델 목록 조회 완료 ({len(model_names)}개 모델)")
 
-            if current and current in models:
-                self.model_add_combo.setCurrentText(current)
-            elif AiRoute.DEFAULT_MODEL in models:
-                self.model_add_combo.setCurrentText(AiRoute.DEFAULT_MODEL)
-            elif models:
-                self.model_add_combo.setCurrentIndex(0)
-
-        self.rebuild_model_list()
-
-        self.log_requested.emit(f"Gemini 모델 목록 조회 완료 ({len(model_names)}개 모델)")
-        self.status_requested.emit('Gemini 모델 목록 자동 갱신 완료')
+        self.model_load_thread = None
+        self._process_next_load()

@@ -340,6 +340,16 @@ class TranslationTab(BaseSettingsTab):
         )
         prompt_layout.addWidget(self.ai_prompt_item.widget)
         layout.addWidget(prompt_group)
+        
+        self.miniprom = self.register_item(
+            SettingCheckBox("miniprom", text="미니 프롬프트 사용", default=False, parent=self)
+        )
+        layout.addWidget(self.miniprom.widget)
+        
+        desc = QLabel("• 적은 토큰을 위해 미니 프롬프트를 사용합니다.")
+        desc.setObjectName("lbl_original_title")
+        desc.setWordWrap(True)
+        layout.addWidget(desc)
 
         censor_group = QGroupBox("AI 검열 우회 및 방지 옵션")
         censor_group.setObjectName('group_box')

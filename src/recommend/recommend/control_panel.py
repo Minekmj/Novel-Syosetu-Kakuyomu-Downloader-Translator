@@ -23,7 +23,7 @@ class RecommendControlPanel(QWidget):
         self.api_timer = QTimer(self)
         self.api_timer.setSingleShot(True)
         self.api_timer.setInterval(700)
-        self.api_timer.timeout.connect(self.fetch_gemini_models)
+        self.api_timer.timeout.connect(self.fetch_models)
 
         self.init_ui()
         self.load_initial_data()
@@ -44,6 +44,8 @@ class RecommendControlPanel(QWidget):
         self.target_combo.setFixedHeight(34)
         self.target_combo.setFixedWidth(85)
         for target_id, name in sorted(AiRoute.TARGET_NAMES.items()):
+            if target_id == AiTarget.OLLAMA:
+                continue
             self.target_combo.addItem(name, target_id)
         self.target_combo.currentIndexChanged.connect(self.on_target_combo_changed)
         api_box.addWidget(self.target_combo)
@@ -75,7 +77,7 @@ class RecommendControlPanel(QWidget):
         self.refresh_model_btn.setObjectName("subtleBtn")
         self.refresh_model_btn.setFixedSize(60, 34)
         self.refresh_model_btn.setCursor(Qt.PointingHandCursor)
-        self.refresh_model_btn.clicked.connect(self.fetch_gemini_models)
+        self.refresh_model_btn.clicked.connect(self.fetch_models)
         model_box.addWidget(self.refresh_model_btn)
         layout.addLayout(model_box)
 
@@ -186,9 +188,9 @@ class RecommendControlPanel(QWidget):
         elif popular_models:
             self.model_combo.setCurrentIndex(0)
 
-        self.refresh_model_btn.setEnabled(target == int(AiTarget.GEMINI))
-        if target == int(AiTarget.GEMINI) and saved_api:
-            QTimer.singleShot(100, self.fetch_gemini_models)
+        self.refresh_model_btn.setEnabled(True)
+        if saved_api or target == int(AiTarget.OLLAMA):
+            QTimer.singleShot(100, self.fetch_models)
 
     def load_initial_data(self):
         user_data = load_data()
@@ -227,7 +229,7 @@ class RecommendControlPanel(QWidget):
 
     def on_api_key_changed(self):
         key = self.api_key_edit.text().strip()
-        if len(key) >= 20 and self.get_current_target() == int(AiTarget.GEMINI):
+        if len(key) >= 20 and self.get_current_target() != int(AiTarget.OLLAMA):
             self.api_timer.start()
 
     def toggle_api_visibility(self, checked: bool):
@@ -255,21 +257,25 @@ class RecommendControlPanel(QWidget):
             item = self.history_list_widget.item(i)
             item.setCheckState(target_state)
 
-    def fetch_gemini_models(self):
-        if self.get_current_target() != int(AiTarget.GEMINI):
-            return
+    def fetch_models(self):
+        name = AiRoute.get_target_name(self.get_current_target())
 
         api_key = self.api_key_edit.text().strip()
-        if not api_key:
+        if not api_key and self.get_current_target() != int(AiTarget.OLLAMA):
             return
 
         if ModelLoadThread is None:
             return
 
-        self.refresh_model_btn.setEnabled(False)
-        self.log_requested.emit("Gemini 사용 가능 모델 목록을 조회 중입니다...")
+        if self.model_load_thread is not None and self.model_load_thread.isRunning():
+            return
 
-        self.model_load_thread = ModelLoadThread(api_key)
+        self.refresh_model_btn.setEnabled(False)
+        self.log_requested.emit(f"{name} 사용 가능 모델 목록을 조회 중입니다...")
+
+        self.model_load_thread = ModelLoadThread(
+            api_key, ai_target=self.get_current_target()
+        )
         self.model_load_thread.finished.connect(self.on_models_fetched)
         self.model_load_thread.start()
 
@@ -282,9 +288,8 @@ class RecommendControlPanel(QWidget):
         if models:
             current = self.model_combo.currentText()
             all_models = list(models)
-            for pm in AiRoute.get_popular_models(AiTarget.GEMINI):
-                if pm not in all_models:
-                    all_models.append(pm)
+            if not all_models:
+                all_models = AiRoute.get_popular_models(self.get_current_target())
 
             self.model_combo.clear()
             self.model_combo.addItems(all_models)
@@ -296,7 +301,7 @@ class RecommendControlPanel(QWidget):
             elif all_models:
                 self.model_combo.setCurrentIndex(0)
 
-            self.log_requested.emit(f"Gemini 모델 {len(models)}개를 불러왔습니다.")
+            self.log_requested.emit(f"모델 {len(models)}개를 불러왔습니다.")
 
     def set_running(self, running: bool):
         self.start_btn.setEnabled(not running)

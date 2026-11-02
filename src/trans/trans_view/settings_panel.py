@@ -27,8 +27,13 @@ class SettingsPanel(QTabWidget):
 
         self.api_edits = {}
         self.api_status_lbls = {}
+        
+        self.model_panel = None
 
         self.init_tabs()
+        
+    def set_model_panel(self, model_panel):
+        self.model_panel = model_panel
 
     def _tab(self, title, obj):
         tab = QWidget()
@@ -53,7 +58,7 @@ class SettingsPanel(QTabWidget):
             ('RPM', 'rpm_combo', ['1', '2', '3', '5', '7', '10', '15', '20', '30', '60'], '15'),
             ('Temperature', 'temp_combo', ['0.0', '0.1', '0.2', '0.3', '0.5', '0.7', '1.0'], '0.1'),
             ('동시 작업', 'concurrency_combo', [str(i) for i in range(1, 61)], '4'),
-            ('청크 글자수', 'chars_combo', ['500', '1000', '2000', '3000', '4000', '5000', '7000', '10000', '15000', '20000', '30000'], '5000'),
+            ('청크 글자수', 'chars_combo', ['100', '250', '500', '1000', '2000', '3000', '4000', '5000', '7000', '10000', '15000', '20000', '30000'], '5000'),
             ('분할 시작', 'br_start_combo', ['0', '1', '2', '3', '4'], '0'),
             ('검열하기', 'censor_combo', ['사용', '사용 안함'], '사용')
         ]
@@ -207,6 +212,8 @@ class SettingsPanel(QTabWidget):
             if target in self.api_edits:
                 self.api_edits[target].setText(active_key)
             self.update_api_status_display(target, len(keys), idx)
+        if target == AiTarget.OLLAMA:
+            self.model_panel.load_models(target_idx=target, manual=False)
 
     def update_api_status_display(self, target: int, total_count: int, active_idx: int):
         lbl = self.api_status_lbls.get(int(target))

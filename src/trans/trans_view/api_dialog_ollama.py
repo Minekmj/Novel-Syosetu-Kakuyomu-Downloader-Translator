@@ -2,8 +2,9 @@ import json
 import os
 import shutil
 import subprocess
+import time
 import requests
-from PySide6.QtCore import Qt, QThread, Signal, QTimer, QUrl
+from PySide6.QtCore import Qt, QThread, Signal, QTimer, QUrl, QCoreApplication
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QDialog, QWidget, QLineEdit, QFrame, QMessageBox,
@@ -20,16 +21,29 @@ VERIFIED_OLLAMA_MODELS = AiRoute.get_popular_models(AiTarget.OLLAMA)
 class OllamaStatusCheckThread(QThread):
     status_checked = Signal(bool, str, list)
 
-    def __init__(self, host: str):
-        super().__init__()
+    def __init__(self, host: str, parent=None):
+        super().__init__(parent)
         self.host = host.rstrip("/")
+        self._is_cancelled = False
+        self._session = requests.Session()
+
+    def cancel(self):
+        self._is_cancelled = True
+        try:
+            self._session.close()
+        except Exception:
+            pass
 
     def run(self):
         try:
-            r = requests.get(f"{self.host}/api/version", timeout=5.0)
+            r = self._session.get(f"{self.host}/api/version", timeout=4.0)
+            if self._is_cancelled:
+                return
             if r.status_code == 200:
                 ver = r.json().get("version", "")
-                tags_resp = requests.get(f"{self.host}/api/tags", timeout=5.0)
+                tags_resp = self._session.get(f"{self.host}/api/tags", timeout=4.0)
+                if self._is_cancelled:
+                    return
                 installed_models = []
                 if tags_resp.status_code == 200:
                     installed_models = [m.get("name", "") for m in tags_resp.json().get("models", [])]
@@ -37,61 +51,83 @@ class OllamaStatusCheckThread(QThread):
                 return
         except Exception:
             pass
-        self.status_checked.emit(False, "", [])
+        finally:
+            try:
+                self._session.close()
+            except Exception:
+                pass
+        if not self._is_cancelled:
+            self.status_checked.emit(False, "", [])
 
 
 class OllamaPullThread(QThread):
     progress_signal = Signal(int, str)
     finished_signal = Signal(bool, str)
 
-    def __init__(self, host: str, model_name: str):
-        super().__init__()
+    def __init__(self, host: str, model_name: str, parent=None):
+        super().__init__(parent)
         self.host = host.rstrip("/")
         self.model_name = model_name
+        self._is_cancelled = False
+        self._session = requests.Session()
+
+    def cancel(self):
+        self._is_cancelled = True
+        try:
+            self._session.close()
+        except Exception:
+            pass
 
     def run(self):
-        resp = None
         try:
             url = f"{self.host}/api/pull"
-            resp = requests.post(
+            with self._session.post(
                 url,
                 json={"name": self.model_name, "stream": True},
                 stream=True,
                 timeout=7200
-            )
-            if resp.status_code != 200:
-                self.finished_signal.emit(False, f"서버 오류 ({resp.status_code}): {resp.text}")
-                return
+            ) as resp:
+                if resp.status_code != 200:
+                    if not self._is_cancelled:
+                        self.finished_signal.emit(False, f"서버 오류 ({resp.status_code}): {resp.text}")
+                    return
 
-            for line in resp.iter_lines():
-                if not line:
-                    continue
-                try:
-                    data = json.loads(line.decode("utf-8"))
-                    status = data.get("status", "")
-                    total = data.get("total", 0)
-                    completed = data.get("completed", 0)
-
-                    if total > 0 and completed > 0:
-                        percent = int((completed / total) * 100)
-                        gb_done = completed / (1024 ** 3)
-                        gb_total = total / (1024 ** 3)
-                        self.progress_signal.emit(percent, f"{status} {percent}% ({gb_done:.1f}GB / {gb_total:.1f}GB)")
-                    else:
-                        self.progress_signal.emit(0, status)
-
-                    if status == "success":
-                        self.finished_signal.emit(True, f"'{self.model_name}' 다운로드 완료!")
+                for line in resp.iter_lines():
+                    if self._is_cancelled:
                         return
-                except Exception:
-                    pass
+                    if not line:
+                        continue
+                    try:
+                        data = json.loads(line.decode("utf-8"))
+                        status = data.get("status", "")
+                        total = data.get("total", 0)
+                        completed = data.get("completed", 0)
 
-            self.finished_signal.emit(True, f"'{self.model_name}' 다운로드 완료")
+                        if total > 0 and completed > 0:
+                            percent = int((completed / total) * 100)
+                            gb_done = completed / (1024 ** 3)
+                            gb_total = total / (1024 ** 3)
+                            self.progress_signal.emit(percent, f"{status} {percent}% ({gb_done:.1f}GB / {gb_total:.1f}GB)")
+                        else:
+                            self.progress_signal.emit(0, status)
+
+                        if status == "success":
+                            if not self._is_cancelled:
+                                self.finished_signal.emit(True, f"'{self.model_name}' 다운로드 완료!")
+                            return
+                    except Exception:
+                        pass
+
+                if not self._is_cancelled:
+                    self.finished_signal.emit(True, f"'{self.model_name}' 다운로드 완료")
         except Exception as e:
-            self.finished_signal.emit(False, f"다운로드 실패: {e}")
+            if not self._is_cancelled:
+                self.finished_signal.emit(False, f"다운로드 실패: {e}")
         finally:
-            if resp is not None:
-                resp.close()
+            try:
+                self._session.close()
+            except Exception:
+                pass
 
 
 class OllamaManagerDialog(QDialog):
@@ -105,7 +141,12 @@ class OllamaManagerDialog(QDialog):
         self.status_thread = None
         self.server_online = False
         self.installed_models = []
+        self.pull_queue = []
+        self.current_pull_model = ""
+        self._is_closed = False
+
         self.init_ui()
+        QTimer.singleShot(150, self.check_server_status)
 
     def init_ui(self):
         root = create_layout('v', (16, 16, 16, 16), spacing=12, parent=self)
@@ -185,15 +226,12 @@ class OllamaManagerDialog(QDialog):
         bot_row = create_layout('h')
         bot_row.addStretch(1)
         self.save_btn = create_button("적용 및 닫기", self.save_and_close, "primaryBtn", h=36, w=100)
-        
         self.save_btn.setAutoDefault(False)
         self.save_btn.setDefault(False)
         self.download_btn.setAutoDefault(False)
-        
+
         bot_row.addWidget(self.save_btn)
         root.addLayout(bot_row)
-
-        QTimer.singleShot(150, self.check_server_status)
 
     def get_ollama_host(self) -> str:
         return self.ollama_url_edit.text().strip().rstrip("/") or "http://localhost:11434"
@@ -210,16 +248,23 @@ class OllamaManagerDialog(QDialog):
         QDesktopServices.openUrl(QUrl(OLLAMA_DOWNLOAD_URL))
 
     def check_server_status(self):
+        if self._is_closed:
+            return
         if self.status_thread and self.status_thread.isRunning():
             return
+
         self.server_status_lbl.setText("서버 상태: 확인 중...")
         self.refresh_server_btn.setEnabled(False)
         host = self.get_ollama_host()
-        self.status_thread = OllamaStatusCheckThread(host)
+
+        self.status_thread = OllamaStatusCheckThread(host, self)
         self.status_thread.status_checked.connect(self._on_server_status_checked)
         self.status_thread.start()
 
     def _on_server_status_checked(self, is_online: bool, ver: str, installed_models: list):
+        if self._is_closed:
+            return
+
         self.refresh_server_btn.setEnabled(True)
         self.server_online = is_online
         self.installed_models = installed_models
@@ -249,6 +294,8 @@ class OllamaManagerDialog(QDialog):
             self.delete_model_btn.setEnabled(False)
 
     def _sync_installed_models_to_combo(self, installed_models: list):
+        if self._is_closed:
+            return
         existing = [self.local_model_combo.itemText(i) for i in range(self.local_model_combo.count())]
         for name in reversed(installed_models):
             clean_name = name.replace(":latest", "")
@@ -257,6 +304,8 @@ class OllamaManagerDialog(QDialog):
                 existing.insert(0, clean_name)
 
     def update_model_status_display(self):
+        if self._is_closed:
+            return
         if not self.server_online:
             self.model_installed_lbl.setText("서버 오프라인")
             self.delete_model_btn.setEnabled(False)
@@ -265,6 +314,20 @@ class OllamaManagerDialog(QDialog):
         target_model = self.local_model_combo.currentText().strip().lower()
         if not target_model:
             self.model_installed_lbl.setText("모델명을 입력하세요.")
+            self.download_btn.setEnabled(False)
+            self.delete_model_btn.setEnabled(False)
+            return
+
+        if self.current_pull_model and target_model == self.current_pull_model.lower():
+            self.model_installed_lbl.setText("다운로드 중...")
+            self.model_installed_lbl.setStyleSheet("font-weight: bold;")
+            self.download_btn.setEnabled(False)
+            self.delete_model_btn.setEnabled(False)
+            return
+
+        if any(target_model == q.lower() for q in self.pull_queue):
+            self.model_installed_lbl.setText("다운로드 대기 중...")
+            self.model_installed_lbl.setStyleSheet("font-weight: bold;")
             self.download_btn.setEnabled(False)
             self.delete_model_btn.setEnabled(False)
             return
@@ -303,9 +366,13 @@ class OllamaManagerDialog(QDialog):
         try:
             subprocess.Popen([bin_path, "serve"], creationflags=flags)
             self.server_status_lbl.setText("서버 상태: 백그라운드 서버 가동 중...")
-            QTimer.singleShot(2500, self.check_server_status)
+            QTimer.singleShot(2500, self._delayed_check_status)
         except Exception as e:
             QMessageBox.critical(self, "오류", f"Ollama 실행 실패: {e}")
+
+    def _delayed_check_status(self):
+        if not self._is_closed:
+            self.check_server_status()
 
     def start_model_download(self):
         host = self.get_ollama_host()
@@ -321,29 +388,71 @@ class OllamaManagerDialog(QDialog):
                 QMessageBox.warning(self, "알림", "먼저 [서버 실행] 버튼을 눌러 Ollama 서버를 가동하세요.")
             return
 
-        self.download_btn.setEnabled(False)
+        if model_name == self.current_pull_model or model_name in self.pull_queue:
+            QMessageBox.information(self, "알림", f"'{model_name}' 모델은 이미 다운로드 중이거나 대기열에 있습니다.")
+            return
+
+        if self.pull_thread and self.pull_thread.isRunning():
+            self.pull_queue.append(model_name)
+            self.pull_status_lbl.setVisible(True)
+            self.pull_status_lbl.setText(f"'{model_name}' 다운로드 대기열 추가됨 (대기 {len(self.pull_queue)}개)")
+            self.update_model_status_display()
+            return
+
+        self.pull_queue.append(model_name)
+        self._process_next_pull()
+
+    def _process_next_pull(self):
+        if self._is_closed:
+            return
+
+        if self.pull_thread and self.pull_thread.isRunning():
+            return
+
+        if not self.pull_queue:
+            self.current_pull_model = ""
+            self.download_btn.setEnabled(True)
+            self.update_model_status_display()
+            return
+
+        model_name = self.pull_queue.pop(0)
+        self.current_pull_model = model_name
+        host = self.get_ollama_host()
+
         self.pull_progress.setVisible(True)
         self.pull_progress.setValue(0)
         self.pull_status_lbl.setVisible(True)
         self.pull_status_lbl.setText(f"'{model_name}' 다운로드 요청 중...")
 
-        self.pull_thread = OllamaPullThread(host, model_name)
+        self.update_model_status_display()
+
+        self.pull_thread = OllamaPullThread(host, model_name, self)
         self.pull_thread.progress_signal.connect(self.on_pull_progress)
         self.pull_thread.finished_signal.connect(self.on_pull_finished)
         self.pull_thread.start()
 
     def on_pull_progress(self, percent: int, msg: str):
+        if self._is_closed:
+            return
         self.pull_progress.setValue(percent)
         self.pull_status_lbl.setText(msg)
 
     def on_pull_finished(self, success: bool, msg: str):
-        self.download_btn.setEnabled(True)
+        if self._is_closed:
+            return
+
+        self.current_pull_model = ""
         self.pull_status_lbl.setText(msg)
+
         if success:
-            QMessageBox.information(self, "완료", msg)
-            QTimer.singleShot(1500, self.check_server_status)
+            if not self.pull_queue:
+                self.download_btn.setEnabled(True)
+                QMessageBox.information(self, "완료", msg)
+            QTimer.singleShot(1500, self._delayed_check_status)
         else:
             QMessageBox.critical(self, "다운로드 실패", msg)
+
+        self._process_next_pull()
 
     def delete_local_model(self):
         host = self.get_ollama_host()
@@ -380,3 +489,71 @@ class OllamaManagerDialog(QDialog):
     def get_current_api_data(self):
         host = self.get_ollama_host()
         return host, [host], 0
+
+    def closeEvent(self, event):
+        self._safe_cleanup()
+        super().closeEvent(event)
+
+    def reject(self):
+        self._safe_cleanup()
+        super().reject()
+
+    def accept(self):
+        self._safe_cleanup()
+        super().accept()
+
+    def _safe_cleanup(self):
+        if self._is_closed:
+            return
+        self._is_closed = True
+        self.pull_queue.clear()
+        self.current_pull_model = ""
+
+        active_threads = []
+        if self.status_thread is not None and self.status_thread.isRunning():
+            active_threads.append(self.status_thread)
+        if self.pull_thread is not None and self.pull_thread.isRunning():
+            active_threads.append(self.pull_thread)
+
+        for child in self.findChildren(QThread):
+            if child.isRunning() and child not in active_threads:
+                active_threads.append(child)
+
+        if active_threads:
+            wait_dialog = QMessageBox(self)
+            wait_dialog.setWindowTitle("종료 안내")
+            wait_dialog.setText("실행 중인 작업이 있습니다.\n모든 스레드가 안전하게 종료될 때까지 잠시 대기해 주세요...")
+            wait_dialog.setIcon(QMessageBox.Information)
+            wait_dialog.setStandardButtons(QMessageBox.NoButton)
+            wait_dialog.show()
+            QCoreApplication.processEvents()
+
+            for th in active_threads:
+                try:
+                    th.disconnect()
+                except Exception:
+                    pass
+                if hasattr(th, "cancel"):
+                    try:
+                        th.cancel()
+                    except Exception:
+                        pass
+                th.quit()
+
+            for th in active_threads:
+                start_time = time.time()
+                while th.isRunning():
+                    th.wait(50)
+                    QCoreApplication.processEvents()
+                    if time.time() - start_time > 3.0:
+                        try:
+                            th.terminate()
+                            th.wait(500)
+                        except Exception:
+                            pass
+                        break
+
+            wait_dialog.close()
+
+        self.status_thread = None
+        self.pull_thread = None

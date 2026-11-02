@@ -23,6 +23,19 @@ def load_cookies(data):
     return {}
 
 
+def sync_to_env():
+    os.environ["minedown_APP_COOKIES"] = json.dumps(COOKIES, ensure_ascii=False)
+    os.environ["minedown_APP_BASE_HEADERS"] = json.dumps(BASE_HEADERS, ensure_ascii=False)
+
+
+def get_env_cookies():
+    return json.loads(os.environ.get("minedown_APP_COOKIES", "{}"))
+
+
+def get_env_headers():
+    return json.loads(os.environ.get("minedown_APP_BASE_HEADERS", "{}"))
+
+
 def reset(b):
     if b:
         sf.find_cf()
@@ -40,10 +53,18 @@ def reset(b):
                     COOKIES = {}
         except Exception as e:
             print(f"[!] reset 로드 실패: {e}")
+            COOKIES = {}
+            BASE_HEADERS = {}
+    else:
+        COOKIES = {}
+        BASE_HEADERS = {}
+
+    sync_to_env()
 
 
 def reset_b():
     reset(False)
+
 
 # 초기 로드 실행
 reset(False)

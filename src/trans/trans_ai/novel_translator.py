@@ -62,7 +62,7 @@ async def _translate_light_novel_async(
 
     model_info = ', '.join(
         f'{worker.model_name}(Target={worker.ai_target},RPM={worker.rpm},동시={worker.max_concurrent},'
-        f'온도={worker.temperature},분할={worker.br_start},검열건너뜀={worker.isno_x},추론={worker.thinking_budget})'
+        f'Temperature={worker.temperature},분할={worker.br_start},검열건너뜀={worker.isno_x},추론={worker.thinking_budget})'
         for worker in workers
     )
     msg = f'총 {len(chunks)}개 청크 분할 완료 (청크 크기: {max_chars}). 사용 모델: {model_info}, RAW: {raw}'

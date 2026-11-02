@@ -12,7 +12,7 @@ from .ui_factory import create_layout, create_button, create_label, clear_layout
 class ApiManagerDialog(QDialog):
     def __new__(cls, parent=None, ai_target: int = AiTarget.GEMINI):
         if int(ai_target) == int(AiTarget.OLLAMA):
-            from .api_dialog_ollma import OllamaManagerDialog
+            from .api_dialog_ollama import OllamaManagerDialog
             return OllamaManagerDialog(parent)
         return super().__new__(cls)
 

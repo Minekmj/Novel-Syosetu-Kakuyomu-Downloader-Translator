@@ -55,6 +55,7 @@ class TranslateDialog(QDialog):
         ll.addWidget(self.model_panel)
 
         self.settings_panel = SettingsPanel(left)
+        self.settings_panel.set_model_panel(self.model_panel)
         ll.addWidget(self.settings_panel, 1)
         ll.addWidget(create_button('설정 전체 저장', self.save_settings))
 

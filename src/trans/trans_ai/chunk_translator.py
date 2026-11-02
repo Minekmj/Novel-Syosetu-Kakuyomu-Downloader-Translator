@@ -1,3 +1,4 @@
+import os
 import asyncio
 import re
 
@@ -6,6 +7,12 @@ from src.trans.prom import (
     SYSTEM_PROMPT,
     SYSTEM_PROMPT_NO_SPLIT,
     SYSTEM_PROMPT_RAW,
+    
+    SYSTEM_PROMPT_MINI,
+    SYSTEM_PROMPT_NO_SPLIT_MINI,
+    SYSTEM_PROMPT_RAW_MINI,
+    GLOSSARY_CONTEXT_MINI,
+    
     IMG_PROMPT_RULE,
     CENSOR_PROMPT_RULE,
     GLOSSARY_CONTEXT
@@ -30,10 +37,15 @@ from .validator import validate_translation_ratios, reset_or_retry_censor
 
 
 def _build_chunk_system_prompt(current_chunk, masked_chunk, raw, expected_img_count, is_censored, dicts, log_callback, prefix_log, check_i):
+    data = os.environ.get("minedown_setting_miniprom", "False") == "True"
     if raw:
-        system_prompt = SYSTEM_PROMPT_RAW
+        system_prompt = SYSTEM_PROMPT_RAW_MINI if data else SYSTEM_PROMPT_RAW
     else:
-        system_prompt = SYSTEM_PROMPT if '+---+' in current_chunk else SYSTEM_PROMPT_NO_SPLIT
+        
+        if '+---+' in current_chunk:
+            system_prompt = SYSTEM_PROMPT_MINI if data else SYSTEM_PROMPT
+        else:
+            system_prompt = SYSTEM_PROMPT_NO_SPLIT_MINI if data else SYSTEM_PROMPT_NO_SPLIT
 
     if expected_img_count > 0:
         system_prompt += f"\n{IMG_PROMPT_RULE}\n"
@@ -50,7 +62,7 @@ def _build_chunk_system_prompt(current_chunk, masked_chunk, raw, expected_img_co
     if dicts:
         glossary_value = build_dynamic_glossary(masked_chunk, dicts)
         if glossary_value:
-            system_prompt += '\n\n' + GLOSSARY_CONTEXT.format(glossary=glossary_value)
+            system_prompt += '\n\n' + (GLOSSARY_CONTEXT_MINI if data else GLOSSARY_CONTEXT).format(glossary=glossary_value)
             glossary_log = ', '.join(glossary_value.splitlines())
             if len(glossary_log) > 40:
                 glossary_log = glossary_log[:40] + '...'

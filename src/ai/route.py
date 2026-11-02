@@ -41,8 +41,9 @@ class AiRoute(metaclass=_AiRouteMeta):
             try:
                 models_list = adapter.list_models(api_key)
                 if models_list:
-                    return models_list
-            except Exception:
+                    if len(models_list)  > 0:
+                        return models_list
+            except Exception as e:
                 pass
         return cls.get_popular_models(t)
 

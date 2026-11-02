@@ -2,7 +2,8 @@
 import asyncio
 import json
 import requests
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
+import subprocess
 
 from src.ai.registry import register_ai
 from src.ai.targets import AiTarget
@@ -12,113 +13,39 @@ from .base import BaseAiModel, AiResponse
 @register_ai(
     target=AiTarget.OLLAMA,
     name="Ollama",
-    default_model="qwen3.5:9b",
+    default_model="translategemma:12b",
     popular_models=[
-        "translategemma:4b",
         "translategemma:12b",
         "translategemma:27b",
-
-        "MedAIBase/Tencent-HY-MT1.5:1.8b",
-        "MedAIBase/Tencent-HY-MT1.5:7b",
-        "MedAIBase/Tencent-HY-MT1.5:1.8b-q4_K_M",
-        "MedAIBase/Tencent-HY-MT1.5:7b-q4_K_M",
-
-        "qwen3.5:0.8b",
-        "qwen3.5:2b",
-        "qwen3.5:4b",
-        "qwen3.5:9b",
-        "qwen3.5:27b",
-        "qwen3.5:35b-a3b",
-        "qwen3.5:122b-a10b",
-
-        "qwen3.6:27b",
-        "qwen3.6:35b",
-
-        "qwen3:0.6b",
-        "qwen3:1.7b",
-        "qwen3:4b",
-        "qwen3:8b",
-        "qwen3:14b",
-        "qwen3:30b",
-        "qwen3:32b",
-        "qwen3:235b",
-
-        "qwen2.5:0.5b",
-        "qwen2.5:1.5b",
-        "qwen2.5:3b",
-        "qwen2.5:7b",
-        "qwen2.5:14b",
-        "qwen2.5:32b",
-        "qwen2.5:72b",
-
-        "exaone3.5:2.4b",
-        "exaone3.5:7.8b",
-        "exaone3.5:32b",
-
-        "gemma4:e2b",
-        "gemma4:e4b",
+        
         "gemma4:12b",
         "gemma4:26b",
         "gemma4:31b",
-
-        "gemma3:1b",
-        "gemma3:4b",
-        "gemma3:12b",
-        "gemma3:27b",
+        "gemma4:e4b",
+        "gemma4:e2b",
         
-        "gemma2:2b",
-        "gemma2:9b",
-        "gemma2:27b",
+        "MedAIBase/Tencent-HY-MT1.5:7b",
 
-        "aya-expanse:8b",
-        "aya-expanse:32b",
-
-        "deepseek-r1:1.5b",
-        "deepseek-r1:7b",
-        "deepseek-r1:8b",
+        "deepseek-v2:16b",
         "deepseek-r1:14b",
         "deepseek-r1:32b",
-        "deepseek-r1:70b",
-        "deepseek-r1:671b",
-
-        "llama3.2:1b",
-        "llama3.2:3b",
-        "llama3.1:8b",
-        "llama3.1:70b",
-        "llama3.3:70b",
-
-        "mistral:7b",
-        "mistral-nemo:12b",
-
-        "phi4-mini",
-        "phi4",
-        "granite3.3:8b",
-        "solar:10.7b",
-        "command-r:35b",
-        "command-r-plus:104b",
+        
+        "gpt-oss:20b",
+        
     ],
     patterns=[
         "translategemma",
         "hy-mt",
-        "tencent",
+        "deepseek",
         "qwen",
         "gemma",
         "exaone",
-        "aya",
-        "deepseek",
-        "llama",
-        "mistral",
-        "phi",
-        "granite",
-        "solar",
-        "command-r",
-        "gpt-oss",
+        "translate",
         ":"
     ],
     matcher=lambda m: ":" in m or any(k in m.lower() for k in (
-        "qwen", "gemma", "exaone", "aya", "deepseek", "llama",
-        "mistral", "phi", "granite", "solar", "command-r",
-        "translategemma", "hy-mt", "tencent", "ollama"
+        "translategemma", "hy-mt", "deepseek", "qwen",
+        "gemma", "exaone", "translate", "ollama"
     )),
     default_config={
         "rpm": 60,
@@ -144,6 +71,23 @@ class OllamaModel(BaseAiModel):
         except Exception:
             pass
         return self.base_url
+    
+    def list_models(self, _) -> List[str]:
+        try:
+            result = subprocess.run(
+                ['ollama', 'list'], capture_output=True, text=True, check=True
+            )
+
+            lines = result.stdout.strip().split('\n')
+            models = []
+            for line in lines[1:]:
+                parts = line.split()
+                if len(parts) >= 4:
+                    models.append(parts[0])
+
+            return models
+        except:
+            return []
 
     async def send_text(self, message: str, setting: Optional[Dict[str, Any]] = None) -> AiResponse:
         setting = setting or {}
@@ -173,7 +117,7 @@ class OllamaModel(BaseAiModel):
                     raise RuntimeError(f"Ollama 오류 ({resp.status_code}): {resp.text}")
                 return resp.json().get("response", "")
             except requests.exceptions.ConnectionError:
-                raise RuntimeError("로컬 Ollama 서버에 연결할 수 없습니다. AI 관리자에서 서버를 실행하세요.")
+                raise RuntimeError("로컬 Ollama 서버에 연결할 수 없습니다. Ollama 서버를 실행하세요.")
 
         text = await asyncio.to_thread(_call)
         return AiResponse(text=text)

@@ -52,8 +52,7 @@ def load_app_settings(settings_panel, model_panel, status_callback, log_callback
 
     default_api = settings_panel.get_api_key(AiRoute.DEFAULT_TARGET)
     if default_api:
-        if AiRoute.DEFAULT_TARGET == int(AiTarget.GEMINI):
-            model_panel.load_gemini_models(default_api, manual=False)
+        model_panel.load_models(default_api, manual=False)
         settings_panel.setCurrentIndex(0)
     else:
         settings_panel.setCurrentIndex(3)
