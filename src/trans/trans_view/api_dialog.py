@@ -72,6 +72,9 @@ class ApiManagerDialog(QDialog):
         self.new_key_edit.setMinimumHeight(35)
         add_row.addWidget(self.new_key_edit, 1)
 
+        clear_btn = create_button("✕", self.new_key_edit.clear, w=36)
+        add_row.addWidget(clear_btn)
+
         self.add_key_btn = create_button("+", self.add_api_key, 'primaryBtn', h=35, w=48)
         add_row.addWidget(self.add_key_btn)
         root.addLayout(add_row)

@@ -182,6 +182,8 @@ class OllamaManagerDialog(QDialog):
         self.ollama_url_edit.setFixedHeight(30)
         self.ollama_url_edit.setText(str(load_data().get("ollama_url", "http://localhost:11434")))
         h_row.addWidget(self.ollama_url_edit, 1)
+        clear_btn = create_button("✕", self.ollama_url_edit.clear, h=30, w=36)
+        h_row.addWidget(clear_btn)
         sc_lay.addLayout(h_row)
 
         root.addWidget(status_card)

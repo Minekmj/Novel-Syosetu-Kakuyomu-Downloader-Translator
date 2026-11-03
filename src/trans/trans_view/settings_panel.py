@@ -125,6 +125,9 @@ class SettingsPanel(QTabWidget):
             api_edit.setMinimumHeight(34)
             srow.addWidget(api_edit, 1)
 
+            clear_btn = create_button('✕', api_edit.clear, w=36)
+            srow.addWidget(clear_btn)
+
             show_btn = create_button('보기', None, w=54, checkable=True)
             show_btn.toggled.connect(lambda c, e=api_edit, b=show_btn: self._toggle_vis(e, b, c))
             srow.addWidget(show_btn)
