@@ -18,6 +18,9 @@ def load_app_settings(settings_panel, model_panel, status_callback, log_callback
             keys_val = [api_val] if api_val else []
         idx_val = data.get(idx_k, 0)
 
+        if not api_val and keys_val:
+            api_val = str(keys_val[0]).strip()
+
         if target == AiRoute.DEFAULT_TARGET:
             trans_ai.set_api_keys(keys_val, idx_val)
             api_val = trans_ai.API or api_val
@@ -75,16 +78,22 @@ def save_app_settings(settings_panel, model_panel, log_callback):
             single_k, list_k, idx_k = AiRoute.get_storage_keys(target)
             key_val = edit_widget.text().strip()
             keys_val = data.get(list_k, [])
-            if not isinstance(keys_val, list) or not keys_val:
-                keys_val = [key_val] if key_val else []
+            if not isinstance(keys_val, list):
+                keys_val = []
+
+            if key_val:
+                if key_val not in keys_val:
+                    keys_val.append(key_val)
+                idx = keys_val.index(key_val)
+            else:
+                idx = 0
 
             data[single_k] = key_val
             data[list_k] = keys_val
-            if idx_k not in data:
-                data[idx_k] = 0
+            data[idx_k] = idx
 
             if target == AiRoute.DEFAULT_TARGET and key_val:
-                trans_ai.set_api_keys(keys_val, data.get(idx_k, 0))
+                trans_ai.set_api_keys(keys_val, idx)
 
         data.update({
             'translate_ai_target': first_target,

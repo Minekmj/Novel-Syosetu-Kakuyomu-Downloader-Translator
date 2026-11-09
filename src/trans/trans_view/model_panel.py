@@ -33,7 +33,7 @@ class ModelPanel(QWidget):
 
         target_list = [AiRoute.get_target_name(t) for t in sorted(AiRoute.TARGET_NAMES.keys())]
         self.target_add_combo = create_combo(target_list, AiRoute.get_target_name(AiRoute.DEFAULT_TARGET), h=35)
-        self.target_add_combo.setFixedWidth(85)
+        self.target_add_combo.setFixedWidth(95)
         self.target_add_combo.currentIndexChanged.connect(self.on_add_target_changed)
         model_row.addWidget(self.target_add_combo)
 
@@ -122,7 +122,7 @@ class ModelPanel(QWidget):
             rl.addWidget(indicator)
 
             row_target_combo = create_combo(target_list, AiRoute.get_target_name(target_int), h=50)
-            row_target_combo.setFixedWidth(82)
+            row_target_combo.setFixedWidth(90)
             row_target_combo.setToolTip('이 모델의 AI 종류 변경')
             row_target_combo.activated.connect(lambda _, idx=i, c=row_target_combo: self.change_selected_target(idx, c.currentIndex()))
             rl.addWidget(row_target_combo)
@@ -348,7 +348,8 @@ class ModelPanel(QWidget):
                    
         if not api_key and target_idx != int(AiTarget.OLLAMA):
             if manual:
-                QMessageBox.warning(self, '알림', 'API 키를 먼저 입력하세요.')
+                msg = 'JSON 키 파일 경로 또는 인증 정보를 먼저 입력하세요.' if target_idx == int(AiTarget.VERTEX) else 'API 키를 먼저 입력하세요.'
+                QMessageBox.warning(self, '알림', msg)
             return False
 
         for item in self._load_queue:

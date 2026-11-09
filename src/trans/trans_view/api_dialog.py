@@ -1,7 +1,9 @@
+import os
+import json
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog, QWidget, QLineEdit, QScrollArea, QFrame, QRadioButton,
-    QButtonGroup, QMessageBox
+    QButtonGroup, QMessageBox, QFileDialog
 )
 from src.ai import AiRoute, AiTarget
 from src.system.load_save import load_data, save_data
@@ -20,10 +22,12 @@ class ApiManagerDialog(QDialog):
         super().__init__(parent)
         self.ai_target = int(ai_target)
         self.target_name = AiRoute.get_target_name(self.ai_target)
+        self.is_vertex = False #(self.ai_target == int(AiTarget.VERTEX))
 
-        self.setWindowTitle(f"{self.target_name} API 키 관리")
-        self.resize(520, 480)
-        self.setMinimumSize(460, 400)
+        title_suffix = "인증 키(JSON) 관리" if self.is_vertex else "API 키 관리"
+        self.setWindowTitle(f"{self.target_name} {title_suffix}")
+        self.resize(540, 480)
+        self.setMinimumSize(480, 400)
 
         self.api_keys = []
         self.selected_index = 0
@@ -48,6 +52,8 @@ class ApiManagerDialog(QDialog):
         single_api = str(data.get(single_k, "")).strip()
         if not self.api_keys and single_api:
             self.api_keys = [single_api]
+        elif single_api and single_api not in self.api_keys:
+            self.api_keys.insert(0, single_api)
 
         try:
             self.selected_index = int(data.get(idx_k, 0))
@@ -62,28 +68,41 @@ class ApiManagerDialog(QDialog):
     def init_ui(self):
         root = create_layout('v', (16, 16, 16, 16), spacing=12, parent=self)
 
-        add_group_label = create_label(f"추가 {self.target_name} API", "optionLabel")
+        label_text = f"추가 {self.target_name} 인증 키 (JSON/파일)" if self.is_vertex else f"추가 {self.target_name} API"
+        add_group_label = create_label(label_text, "optionLabel")
         root.addWidget(add_group_label)
 
         add_row = create_layout('h', spacing=8)
         self.new_key_edit = QLineEdit()
-        self.new_key_edit.setPlaceholderText(f"새 {self.target_name} API 키를 입력하세요")
-        self.new_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        if self.is_vertex:
+            self.new_key_edit.setPlaceholderText("JSON 파일 경로 (.json) 또는 텍스트 입력")
+            self.new_key_edit.setEchoMode(QLineEdit.EchoMode.Normal)
+        else:
+            self.new_key_edit.setPlaceholderText(f"새 {self.target_name} API 키를 입력하세요")
+            self.new_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self.new_key_edit.setMinimumHeight(35)
         add_row.addWidget(self.new_key_edit, 1)
 
         clear_btn = create_button("✕", self.new_key_edit.clear, w=36)
         add_row.addWidget(clear_btn)
 
+        if self.is_vertex:
+            browse_btn = create_button("파일 찾기", self.browse_key_file, w=75)
+            add_row.addWidget(browse_btn)
+
         self.add_key_btn = create_button("+", self.add_api_key, 'primaryBtn', h=35, w=48)
         add_row.addWidget(self.add_key_btn)
         root.addLayout(add_row)
 
-        desc_lbl = create_label("인덱스 0이 메인 API이며 1 이상은 추가 API입니다.\nRate Limit 발생 시 순차적으로 다음 API 키로 자동 전환됩니다.", "secondaryInfo")
+        desc = (
+            "인덱스 0이 메인 키이며 1 이상은 추가 키입니다.\n"
+            "Rate Limit 발생 시 순차적으로 다음 키로 자동 전환됩니다."
+        )
+        desc_lbl = create_label(desc, "secondaryInfo")
         desc_lbl.setWordWrap(True)
         root.addWidget(desc_lbl)
 
-        list_title = create_label(f"등록된 {self.target_name} API 키 목록", "subLabel")
+        list_title = create_label(f"등록된 {self.target_name} 키 목록", "subLabel")
         root.addWidget(list_title)
 
         self.scroll_area = QScrollArea()
@@ -107,12 +126,35 @@ class ApiManagerDialog(QDialog):
         bottom_layout.addWidget(save_btn)
         root.addLayout(bottom_layout)
 
+    def browse_key_file(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, f"{self.target_name} 서비스 계정 JSON 파일 선택", "", "JSON 파일 (*.json);;모든 파일 (*.*)"
+        )
+        if path:
+            norm_path = os.path.normpath(path).replace("\\", "/")
+            self.new_key_edit.setText(norm_path)
+            self.add_api_key()
+
+    def _format_key_display(self, key: str) -> str:
+        s = key.strip()
+        if self.is_vertex:
+            if os.path.isfile(s) or s.lower().endswith(".json"):
+                return f"[파일] {os.path.basename(s)}"
+            if s.startswith("{") and s.endswith("}"):
+                try:
+                    data = json.loads(s)
+                    proj = data.get("project_id", "")
+                    return f"[JSON] {proj}" if proj else "[JSON 데이터]"
+                except Exception:
+                    return "[JSON 데이터]"
+        return key[:6] + "..." + key[-4:] if len(key) > 10 else key
+
     def rebuild_key_list(self):
         clear_layout(self.list_layout)
         self.button_group = QButtonGroup(self)
 
         if not self.api_keys:
-            empty_lbl = create_label("등록된 API 키가 없습니다.", "secondaryInfo")
+            empty_lbl = create_label("등록된 키가 없습니다.", "secondaryInfo")
             empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.list_layout.addWidget(empty_lbl)
             self.list_layout.addStretch(1)
@@ -136,8 +178,8 @@ class ApiManagerDialog(QDialog):
             label_text = f"[{i}] 메인" if i == 0 else f"[{i}] 추가"
             row_layout.addWidget(create_label(label_text, width=64))
 
-            masked_key = key[:6] + "..." + key[-4:] if len(key) > 10 else key
-            key_display = QLineEdit(masked_key)
+            key_display = QLineEdit(self._format_key_display(key))
+            key_display.setToolTip(key)
             key_display.setReadOnly(True)
             key_display.setMinimumHeight(32)
             row_layout.addWidget(key_display, 1)
@@ -159,10 +201,13 @@ class ApiManagerDialog(QDialog):
         if not new_key:
             return
         if new_key in self.api_keys:
-            QMessageBox.warning(self, "알림", "이미 등록된 API 키입니다.")
+            self.selected_index = self.api_keys.index(new_key)
+            self.new_key_edit.clear()
+            self.rebuild_key_list()
             return
 
         self.api_keys.append(new_key)
+        self.selected_index = len(self.api_keys) - 1
         self.new_key_edit.clear()
         self.rebuild_key_list()
 
@@ -177,6 +222,11 @@ class ApiManagerDialog(QDialog):
         self.rebuild_key_list()
 
     def save_and_close(self):
+        pending = self.new_key_edit.text().strip()
+        if pending and pending not in self.api_keys:
+            self.api_keys.append(pending)
+            self.selected_index = len(self.api_keys) - 1
+
         single_k, list_k, idx_k = self._get_key_names()
 
         if self.ai_target == int(AiTarget.GEMINI):
@@ -185,7 +235,7 @@ class ApiManagerDialog(QDialog):
         data = load_data()
         data[list_k] = self.api_keys
         data[idx_k] = self.selected_index
-        data[single_k] = self.api_keys[self.selected_index] if self.api_keys else ""
+        data[single_k] = self.api_keys[self.selected_index] if (0 <= self.selected_index < len(self.api_keys)) else ""
         save_data(data)
         self.accept()
 

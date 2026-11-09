@@ -119,16 +119,23 @@ class SettingsPanel(QTabWidget):
             sl = create_layout('v', (6, 6, 6, 6), spacing=6, parent=sub_w)
             srow = create_layout('h', spacing=6)
 
+            is_vertex = False #(target_int == int(AiTarget.VERTEX))
+            is_local = (target_int == int(AiTarget.OLLAMA))
+
             api_edit = preset.PasteOnlyLineEdit()
-            api_edit.setPlaceholderText(f"{target_name} API Key 또는 Endpoint")
-            api_edit.setEchoMode(QLineEdit.EchoMode.Password)
             api_edit.setMinimumHeight(34)
             srow.addWidget(api_edit, 1)
 
             clear_btn = create_button('✕', api_edit.clear, w=36)
             srow.addWidget(clear_btn)
 
-            show_btn = create_button('보기', None, w=54, checkable=True)
+            if is_vertex:
+                browse_btn = create_button('파일 찾기', lambda _, e=api_edit: self._browse_vertex_key(e), w=75)
+                srow.addWidget(browse_btn)
+
+            show_btn = create_button('숨기기' if is_vertex else '보기', None, w=65, checkable=True)
+            if is_vertex:
+                show_btn.setChecked(True)
             show_btn.toggled.connect(lambda c, e=api_edit, b=show_btn: self._toggle_vis(e, b, c))
             srow.addWidget(show_btn)
 
@@ -140,6 +147,20 @@ class SettingsPanel(QTabWidget):
             status_lbl = create_label('', 'secondaryInfo')
             sl.addWidget(status_lbl)
             sl.addStretch(1)
+
+            if is_vertex:
+                api_edit.setPlaceholderText("JSON 키 파일 경로 (.json) 또는 Project ID")
+                api_edit.setEchoMode(QLineEdit.EchoMode.Normal)
+                show_btn.hide()
+            elif is_local:
+                api_edit.hide()
+                clear_btn.hide()
+                show_btn.hide()
+                more_btn.setText("로컬 모델 설정")
+                more_btn.setFixedWidth(400)
+            else:
+                api_edit.setPlaceholderText(f"{target_name} API Key 또는 Endpoint")
+                api_edit.setEchoMode(QLineEdit.EchoMode.Password)
 
             self.api_edits[target_int] = api_edit
             self.api_status_lbls[target_int] = status_lbl
@@ -191,6 +212,13 @@ class SettingsPanel(QTabWidget):
 
         self.update_glossary_button()
 
+    def _browse_vertex_key(self, edit_widget):
+        path, _ = QFileDialog.getOpenFileName(
+            self, 'Vertex AI 서비스 계정 JSON 파일 선택', '', 'JSON 키 파일 (*.json);;모든 파일 (*.*)'
+        )
+        if path:
+            edit_widget.setText(path)
+
     def get_api_key(self, target: int) -> str:
         edit = self.api_edits.get(int(target))
         return edit.text().strip() if edit else ""
@@ -225,6 +253,13 @@ class SettingsPanel(QTabWidget):
         t_name = AiRoute.get_target_name(target)
         if int(target) == int(AiTarget.OLLAMA):
             lbl.setText(f"{t_name} 로컬 엔드포인트 설정 완료")
+        elif False:#int(target) == int(AiTarget.VERTEX):
+            if total_count > 1:
+                lbl.setText(f"등록된 {t_name} 인증 키: 총 {total_count}개 / 현재 활성: [{active_idx}]")
+            elif total_count == 1:
+                lbl.setText(f"등록된 {t_name} 인증 키: 1개")
+            else:
+                lbl.setText("")
         elif total_count > 1:
             lbl.setText(f"등록된 {t_name} API: 총 {total_count}개 / 현재 활성: [{active_idx}]")
         elif total_count == 1:

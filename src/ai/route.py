@@ -52,7 +52,7 @@ class AiRoute(metaclass=_AiRouteMeta):
         t = int(target)
         if t == cls.DEFAULT_TARGET:
             return "api", "api_keys", "api_index"
-        name = cls.get_target_name(t).lower()
+        name = cls.get_target_name(t).lower().replace(" ", "_")
         return f"api_{name}", f"api_keys_{name}", f"api_index_{name}"
 
     @classmethod
