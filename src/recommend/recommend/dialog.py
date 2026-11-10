@@ -4,7 +4,9 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QSplitter, QMessageBox
 from src.ai import AiRoute
 from src.main.thread_pyqt import RecommendWorker
+from src.system.data import load_data
 from .control_panel import RecommendControlPanel
+from .exclude_panel import RecommendExcludedPanel
 from . import workspace_panel
 
 
@@ -12,7 +14,7 @@ class NovelRecommendDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("AI 추천")
-        self.resize(1150, 720)
+        self.resize(1180, 720)
         self.setMinimumSize(1150, 720)
         self.setWindowFlags(self.windowFlags() | Qt.WindowMaximizeButtonHint)
 
@@ -32,18 +34,43 @@ class NovelRecommendDialog(QDialog):
 
         self.control_panel = RecommendControlPanel(self)
         self.workspace_panel = workspace_panel.RecommendWorkspacePanel(self)
+        self.exclude_panel = RecommendExcludedPanel(self)
+        self.exclude_panel.hide()
 
         self.control_panel.start_requested.connect(self.on_start_recommendation)
         self.control_panel.log_requested.connect(self.workspace_panel.append_info_card)
 
+        self.workspace_panel.toggle_exclude_requested.connect(self.toggle_exclude_panel)
+        self.exclude_panel.excluded_changed.connect(self.workspace_panel.set_exclude_count)
+
         self.splitter.addWidget(self.control_panel)
         self.splitter.addWidget(self.workspace_panel)
+        self.splitter.addWidget(self.exclude_panel)
 
-        self.splitter.setSizes([380, 900])
+        self.splitter.setSizes([380, 800, 0])
         self.splitter.setStretchFactor(0, 0)
         self.splitter.setStretchFactor(1, 1)
+        self.splitter.setStretchFactor(2, 0)
 
         root.addWidget(self.splitter)
+
+        data = load_data()
+        excluded = data.get("recommend_excluded", {})
+        if isinstance(excluded, dict):
+            self.workspace_panel.set_exclude_count(len(excluded))
+
+    def toggle_exclude_panel(self):
+        if self.exclude_panel.isVisible():
+            self.exclude_panel.hide()
+            self.splitter.setSizes([380, 800, 0])
+        else:
+            self.exclude_panel.refresh_list()
+            self.exclude_panel.show()
+            self.splitter.setSizes([320, 560, 300])
+
+    def on_work_excluded(self, url: str, title_ja: str, title_ko: str = ""):
+        self.exclude_panel.add_excluded(url, title_ja, title_ko)
+        self.workspace_panel.update_result_tab_count()
 
     def on_start_recommendation(
         self,

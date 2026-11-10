@@ -1,9 +1,9 @@
 from typing import Dict, Any
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QPushButton, QFrame
+    QLabel, QPushButton, QFrame, QSizePolicy
 )
 from src.find.site_list import site_point_text
 from src.main.thread_pyqt import TitleTranslateWorker
@@ -12,21 +12,24 @@ from .widgets import ClickableTitleLabel
 detail_ui = None
 
 class RecommendedWorkCard(QFrame):
+    work_excluded = Signal(str, str, str)
+
     def __init__(self, item_data: Dict[str, Any], order_number=1, parent=None):
         super().__init__(parent)
         self.item_data = item_data
         self.order_number = order_number
         self.story_expanded = False
         self.setObjectName("CardFrame")
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
         self.init_ui()
 
     def init_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 16, 18, 16)
-        layout.setSpacing(14)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(12)
 
         header_layout = QHBoxLayout()
-        header_layout.setSpacing(12)
+        header_layout.setSpacing(10)
         header_layout.setAlignment(Qt.AlignTop)
 
         title_container = QHBoxLayout()
@@ -37,14 +40,14 @@ class RecommendedWorkCard(QFrame):
         order_label.setObjectName("lbl_title")
         order_label.setStyleSheet("font-size: 15px; font-weight: bold;")
         order_label.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
-        order_label.setFixedWidth(22)
+        order_label.setFixedWidth(20)
         title_container.addWidget(order_label)
 
         title_col = QVBoxLayout()
-        title_col.setSpacing(4)
+        title_col.setSpacing(3)
 
-        title_ja = self.item_data.get("title_ja", self.item_data.get("title", ""))
-        url = self.item_data.get("url", "")
+        title_ja = self.item_data.get("title_ja") or self.item_data.get("title") or ""
+        url = self.item_data.get("url") or self.item_data.get("src") or self.item_data.get("link") or ""
 
         self.title_label = ClickableTitleLabel(title_ja, url)
         self.title_label.setObjectName("lbl_title")
@@ -77,7 +80,7 @@ class RecommendedWorkCard(QFrame):
         score = self.item_data.get("match_score", 0)
         score_lbl = QLabel(f"적합도 {score}점")
         score_lbl.setStyleSheet(
-            "font-weight: bold; padding: 4px 10px; border-radius: 4px; font-size: 12px;"
+            "font-weight: bold; padding: 4px 8px; border-radius: 4px; font-size: 12px;"
         )
         score_lbl.setAlignment(Qt.AlignCenter)
         badge_box.addWidget(score_lbl)
@@ -88,8 +91,8 @@ class RecommendedWorkCard(QFrame):
         info_box = QFrame()
         info_box.setObjectName("CardFrame_ui")
         info_box_layout = QVBoxLayout(info_box)
-        info_box_layout.setContentsMargins(14, 12, 14, 12)
-        info_box_layout.setSpacing(10)
+        info_box_layout.setContentsMargins(12, 10, 12, 10)
+        info_box_layout.setSpacing(8)
 
         one_liner = self.item_data.get("curator_one_liner", "")
         if one_liner:
@@ -100,7 +103,7 @@ class RecommendedWorkCard(QFrame):
             info_box_layout.addWidget(one_liner_lbl)
 
         details_col = QVBoxLayout()
-        details_col.setSpacing(6)
+        details_col.setSpacing(5)
 
         rationale = self.item_data.get("score_rationale", "")
         if rationale:
@@ -133,8 +136,8 @@ class RecommendedWorkCard(QFrame):
         layout.addWidget(info_box)
 
         footer_layout = QHBoxLayout()
-        footer_layout.setContentsMargins(2, 0, 2, 0)
-        footer_layout.setSpacing(12)
+        footer_layout.setContentsMargins(0, 2, 0, 0)
+        footer_layout.setSpacing(8)
         footer_layout.setAlignment(Qt.AlignVCenter)
 
         meta_items = []
@@ -154,27 +157,34 @@ class RecommendedWorkCard(QFrame):
         meta_text = "  ·  ".join(meta_items)
         meta_lbl = QLabel(meta_text)
         meta_lbl.setObjectName("lbl_url")
-        meta_lbl.setStyleSheet("font-size: 12px;")
-        
+        meta_lbl.setStyleSheet("font-size: 11px;")
+        meta_lbl.setWordWrap(True)
         footer_layout.addWidget(meta_lbl, stretch=1)
 
         btn_box = QHBoxLayout()
-        btn_box.setSpacing(6)
-        
+        btn_box.setSpacing(5)
+
         if detail_ui:
             self.dialog_btn = QPushButton("상세보기")
             self.dialog_btn.setObjectName("subtleBtn")
-            self.dialog_btn.setFixedSize(88, 30)
+            self.dialog_btn.setFixedSize(76, 28)
             self.dialog_btn.setCursor(Qt.PointingHandCursor)
             self.dialog_btn.clicked.connect(self.open_detail_dialog)
             btn_box.addWidget(self.dialog_btn)
 
         self.add_work_btn = QPushButton("작품 추가")
         self.add_work_btn.setObjectName("subtleBtn")
-        self.add_work_btn.setFixedSize(88, 30)
+        self.add_work_btn.setFixedSize(76, 28)
         self.add_work_btn.setCursor(Qt.PointingHandCursor)
         self.add_work_btn.clicked.connect(self.save_to_user_list)
         btn_box.addWidget(self.add_work_btn)
+
+        self.exclude_btn = QPushButton("제외 추가")
+        self.exclude_btn.setObjectName("subtleBtn")
+        self.exclude_btn.setFixedSize(76, 28)
+        self.exclude_btn.setCursor(Qt.PointingHandCursor)
+        self.exclude_btn.clicked.connect(self.on_exclude_clicked)
+        btn_box.addWidget(self.exclude_btn)
 
         footer_layout.addLayout(btn_box)
         layout.addLayout(footer_layout)
@@ -216,3 +226,20 @@ class RecommendedWorkCard(QFrame):
             detail_ui.click = True
         self.add_work_btn.setText("추가됨")
         self.add_work_btn.setEnabled(False)
+
+    def on_exclude_clicked(self):
+        url = self.item_data.get("url") or self.item_data.get("src") or self.item_data.get("link") or ""
+        title_ja = self.item_data.get("title_ja") or self.item_data.get("title") or ""
+        title_ko = self.item_data.get("title_ko") or ""
+
+        if not title_ko and hasattr(self, "title_label"):
+            lbl_txt = self.title_label.text().strip()
+            if lbl_txt and lbl_txt != title_ja:
+                title_ko = lbl_txt
+
+        if not url and hasattr(self, "title_label") and hasattr(self.title_label, "url_string"):
+            url = self.title_label.url_string or ""
+
+        self.work_excluded.emit(url, title_ja, title_ko)
+        self.setParent(None)
+        self.deleteLater()

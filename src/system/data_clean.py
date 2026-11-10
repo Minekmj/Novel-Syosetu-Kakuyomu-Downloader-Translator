@@ -108,6 +108,9 @@ def data_clean(data: dict):
     d.get_data_api("api", KEY_FILE_PATH)
     d.get_data_api("api_keys", KEY_FILE_PATH)
     d.get_data("api_index", 0)
+    
+    d.set_src(DATA_FILE_RECOMMEND)
+    d.get_data("recommend_excluded", {})
 
     return d.data_dict
 
@@ -166,6 +169,7 @@ def data_get():
     d.get_path(DATA_FILE_V)
     d.get_path(DATA_FILE_SITE)
     d.get_path(DATA_FILE_DICT)
+    d.get_path(DATA_FILE_RECOMMEND)
 
     d.get_path_api(DATA_FILE_API, KEY_FILE_PATH)
 

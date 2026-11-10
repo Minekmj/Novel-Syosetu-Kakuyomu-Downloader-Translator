@@ -1,4 +1,7 @@
-from PySide6.QtCore import QThread, QUrl, Signal, Qt, QTimer
+from PySide6.QtCore import (
+    QThread, QUrl, Signal, Qt, QTimer,
+    QPropertyAnimation, QEasingCurve
+)
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QTextEdit, QDialog,
@@ -10,6 +13,52 @@ from src.trans.trans import Translator
 import src.find.tag as tag_ui
 
 DOWN = None
+
+
+class SmoothTextEdit(QTextEdit):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._target_value = self.verticalScrollBar().value()
+
+        self._anim = QPropertyAnimation(self.verticalScrollBar(), b"value", self)
+        self._anim.setEasingCurve(QEasingCurve.OutCubic)
+        self._anim.setDuration(220)
+
+        self.verticalScrollBar().sliderPressed.connect(self._anim.stop)
+        self.verticalScrollBar().valueChanged.connect(self._on_value_changed)
+
+    def _on_value_changed(self, value):
+        if self._anim.state() != QPropertyAnimation.State.Running:
+            self._target_value = value
+
+    def wheelEvent(self, event):
+        if not event.pixelDelta().isNull():
+            super().wheelEvent(event)
+            self._target_value = self.verticalScrollBar().value()
+            return
+
+        delta_y = event.angleDelta().y()
+        if delta_y == 0:
+            super().wheelEvent(event)
+            return
+
+        scrollbar = self.verticalScrollBar()
+        step = (delta_y / 120.0) * (self.fontMetrics().lineSpacing() * 3.5)
+
+        base = self._target_value if self._anim.state() == QPropertyAnimation.State.Running else scrollbar.value()
+        new_target = int(base - step)
+        
+        new_target = max(scrollbar.minimum(), min(new_target, scrollbar.maximum()))
+
+        if new_target != scrollbar.value():
+            self._target_value = new_target
+            self._anim.stop()
+            self._anim.setStartValue(scrollbar.value())
+            self._anim.setEndValue(self._target_value)
+            self._anim.start()
+
+        event.accept()
+
 
 class ClickableUrlLabel(QLabel):
     def __init__(self, url_string, parent=None):
@@ -23,6 +72,7 @@ class ClickableUrlLabel(QLabel):
         if event.button() == Qt.LeftButton:
             QDesktopServices.openUrl(QUrl(self.url_string))
         super().mousePressEvent(event)
+
 
 class DetailWorker(QThread):
     finished = Signal(str, str)
@@ -51,6 +101,7 @@ class DetailWorker(QThread):
             print(f'상세 정보 오류: {e}')
             self.finished.emit('', '')
 
+
 class AverageWorker(QThread):
     finished = Signal(object)
 
@@ -66,6 +117,7 @@ class AverageWorker(QThread):
             print(f'연재 간격 계산 오류: {e}')
             self.finished.emit((None, None, None, None))
 
+
 class CopyTagButton(QPushButton):
     def __init__(self, display_text, original_text, parent=None):
         super().__init__(display_text, parent)
@@ -79,6 +131,7 @@ class CopyTagButton(QPushButton):
         QApplication.clipboard().setText(self.original_text)
         self.setText('✓ 복사됨')
         QTimer.singleShot(800, lambda: self.setText(self.display_text))
+
 
 class DetailDialog(QDialog):
     def __init__(self, item_data, auto_translate, site, parent=None):
@@ -186,7 +239,7 @@ class DetailDialog(QDialog):
         description_title.setObjectName('detail_section_title')
         layout.addWidget(description_title)
 
-        self.text_detail = QTextEdit()
+        self.text_detail = SmoothTextEdit()
         self.text_detail.setObjectName('detail_description')
         self.text_detail.setReadOnly(True)
         self.text_detail.setPlaceholderText('작품 소개가 없습니다.')

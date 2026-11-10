@@ -40,6 +40,7 @@ class SmoothScrollArea(QScrollArea):
 class SmoothListWidget(QListWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setVerticalScrollMode(QListWidget.ScrollPerPixel)
         self.anim = QPropertyAnimation(self.verticalScrollBar(), b"value", self)
         self.anim.setEasingCurve(QEasingCurve.Type.OutCubic)
         self.anim.setDuration(250)

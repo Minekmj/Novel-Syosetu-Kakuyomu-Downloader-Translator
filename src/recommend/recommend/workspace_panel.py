@@ -1,14 +1,16 @@
 from typing import Dict, Any, List
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QPushButton, QFrame, QTabWidget
+    QLabel, QPushButton, QFrame, QTabWidget, QSizePolicy
 )
 from .widgets import SmoothScrollArea
 from . import card as cd
 
 class RecommendWorkspacePanel(QWidget):
+    toggle_exclude_requested = Signal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.init_ui()
@@ -21,7 +23,7 @@ class RecommendWorkspacePanel(QWidget):
         header = QFrame()
         header.setObjectName("CardFrame_ui")
         h_layout = QHBoxLayout(header)
-        h_layout.setContentsMargins(14, 10, 14, 10)
+        h_layout.setContentsMargins(14, 8, 14, 8)
         h_layout.setSpacing(10)
 
         self.results_title_lbl = QLabel("AI 작품 추천")
@@ -34,9 +36,16 @@ class RecommendWorkspacePanel(QWidget):
         self.results_status_lbl.setObjectName("new_and_now")
         h_layout.addWidget(self.results_status_lbl)
 
+        self.btn_toggle_exclude = QPushButton("제외 목록 (0)")
+        self.btn_toggle_exclude.setObjectName("subtleBtn")
+        self.btn_toggle_exclude.setFixedHeight(34)
+        self.btn_toggle_exclude.setCursor(Qt.PointingHandCursor)
+        self.btn_toggle_exclude.clicked.connect(self.toggle_exclude_requested.emit)
+        h_layout.addWidget(self.btn_toggle_exclude)
+
         self.clear_feed_btn = QPushButton("로그 지우기")
         self.clear_feed_btn.setObjectName("subtleBtn")
-        self.clear_feed_btn.setFixedSize(90, 50)
+        self.clear_feed_btn.setFixedHeight(34)
         self.clear_feed_btn.setCursor(Qt.PointingHandCursor)
         self.clear_feed_btn.clicked.connect(self.clear_feed)
         h_layout.addWidget(self.clear_feed_btn)
@@ -56,13 +65,15 @@ class RecommendWorkspacePanel(QWidget):
         self.scroll_area.setFrameShape(QFrame.NoFrame)
         self.scroll_area.setObjectName("t_123")
         self.scroll_area.setStyleSheet("#t_123{background: transparent;}")
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
         self.cards_container = QWidget()
         self.cards_container.setObjectName("t_123")
         self.cards_container.setStyleSheet("#t_123{background: transparent;}")
+        self.cards_container.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
 
         self.cards_layout = QVBoxLayout(self.cards_container)
-        self.cards_layout.setContentsMargins(14, 8, 8, 8)
+        self.cards_layout.setContentsMargins(10, 8, 8, 8)
         self.cards_layout.setSpacing(12)
         self.cards_layout.addStretch()
 
@@ -71,7 +82,7 @@ class RecommendWorkspacePanel(QWidget):
 
         tab_feed = QWidget()
         feed_vbox = QVBoxLayout(tab_feed)
-        feed_vbox.setContentsMargins(14, 8, 8, 8)
+        feed_vbox.setContentsMargins(10, 8, 8, 8)
         feed_vbox.setSpacing(0)
 
         self.feed_scroll = SmoothScrollArea()
@@ -79,6 +90,7 @@ class RecommendWorkspacePanel(QWidget):
         self.feed_scroll.setFrameShape(QFrame.NoFrame)
         self.feed_scroll.setObjectName("t_123")
         self.feed_scroll.setStyleSheet("#t_123{background: transparent;}")
+        self.feed_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
         self.feed_container = QWidget()
         self.feed_container.setObjectName("t_123")
@@ -99,6 +111,9 @@ class RecommendWorkspacePanel(QWidget):
 
     def set_status(self, text: str):
         self.results_status_lbl.setText(text)
+
+    def set_exclude_count(self, count: int):
+        self.btn_toggle_exclude.setText(f"제외 목록 ({count})")
 
     def set_tab_index(self, index: int):
         self.tab_widget.setCurrentIndex(index)
@@ -167,6 +182,20 @@ class RecommendWorkspacePanel(QWidget):
         no_lbl.setAlignment(Qt.AlignCenter)
         self.cards_layout.insertWidget(0, no_lbl)
 
+    def get_remaining_cards_count(self) -> int:
+        count = 0
+        for i in range(self.cards_layout.count() - 1):
+            w = self.cards_layout.itemAt(i).widget()
+            if isinstance(w, cd.RecommendedWorkCard):
+                count += 1
+        return count
+
+    def update_result_tab_count(self):
+        cnt = self.get_remaining_cards_count()
+        self.tab_widget.setTabText(0, f"추천 결과 ({cnt})")
+        if cnt == 0:
+            self.set_status("후보작 없음")
+
     def display_results(self, works: List[Dict[str, Any]], curator_note: str, parent_dialog):
         self.tab_widget.setTabText(0, f"추천 결과 ({len(works)})")
 
@@ -184,6 +213,7 @@ class RecommendWorkspacePanel(QWidget):
 
         for order, work in enumerate(works):
             card = cd.RecommendedWorkCard(work, order + 1, parent_dialog)
+            card.work_excluded.connect(parent_dialog.on_work_excluded)
             self.cards_layout.insertWidget(self.cards_layout.count() - 1, card)
 
         self.scroll_area.verticalScrollBar().setValue(0)

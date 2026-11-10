@@ -4,13 +4,13 @@ from typing import Dict, Any, Optional
 from collections.abc import Callable
 
 from src.ai import AiRoute
+from src.system.data import load_data
 from src.find.site import KakuyomuSearch, NaroSearch, SyosetuSearch
 from .ai_client import SuggestionAIClient
 from .executor import SearchExecutor
 from .agent import SearchAgent
 from .ranker import CandidateRanker
 from .utils import PrintIo, normalize_url
-
 
 class NovelRecommender:
     def __init__(
@@ -52,7 +52,7 @@ class NovelRecommender:
         self.ranker = CandidateRanker(ai_client=self.ai)
 
     def get_read_history(self) -> Dict[str, Any]:
-        self.log("info", "사용자 작품 목록 로드 중...")
+        self.log("info", "사용자 감상 이력 데이터베이스 로드 중...")
         PrintIo("[행동] 사용자 감상 목록 로드")
         user_data = self.user_data
 
@@ -88,7 +88,6 @@ class NovelRecommender:
 
             history_items.append(set_data)
 
-        PrintIo(f"[기록] 감상 작품 수: {len(history_items)}개, 등록된 URL: {len(read_urls)}개")
         return {"items": history_items, "read_urls": read_urls}
 
     def run_recommendation(
@@ -97,9 +96,7 @@ class NovelRecommender:
         user_custom_prompt: Optional[str] = None
     ) -> Dict[str, Any]:
         start_time = datetime.now()
-        PrintIo("=== 추천 파이프라인 가동 ===")
-        if user_custom_prompt:
-            PrintIo(f"[사용자 특별 요청 반영]: \"{user_custom_prompt}\"")
+        PrintIo("=== 신규 파이프라인 가동 ===")
 
         try:
             history = self.get_read_history()
@@ -108,36 +105,55 @@ class NovelRecommender:
 
             if not history_items:
                 msg = "읽은 작품 기록이 없습니다."
-                PrintIo(msg)
                 return {"error": msg, "recommended_works": []}
 
-            self.log("info", "AI 추천 탐색을 시작하는 중...")
+            system_data = load_data()
+            excluded_dict = system_data.get("recommend_excluded", {})
+            excluded_urls = set()
+            excluded_titles = set()
 
-            candidates = self.agent.run_search_loop(
+            for k, info in excluded_dict.items():
+                if k.startswith("http"):
+                    excluded_urls.add(normalize_url(k))
+                if isinstance(info, dict):
+                    u = info.get("url")
+                    if u:
+                        excluded_urls.add(normalize_url(u))
+                    for t_field in ["title", "title_ko"]:
+                        t_val = info.get(t_field)
+                        if t_val:
+                            excluded_titles.add(t_val.strip().lower().replace(" ", ""))
+                elif isinstance(info, str) and info.strip():
+                    excluded_titles.add(info.strip().lower().replace(" ", ""))
+
+            candidates, history_analysis, main_request = self.agent.run_search_loop(
                 history_items=history_items,
                 read_urls=read_urls,
                 user_custom_prompt=user_custom_prompt,
-                top_k=top_k
+                top_k=top_k,
+                excluded_urls=excluded_urls,
+                excluded_titles=excluded_titles
             )
 
-            PrintIo(f"\n[최종 탐색 결산] 중복 제외 총 {len(candidates)}개의 고유 신작 후보 확보")
-            PrintIo(f"[플랫폼별 검색 성공 횟수]: {self.site_success_counts}")
-
-            self.log("info", f"검색 종료. {len(candidates)}개의 작품 중 최적작 {top_k}개 선별 중...")
+            PrintIo(f"\n[최종 탐색 결산] 총 {len(candidates)}개 후보 확보")
+            self.log(
+                "info",
+                f"누적 확보된 {len(candidates)}작품 중 최상위 {top_k}작품 선별 진행..."
+            )
 
             final_result = self.ranker.rerank_and_synthesize(
-                history_items=history_items,
-                user_custom_prompt=user_custom_prompt,
+                history_analysis=history_analysis,
+                main_request=main_request,
                 candidates=candidates,
                 top_k=top_k
             )
             final_result["user_custom_prompt"] = user_custom_prompt
+            final_result["main_request"] = main_request
 
             duration = (datetime.now() - start_time).total_seconds()
-            PrintIo(f"=== 추천 파이프라인 완료 (소요시간: {duration:.2f}초) ===")
-            PrintIo(f"=== {final_result.get('curator_note', '')} ===")
+            PrintIo(f"=== 추천 파이프라인 완료 ({duration:.2f}초 소요) ===")
             return final_result
 
         except Exception as e:
-            PrintIo(f"[치명적 오류 발생]: {e}\n{traceback.format_exc()}")
+            PrintIo(f"[치명적 오류]: {e}\n{traceback.format_exc()}")
             return {"error": str(e), "recommended_works": []}

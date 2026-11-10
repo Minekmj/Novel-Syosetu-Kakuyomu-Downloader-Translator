@@ -196,8 +196,6 @@ def human_like_background_click(hwnd, win_w, win_h, target_x, target_y):
         user32.PostMessageW(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, final_l_param)
         time.sleep(random.uniform(0.05, 0.1))
         user32.PostMessageW(hwnd, WM_LBUTTONUP, 0, final_l_param)
-        
-        print("[*] 백그라운드 가상 마우스 클릭 실행")
     except Exception as e:
         print(f"[!] 클릭 실패: {e}")
 
@@ -310,7 +308,6 @@ def find_cf():
     if os.path.exists(SRC):
         try:
             os.remove(SRC)
-            print(f"[*] 이전 '{SRC}' 파일을 삭제했습니다.")
         except Exception:
             pass
 
@@ -399,6 +396,7 @@ def find_cf():
         last_click_time = 0.0
         retry_interval = 1.0
 
+        print(f"[*] 인증 우회 시도 중...")
         while True:
             try:
                 ws_client.call_cdp(
@@ -426,9 +424,7 @@ def find_cf():
                 ctypes.windll.user32.EnumWindows(EnumWindowsProcType(enum_windows_proc), 0)
 
             now = time.time()
-            
             if target_hwnd and (now - start_time > 0.5) and (now - last_click_time > retry_interval):
-                print(f"[*] 인증 우회 시도 중...")
                 target_x = 200
                 target_y = 150
                 human_like_background_click(target_hwnd, win_w, win_h, target_x, target_y)
@@ -484,7 +480,6 @@ def find_cf():
 
         with open(SRC, "w", encoding="utf-8") as f:
             json.dump(session_data, f, ensure_ascii=False, indent=4)
-        print(f"[+] '{SRC}' 저장 완료!")
 
     finally:
         if ws_client:

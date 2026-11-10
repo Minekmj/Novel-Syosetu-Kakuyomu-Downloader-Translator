@@ -10,6 +10,7 @@ DATA_FILE_DICT = DATA_FOLDER + "dictionary.json"
 DATA_FILE_V = DATA_FOLDER + "ver.json"
 DATA_FILE_EPUB = DATA_FOLDER + "epub_cofing.json"
 DATA_FILE_SITE = DATA_FOLDER + "site_data.json"
+DATA_FILE_RECOMMEND = DATA_FOLDER + "recommend.json"
 
 # 태그 저장 경로
 USER_TAGS_SRC = DATA_FOLDER + "tag_user.json"
