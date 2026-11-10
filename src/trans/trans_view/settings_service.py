@@ -18,12 +18,20 @@ def load_app_settings(settings_panel, model_panel, status_callback, log_callback
             keys_val = [api_val] if api_val else []
         idx_val = data.get(idx_k, 0)
 
+        if target == int(AiTarget.OLLAMA) and not api_val:
+            api_val = str(data.get('ollama_url', 'http://localhost:11434')).strip()
+            keys_val = [api_val]
+            idx_val = 0
+
         if not api_val and keys_val:
-            api_val = str(keys_val[0]).strip()
+            try:
+                api_val = str(keys_val[idx_val]).strip()
+            except (IndexError, TypeError):
+                api_val = str(keys_val[0]).strip()
 
         if target == AiRoute.DEFAULT_TARGET:
             trans_ai.set_api_keys(keys_val, idx_val)
-            api_val = trans_ai.API or api_val
+            api_val = api_val or trans_ai.API
 
         settings_panel.set_api_key(target, api_val)
         settings_panel.update_api_status_display(target, len(keys_val), idx_val)
@@ -53,9 +61,16 @@ def load_app_settings(settings_panel, model_panel, status_callback, log_callback
         model_panel.active_model_index = -1
         model_panel.select_model(0, save_current=False)
 
-    default_api = settings_panel.get_api_key(AiRoute.DEFAULT_TARGET)
-    if default_api:
-        model_panel.load_models(default_api, manual=False)
+    active_target = int(model_panel.selected_models[0].get('ai_target', AiRoute.DEFAULT_TARGET)) if model_panel.selected_models else AiRoute.DEFAULT_TARGET
+    active_api = settings_panel.get_api_key(active_target)
+
+    if active_target == int(AiTarget.OLLAMA):
+        active_api = active_api or str(data.get('ollama_url', 'http://localhost:11434')).strip()
+        settings_panel.set_api_key(active_target, active_api)
+        model_panel.load_models(active_api, target_idx=active_target, manual=False)
+        settings_panel.setCurrentIndex(0)
+    elif active_api:
+        model_panel.load_models(active_api, target_idx=active_target, manual=False)
         settings_panel.setCurrentIndex(0)
     else:
         settings_panel.setCurrentIndex(3)
@@ -63,28 +78,28 @@ def load_app_settings(settings_panel, model_panel, status_callback, log_callback
 
     log_callback('저장된 번역 설정을 불러왔습니다.')
 
-
 def save_app_settings(settings_panel, model_panel, log_callback):
-    configs = model_panel.get_model_configs()
-    if not configs:
-        return False
-
     try:
         data = load_data()
-        first = configs[0]
-        first_target = first.get('ai_target', AiRoute.DEFAULT_TARGET)
 
         for target, edit_widget in settings_panel.api_edits.items():
             single_k, list_k, idx_k = AiRoute.get_storage_keys(target)
             key_val = edit_widget.text().strip()
+
+            if target == int(AiTarget.OLLAMA) and not key_val:
+                key_val = str(data.get('ollama_url', 'http://localhost:11434')).strip()
+                edit_widget.setText(key_val)
+
             keys_val = data.get(list_k, [])
             if not isinstance(keys_val, list):
                 keys_val = []
 
             if key_val:
                 if key_val not in keys_val:
-                    keys_val.append(key_val)
-                idx = keys_val.index(key_val)
+                    keys_val.insert(0, key_val)
+                    idx = 0
+                else:
+                    idx = keys_val.index(key_val)
             else:
                 idx = 0
 
@@ -92,8 +107,20 @@ def save_app_settings(settings_panel, model_panel, log_callback):
             data[list_k] = keys_val
             data[idx_k] = idx
 
+            if target == int(AiTarget.OLLAMA):
+                data['ollama_url'] = key_val
+
             if target == AiRoute.DEFAULT_TARGET and key_val:
                 trans_ai.set_api_keys(keys_val, idx)
+
+        save_data(data)
+
+        configs = model_panel.get_model_configs()
+        if not configs:
+            return False
+
+        first = configs[0]
+        first_target = first.get('ai_target', AiRoute.DEFAULT_TARGET)
 
         data.update({
             'translate_ai_target': first_target,

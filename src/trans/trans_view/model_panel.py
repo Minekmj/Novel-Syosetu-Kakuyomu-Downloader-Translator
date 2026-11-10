@@ -87,6 +87,10 @@ class ModelPanel(QWidget):
         if target_name not in self._cached_models:
             if self.settings_panel:
                 api_key = self.settings_panel.api_edits[target_idx].text().strip()
+                if target_idx == int(AiTarget.OLLAMA) and not api_key:
+                    from src.system.load_save import load_data
+                    api_key = str(load_data().get("ollama_url", "http://localhost:11434")).strip()
+                    self.settings_panel.set_api_key(target_idx, api_key)
                 self.load_models(api_key, target_idx, manual=False)
         data = self._cached_models.get(target_name, [])
         if data:
@@ -101,6 +105,10 @@ class ModelPanel(QWidget):
             target_idx = self.get_current_target()
         if self.settings_panel:
             api_key = self.settings_panel.api_edits[target_idx].text().strip()
+            if target_idx == int(AiTarget.OLLAMA) and not api_key:
+                from src.system.load_save import load_data
+                api_key = str(load_data().get("ollama_url", "http://localhost:11434")).strip()
+                self.settings_panel.set_api_key(target_idx, api_key)
             self.load_models(api_key, target_idx, manual=True)
 
     def rebuild_model_list(self):
@@ -345,7 +353,13 @@ class ModelPanel(QWidget):
     def load_models(self, api_key="", target_idx: int = -1, manual=False):
         if target_idx < 0:
             target_idx = self.get_current_target()
-                   
+
+        if target_idx == int(AiTarget.OLLAMA) and not api_key:
+            from src.system.load_save import load_data
+            api_key = str(load_data().get("ollama_url", "http://localhost:11434")).strip()
+            if self.settings_panel:
+                self.settings_panel.set_api_key(target_idx, api_key)
+
         if not api_key and target_idx != int(AiTarget.OLLAMA):
             if manual:
                 msg = 'JSON 키 파일 경로 또는 인증 정보를 먼저 입력하세요.' if target_idx == int(AiTarget.VERTEX) else 'API 키를 먼저 입력하세요.'

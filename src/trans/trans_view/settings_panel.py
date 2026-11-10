@@ -5,6 +5,8 @@ from PySide6.QtWidgets import (
     QTabWidget, QWidget, QLineEdit, QComboBox, QSizePolicy, QFileDialog, QMessageBox
 )
 from src.ai import AiRoute, AiTarget
+from src.system.load_save import load_data, save_data
+import src.trans.trans_ai as trans_ai
 from src.trans.trans_ai_utils import inspect_json_japanese
 import src.trans.trans_check_jp as check_jp
 import src.trans.preset as preset
@@ -119,7 +121,7 @@ class SettingsPanel(QTabWidget):
             sl = create_layout('v', (6, 6, 6, 6), spacing=6, parent=sub_w)
             srow = create_layout('h', spacing=6)
 
-            is_vertex = False #(target_int == int(AiTarget.VERTEX))
+            is_vertex = False
             is_local = (target_int == int(AiTarget.OLLAMA))
 
             api_edit = preset.PasteOnlyLineEdit()
@@ -161,6 +163,8 @@ class SettingsPanel(QTabWidget):
             else:
                 api_edit.setPlaceholderText(f"{target_name} API Key 또는 Endpoint")
                 api_edit.setEchoMode(QLineEdit.EchoMode.Password)
+
+            api_edit.textChanged.connect(lambda text, t=target_int: self.on_api_key_changed(t, text))
 
             self.api_edits[target_int] = api_edit
             self.api_status_lbls[target_int] = status_lbl
@@ -212,6 +216,35 @@ class SettingsPanel(QTabWidget):
 
         self.update_glossary_button()
 
+    def on_api_key_changed(self, target: int, text: str):
+        if target == int(AiTarget.OLLAMA):
+            return
+        clean_text = text.strip()
+        data = load_data()
+        single_k, list_k, idx_k = AiRoute.get_storage_keys(target)
+        keys_val = data.get(list_k, [])
+        if not isinstance(keys_val, list):
+            keys_val = []
+
+        if clean_text:
+            if clean_text not in keys_val:
+                keys_val.insert(0, clean_text)
+                idx = 0
+            else:
+                idx = keys_val.index(clean_text)
+        else:
+            idx = 0
+
+        data[single_k] = clean_text
+        data[list_k] = keys_val
+        data[idx_k] = idx
+        save_data(data)
+
+        if target == AiRoute.DEFAULT_TARGET:
+            trans_ai.set_api_keys(keys_val, idx)
+
+        self.update_api_status_display(target, len(keys_val), idx)
+
     def _browse_vertex_key(self, edit_widget):
         path, _ = QFileDialog.getOpenFileName(
             self, 'Vertex AI 서비스 계정 JSON 파일 선택', '', 'JSON 키 파일 (*.json);;모든 파일 (*.*)'
@@ -226,7 +259,9 @@ class SettingsPanel(QTabWidget):
     def set_api_key(self, target: int, key: str):
         edit = self.api_edits.get(int(target))
         if edit:
+            edit.blockSignals(True)
             edit.setText(str(key or "").strip())
+            edit.blockSignals(False)
 
     def _toggle_vis(self, edit_widget, btn_widget, checked):
         if checked:
@@ -253,13 +288,6 @@ class SettingsPanel(QTabWidget):
         t_name = AiRoute.get_target_name(target)
         if int(target) == int(AiTarget.OLLAMA):
             lbl.setText(f"{t_name} 로컬 엔드포인트 설정 완료")
-        elif False:#int(target) == int(AiTarget.VERTEX):
-            if total_count > 1:
-                lbl.setText(f"등록된 {t_name} 인증 키: 총 {total_count}개 / 현재 활성: [{active_idx}]")
-            elif total_count == 1:
-                lbl.setText(f"등록된 {t_name} 인증 키: 1개")
-            else:
-                lbl.setText("")
         elif total_count > 1:
             lbl.setText(f"등록된 {t_name} API: 총 {total_count}개 / 현재 활성: [{active_idx}]")
         elif total_count == 1:

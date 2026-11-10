@@ -483,8 +483,12 @@ class OllamaManagerDialog(QDialog):
 
     def save_and_close(self):
         url = self.get_ollama_host()
+        single_k, list_k, idx_k = AiRoute.get_storage_keys(AiTarget.OLLAMA)
         data = load_data()
         data["ollama_url"] = url
+        data[single_k] = url
+        data[list_k] = [url]
+        data[idx_k] = 0
         save_data(data)
         self.accept()
 

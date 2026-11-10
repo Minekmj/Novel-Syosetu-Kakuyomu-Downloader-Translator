@@ -12,6 +12,7 @@ from .config import ForceStopException
 from .model_worker import _create_model_workers
 from .chunk_utils import repair_chunk_boundaries, _is_stopped
 from .pipeline import TranslationItem, run_translation_batch
+import src.ai.targets as t
 
 
 async def _translate_light_novel_async(
@@ -35,7 +36,7 @@ async def _translate_light_novel_async(
 ):
     target = config.AI_TARGET if ai_target is None else ai_target
 
-    if config.API == '':
+    if config.API == '' and config.AI_TARGET != t.AiTarget.OLLAMA:
         if log_callback:
             log_callback('에러: API 키가 설정되지 않았습니다.')
         return 'error'

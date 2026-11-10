@@ -385,4 +385,5 @@ class TranslateDialog(QDialog):
             )
             event.ignore()
         else:
+            self.save_settings()
             super().closeEvent(event)
