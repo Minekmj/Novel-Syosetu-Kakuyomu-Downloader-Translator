@@ -9,6 +9,8 @@ import src.find.findsyou as findsyou
 from src.recommend.suggestion import NovelRecommender
 from src.trans.trans import Translator
 import src.trans.trans_ai as trans_ai
+from src.trans.trans_check_jp import JapaneseCheckCode
+from src.trans.trans_ai_utils import inspect_json_japanese
 
 DOWN = None
 STOP_CLICK = False
@@ -159,11 +161,13 @@ class TranslateThread(QThread):
             self.log_changed.emit(f"추론: {self.thinking_budget}")
             self.log_changed.emit("번역 작업 시작")
             self.log_changed.emit("=" * 60)
+            
+            json = ""
 
             if self.file_path.lower().endswith(".json"):
                 self.log_changed.emit("JSON 파일 감지 → 복원/재번역 모드")
 
-                trans_ai.TransAi_From_Json(
+                json = trans_ai.TransAi_From_Json(
                     self.file_path,
                     model_name=self.model_name,
                     rpm=self.rpm,
@@ -198,7 +202,7 @@ class TranslateThread(QThread):
                     result = f"{ff}\n{s}\n(raw)\n+---+\n"
                     text = result + text
 
-                trans_ai.TransAi_All(
+                json = trans_ai.TransAi_All(
                     text,
                     max_chars=self.max_chars,
                     model_name=self.model_name,
@@ -223,6 +227,13 @@ class TranslateThread(QThread):
                 self.log_changed.emit(f"출력 폴더: {output_dir}")
                 self.log_changed.emit("=" * 60)
                 self.finished_signal.emit(True, "번역이 완료되었습니다.", output_dir)
+                
+                if json != "" and os.environ.get("minedown_setting_auto_check", False):
+                    result = inspect_json_japanese(json, ratio_threshold=0.0, char_count_threshold=1)
+                    is_change = JapaneseCheckCode(result, self.log_changed.emit)
+                    if is_change:
+                        trans_ai.Change_file(self.file_path, self.max_chars, self.check, self.check_i)
+                    
             else:
                 self.log_changed.emit("=" * 60)
                 self.log_changed.emit("번역 중지")

@@ -68,6 +68,7 @@ def data_clean(data: dict):
     d.get_data("CENSOR_MODE", "word")
     d.get_data("CENSOR_PAPAGO", False)
     d.get_data("miniprom", False)
+    d.get_data("auto_check", False)
 
     d.set_src(DATA_FILE_LIST)
     d.get_data("list", {})

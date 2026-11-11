@@ -350,6 +350,16 @@ class TranslationTab(BaseSettingsTab):
         desc.setObjectName("lbl_original_title")
         desc.setWordWrap(True)
         layout.addWidget(desc)
+        
+        self.auto_check = self.register_item(
+            SettingCheckBox("auto_check", text="자동 일본어 치환 사용", default=False, parent=self)
+        )
+        layout.addWidget(self.auto_check.widget)
+        
+        descq = QLabel("• 번역 완료 후 자동으로 일본어를 삭제&치환 시킵니다.\n• 기준 : 일본어 글자수 1자 이상")
+        descq.setObjectName("lbl_original_title")
+        descq.setWordWrap(True)
+        layout.addWidget(descq)
 
         censor_group = QGroupBox("AI 검열 우회 및 방지 옵션")
         censor_group.setObjectName('group_box')

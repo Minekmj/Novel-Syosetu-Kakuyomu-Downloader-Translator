@@ -3,7 +3,12 @@ import json
 import os
 import re
 from src.ai import AiTarget
-from src.trans.trans_ai_utils import get_japanese_ratio
+from src.trans.trans_ai_utils import (
+    get_japanese_ratio,
+    detect_raw_text,
+    save_translation_json,
+    save_translation_txt
+)
 import src.down.down as down
 from . import config
 from .config import ForceStopException
@@ -37,7 +42,7 @@ def _parse_json_title_metadata(title):
         author = ''
         episode = ''
 
-    clean_book_title = re.sub(r'(_번역)+$', '', raw_book_title)
+    clean_book_title = re.sub(r'(_번역|_복원)+$', '', raw_book_title)
     restored_book_title = f'{clean_book_title}_복원'
 
     if episode:
@@ -69,13 +74,13 @@ async def _TransAi_From_Json_async(
     if _is_stopped(check, check_i):
         if log_callback and not (check_i and check_i()):
             log_callback('JSON 복원 중지: 작업 시작 전 중지되었습니다.')
-        return 'ignore'
+        return ''
 
     if not os.path.exists(json_path):
         msg = f'에러: JSON 파일을 찾을 수 없습니다 | {json_path}'
         if log_callback and not (check_i and check_i()):
             log_callback(msg)
-        return 'error'
+        return ''
 
     with open(json_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
@@ -91,7 +96,7 @@ async def _TransAi_From_Json_async(
     except Exception as e:
         if log_callback and not (check_i and check_i()):
             log_callback(f'에러: JSON 모델 설정 오류: {e}')
-        return 'error'
+        return ''
 
     chunk_indices = sorted(list(set(
         int(k[:-2]) if (k.endswith('-j') and k[:-2].isdigit()) else int(k)
@@ -180,7 +185,7 @@ async def _TransAi_From_Json_async(
                 normal_header.append(episode)
             return '\n'.join(normal_header) + f'\n{"+---+\n"}{final_result}'
 
-    return await run_translation_batch(
+    final_result, saved_json_path = await run_translation_batch(
         items=items,
         workers=workers,
         title=restored_book_title,
@@ -196,6 +201,11 @@ async def _TransAi_From_Json_async(
         raw_txt_info=raw_txt_info,
         epub_text_builder=build_epub_text
     )
+
+    if final_result == 'ignore' or not saved_json_path:
+        return ''
+
+    return saved_json_path
 
 
 def TransAi_From_Json(
@@ -215,7 +225,7 @@ def TransAi_From_Json(
     ai_target=None
 ):
     try:
-        return asyncio.run(
+        res = asyncio.run(
             _TransAi_From_Json_async(
                 json_path,
                 model_name,
@@ -233,7 +243,14 @@ def TransAi_From_Json(
                 ai_target=ai_target
             )
         )
+        if not res or res in ('ignore', 'error'):
+            return ''
+        return res
     except (ForceStopException, asyncio.CancelledError):
         if log_callback:
             log_callback('번역이 강제로 종료 되었습니다.')
-        return 'ignore'
+        return ''
+    except Exception as e:
+        if log_callback:
+            log_callback(f'에러: 번역 작업 중 예외 발생: {e}')
+        return ''

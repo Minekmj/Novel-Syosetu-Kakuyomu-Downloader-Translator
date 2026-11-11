@@ -36,12 +36,19 @@ from .chunk_utils import _is_stopped, adjust_split_mid
 from .validator import validate_translation_ratios, reset_or_retry_censor
 
 
+class _NullAsyncContext:
+    async def __aenter__(self):
+        return None
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+
 def _build_chunk_system_prompt(current_chunk, masked_chunk, raw, expected_img_count, is_censored, dicts, log_callback, prefix_log, check_i):
     data = os.environ.get("minedown_setting_miniprom", "False") == "True"
     if raw:
         system_prompt = SYSTEM_PROMPT_RAW_MINI if data else SYSTEM_PROMPT_RAW
     else:
-        
         if '+---+' in current_chunk:
             system_prompt = SYSTEM_PROMPT_MINI if data else SYSTEM_PROMPT
         else:
@@ -89,7 +96,8 @@ async def translate_chunk_safe_async(
     br_start=0,
     isno_x=False,
     thinking_budget=None,
-    ai_target=AiTarget.GEMINI
+    ai_target=AiTarget.GEMINI,
+    semaphore=None
 ):
     if dicts is None:
         dicts = {}
@@ -147,17 +155,8 @@ async def translate_chunk_safe_async(
             censored_label = '검열' if is_censored else ''
             prefix_log = f'[{chunk_idx} - {model_name}{(" - " + censored_label) if censored_label else ""}] [{depth}] [시도 {attempt}/{max_retries}]'
 
-        await rate_limiter.wait()
-
-        if _is_stopped(check, check_i):
-            if log_callback and not (check_i and check_i()):
-                log_callback(f'{prefix_log} 중지: API 호출 직전 작업 중지')
-            return None, 0, True
-
-        if log_callback and not (check_i and check_i()):
-            log_callback(f'{prefix_log} 번역 시작: (라인 수: {len(lines)})')
-
         cur_used_key = config.API
+        response = None
 
         try:
             system_prompt = _build_chunk_system_prompt(
@@ -176,41 +175,53 @@ async def translate_chunk_safe_async(
                 "thinking_budget": cur_thinking_budget
             }
 
-            try:
-                response = await config.ai_route.send_text(
-                    message=f'번역:\n{current_chunk}',
-                    setting=setting
-                )
-            except asyncio.CancelledError:
-                raise ForceStopException()
-            except Exception as api_err:
-                _is_stopped(check, check_i)
-                if config.ai_route.is_connection_error(api_err):
+            sem_ctx = semaphore if semaphore is not None else _NullAsyncContext()
+            async with sem_ctx:
+                await rate_limiter.wait()
+
+                if _is_stopped(check, check_i):
                     if log_callback and not (check_i and check_i()):
-                        log_callback(f'{prefix_log} 알림: 세션 재연결 중...')
-                    config.ai_route.refresh_client(cur_used_key)
-                    continue
-                elif cur_thinking_budget is not None and any(kw in str(api_err).lower() for kw in ("thinking", "unsupported", "invalid argument")):
-                    if log_callback and not (check_i and check_i()):
-                        log_callback(f'{prefix_log} 알림: 모델이 해당 추론 설정을 미지원하여 제외 후 일반 모드로 재시도합니다.')
-                    cur_thinking_budget = None
-                    continue
-                elif config.ai_route.is_rate_limit_error(api_err):
-                    delay = config.ai_route.extract_retry_delay(api_err)
-                    can_retry, new_idx, is_leader, wrapped = await config.switch_api_key_safe(cur_used_key, delay, log_callback)
-                    if can_retry:
+                        log_callback(f'{prefix_log} 중지: API 호출 직전 작업 중지')
+                    return None, 0, True
+
+                if log_callback and not (check_i and check_i()):
+                    log_callback(f'{prefix_log} 번역 시작: (라인 수: {len(lines)})')
+
+                try:
+                    response = await config.ai_route.send_text(
+                        message=f'번역:\n{current_chunk}',
+                        setting=setting
+                    )
+                except asyncio.CancelledError:
+                    raise ForceStopException()
+                except Exception as api_err:
+                    _is_stopped(check, check_i)
+                    if config.ai_route.is_connection_error(api_err):
                         if log_callback and not (check_i and check_i()):
-                            if is_leader and not wrapped:
-                                log_callback(f'{prefix_log} 경고: Rate Limit 감지 -> 전체 API 키를 [{new_idx}]번으로 전환했습니다.')
+                            log_callback(f'{prefix_log} 알림: 세션 재연결 중...')
+                        config.ai_route.refresh_client(cur_used_key)
                         continue
+                    elif cur_thinking_budget is not None and any(kw in str(api_err).lower() for kw in ("thinking", "unsupported", "invalid argument")):
+                        if log_callback and not (check_i and check_i()):
+                            log_callback(f'{prefix_log} 알림: 모델이 해당 추론 설정을 미지원하여 제외 후 일반 모드로 재시도합니다.')
+                        cur_thinking_budget = None
+                        continue
+                    elif config.ai_route.is_rate_limit_error(api_err):
+                        delay = config.ai_route.extract_retry_delay(api_err)
+                        can_retry, new_idx, is_leader, wrapped = await config.switch_api_key_safe(cur_used_key, delay, log_callback)
+                        if can_retry:
+                            if log_callback and not (check_i and check_i()):
+                                if is_leader and not wrapped:
+                                    log_callback(f'{prefix_log} 경고: Rate Limit 감지 -> 전체 API 키를 [{new_idx}]번으로 전환했습니다.')
+                            continue
+                        else:
+                            if log_callback and not (check_i and check_i()):
+                                log_callback(f'{prefix_log} 경고: Rate Limit 발생 (대기 시간: {int(delay)}초) -> {int(delay)}초 대기 후 재시도')
+                            await asyncio.sleep(delay)
+                            attempt += 1
+                            continue
                     else:
-                        if log_callback and not (check_i and check_i()):
-                            log_callback(f'{prefix_log} 경고: Rate Limit 발생 (대기 시간: {int(delay)}초) -> {int(delay)}초 대기 후 재시도')
-                        await asyncio.sleep(delay)
-                        attempt += 1
-                        continue
-                else:
-                    raise api_err
+                        raise api_err
 
             _is_stopped(check, check_i)
 
@@ -381,25 +392,59 @@ async def translate_chunk_safe_async(
             f'청크 분할 처리 (전반부 {mid}줄, 후반부 {len(lines)-mid}줄)'
         )
 
-    part1_text, part1_len, part1_ignore = await translate_chunk_safe_async(
-        chunk=''.join(lines[:mid]),
-        model_name=model_name,
-        safety_settings=safety_settings,
-        rate_limiter=rate_limiter,
-        temperature=temperature,
-        max_retries=max_retries,
-        depth=depth + 1,
-        log_callback=log_callback,
-        chunk_idx=chunk_idx,
-        raw=raw,
-        dicts=dicts,
-        check=check,
-        check_i=check_i,
-        br_start=max(0, br_start - 1),
-        isno_x=isno_x,
-        thinking_budget=cur_thinking_budget,
-        ai_target=ai_target
+    task1 = asyncio.create_task(
+        translate_chunk_safe_async(
+            chunk=''.join(lines[:mid]),
+            model_name=model_name,
+            safety_settings=safety_settings,
+            rate_limiter=rate_limiter,
+            temperature=temperature,
+            max_retries=max_retries,
+            depth=depth + 1,
+            log_callback=log_callback,
+            chunk_idx=chunk_idx,
+            raw=raw,
+            dicts=dicts,
+            check=check,
+            check_i=check_i,
+            br_start=max(0, br_start - 1),
+            isno_x=isno_x,
+            thinking_budget=cur_thinking_budget,
+            ai_target=ai_target,
+            semaphore=semaphore
+        )
     )
+
+    task2 = asyncio.create_task(
+        translate_chunk_safe_async(
+            chunk=''.join(lines[mid:]),
+            model_name=model_name,
+            safety_settings=safety_settings,
+            rate_limiter=rate_limiter,
+            temperature=temperature,
+            max_retries=max_retries,
+            depth=depth + 1,
+            log_callback=log_callback,
+            chunk_idx=chunk_idx,
+            raw=raw,
+            dicts=dicts,
+            check=check,
+            check_i=check_i,
+            br_start=max(0, br_start - 1),
+            isno_x=isno_x,
+            thinking_budget=cur_thinking_budget,
+            ai_target=ai_target,
+            semaphore=semaphore
+        )
+    )
+
+    try:
+        (part1_text, part1_len, part1_ignore), (part2_text, part2_len, part2_ignore) = await asyncio.gather(task1, task2)
+    except (ForceStopException, asyncio.CancelledError):
+        task1.cancel()
+        task2.cancel()
+        await asyncio.gather(task1, task2, return_exceptions=True)
+        raise ForceStopException()
 
     if part1_ignore:
         return part1_text, part1_len, True
@@ -409,26 +454,6 @@ async def translate_chunk_safe_async(
 
     if _is_stopped(check, check_i):
         return part1_text, len(lines[:mid]), True
-
-    part2_text, part2_len, part2_ignore = await translate_chunk_safe_async(
-        chunk=''.join(lines[mid:]),
-        model_name=model_name,
-        safety_settings=safety_settings,
-        rate_limiter=rate_limiter,
-        temperature=temperature,
-        max_retries=max_retries,
-        depth=depth + 1,
-        log_callback=log_callback,
-        chunk_idx=chunk_idx,
-        raw=raw,
-        dicts=dicts,
-        check=check,
-        check_i=check_i,
-        br_start=max(0, br_start - 1),
-        isno_x=isno_x,
-        thinking_budget=cur_thinking_budget,
-        ai_target=ai_target
-    )
 
     if part2_ignore:
         return part1_text, len(lines[:mid]), True

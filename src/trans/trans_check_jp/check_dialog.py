@@ -9,7 +9,6 @@ from .workers import GlossaryExtractWorker, JapaneseTranslateWorker
 from .glossary_dialog import JapaneseGlossaryDialog
 from src.trans.trans_ai_utils import apply_japanese_corrections
 
-
 class JapaneseCheckDialog(QDialog):
     def __init__(self, inspection_data, parent=None):
         super().__init__(parent)

@@ -108,7 +108,8 @@ async def run_translation_batch(
                     br_start=worker.br_start,
                     isno_x=worker.isno_x,
                     thinking_budget=worker.thinking_budget,
-                    ai_target=worker.ai_target
+                    ai_target=worker.ai_target,
+                    semaphore=worker.semaphore
                 )
 
                 if result_ignore or result_text is None or _is_stopped(check, check_i):
@@ -205,6 +206,7 @@ error 청크 next
 
     _is_stopped(check, check_i)
 
+    json_saved = False
     try:
         first_br = workers[0].br_start if workers else 0
         first_tb = workers[0].thinking_budget if workers else None
@@ -212,6 +214,7 @@ error 청크 next
             translated_parts, original_chunks, max_chars, json_title, json_path,
             raw=raw, br_start=first_br, thinking_budget=first_tb
         )
+        json_saved = True
     except Exception as e:
         if log_callback and not (check_i and check_i()):
             log_callback(f'JSON 저장 실패: {e}')
@@ -219,7 +222,7 @@ error 청크 next
     if ignored or _is_stopped(check, check_i):
         if epub_text_builder and log_callback and not (check_i and check_i()):
             log_callback('JSON 복원 중지됨 → EPUB 변환은 생략합니다.')
-        return 'ignore'
+        return 'ignore', ''
 
     final_result = '\n\n'.join(p for p in translated_parts if p)
 
@@ -235,4 +238,5 @@ error 청크 next
         if not _is_stopped(check, check_i):
             down.create_epub_from_merged_txt(txt_value=epub_text, RAW=raw)
 
-    return final_result
+    saved_path = json_path if (json_saved and os.path.exists(json_path)) else (json_path if json_saved else '')
+    return final_result, saved_path

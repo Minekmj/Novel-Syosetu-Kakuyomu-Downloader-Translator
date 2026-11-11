@@ -39,7 +39,7 @@ async def _translate_light_novel_async(
     if config.API == '' and config.AI_TARGET != t.AiTarget.OLLAMA:
         if log_callback:
             log_callback('에러: API 키가 설정되지 않았습니다.')
-        return 'error'
+        return 'error', ''
 
     try:
         workers = _create_model_workers(
@@ -48,7 +48,7 @@ async def _translate_light_novel_async(
     except Exception as e:
         if log_callback:
             log_callback(f'에러: 모델 설정 오류: {e}')
-        return 'error'
+        return 'error', ''
 
     chunks = repair_chunk_boundaries(split_text_by_lines(text, max_chars=max_chars), raw=raw)
     items = [
@@ -182,7 +182,7 @@ def TransAi_All(
                     f'청크 크기: {max_chars}, 동시 작업수: {max_concurrent}, 추론: {thinking_budget}'
                 )
 
-            trans_out = translate_light_novel(
+            trans_out, saved_json_path = translate_light_novel(
                 raw_text,
                 max_chars=max_chars,
                 model_name=model_name,
@@ -202,23 +202,24 @@ def TransAi_All(
                 ai_target=ai_target
             )
 
-            if trans_out == 'ignore':
-                return 'ignore'
-
-            if trans_out == 'error':
-                return 'error'
+            if trans_out in ('ignore', 'error') or not saved_json_path:
+                return ''
 
             translated_result = '+---+\n' + trans_out
             epub_text = f'{book_title}\n{author}\n(raw)\n{"+---+\n"}{translated_result}'
 
-            _is_stopped(check, check_i)
-            if not _is_stopped(check, check_i):
-                down.create_epub_from_merged_txt(
-                    txt_value=epub_text,
-                    RAW=True
-                )
+            if _is_stopped(check, check_i):
+                return ''
 
-            return translated_result
+            down.create_epub_from_merged_txt(
+                txt_value=epub_text,
+                RAW=True
+            )
+
+            if _is_stopped(check, check_i):
+                return ''
+
+            return saved_json_path
 
         A = '_번역\n'
 
@@ -242,7 +243,7 @@ def TransAi_All(
                 f'동시 작업수: {max_concurrent}, 추론: {thinking_budget}'
             )
 
-        trans_out = translate_light_novel(
+        trans_out, saved_json_path = translate_light_novel(
             g,
             max_chars=max_chars,
             model_name=model_name,
@@ -262,11 +263,8 @@ def TransAi_All(
             ai_target=ai_target
         )
 
-        if trans_out == 'ignore':
-            return 'ignore'
-
-        if trans_out == 'error':
-            return 'error'
+        if trans_out in ('ignore', 'error') or not saved_json_path:
+            return ''
 
         translated_result = '+---+\n' + trans_out
 
@@ -276,16 +274,24 @@ def TransAi_All(
         else:
             epub_text = f[:title_end] + A + f[title_end + 1:] + '\n' + translated_result
 
-        _is_stopped(check, check_i)
-        if not _is_stopped(check, check_i):
-            down.create_epub_from_merged_txt(
-                txt_value=epub_text,
-                RAW=False
-            )
+        if _is_stopped(check, check_i):
+            return ''
 
-        return translated_result
+        down.create_epub_from_merged_txt(
+            txt_value=epub_text,
+            RAW=False
+        )
+
+        if _is_stopped(check, check_i):
+            return ''
+
+        return saved_json_path
 
     except (ForceStopException, asyncio.CancelledError):
         if log_callback:
             log_callback('번역이 강제로 종료 되었습니다.')
-        return 'ignore'
+        return ''
+    except Exception as e:
+        if log_callback:
+            log_callback(f'번역 오류 발생: {e}')
+        return ''

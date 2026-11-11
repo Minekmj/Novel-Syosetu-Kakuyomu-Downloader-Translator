@@ -1,3 +1,4 @@
+import asyncio
 from src.ai import AiTarget
 from .rate_limiter import AsyncRateLimiter
 
@@ -23,6 +24,19 @@ class ModelWorker:
         self.thinking_budget = thinking_budget
         self.ai_target = ai_target
         self.rate_limiter = AsyncRateLimiter(self.rpm)
+        self._semaphore = None
+        self._loop = None
+
+    @property
+    def semaphore(self):
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if self._semaphore is None or self._loop is not loop:
+            self._semaphore = asyncio.Semaphore(self.max_concurrent)
+            self._loop = loop
+        return self._semaphore
 
     def __repr__(self):
         return (

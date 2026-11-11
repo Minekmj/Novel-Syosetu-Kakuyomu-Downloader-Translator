@@ -3,6 +3,7 @@ from . import config
 from .config import trans_ai
 
 from .check_dialog import JapaneseCheckDialog
+from .check_code import JapaneseCheckCode
 
 _CONFIG_VARS = {'trans_ai'}
 

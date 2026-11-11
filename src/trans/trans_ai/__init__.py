@@ -31,6 +31,7 @@ from .config import (
 
 from .novel_translator import TransAi_All
 from .json_translator import TransAi_From_Json
+from .change_translator import Change_file
 
 _CONFIG_VARS = {
     'API',
