@@ -181,7 +181,7 @@ def apply_japanese_corrections(json_path, corrections):
         max_chars = data.get('chunk', 5000)
         out = os.environ.get('minedown_setting_src', './out/')
         safe = re.sub(r'[\\/:*?"<>|]', '_', title).strip()
-        ai_dir = f'{out}trs\\ai_down_{safe}_{max_chars}'
+        ai_dir = os.path.join(out, "trs", f'ai_down_{safe}_{max_chars}')
 
         grouped = {}
         for corr in corrections:

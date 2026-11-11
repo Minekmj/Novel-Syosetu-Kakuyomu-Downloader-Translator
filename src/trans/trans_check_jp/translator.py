@@ -46,7 +46,7 @@ def call_translator_safely(text_to_translate: str) -> str:
 
         return res_str
     except Exception as e:
-        print(f"\n[ERROR Translator] 호출 실패! {e}", file=sys.stderr)
+        print(f"\n{e}", file=sys.stderr)
         traceback.print_exc()
         raise e
 
@@ -56,7 +56,6 @@ def smart_translate(text: str, glossary: dict = None, is_word_mode: bool = False
         return text
 
     orig_input = text
-    print(f"\n[DEBUG Pipeline] >>> 입력 [모드={'단어' if is_word_mode else '문장'}]: {orig_input!r}")
 
     res = resolve_arrows_and_memos(text)
     res = resolve_brackets_from_raw(res)
@@ -76,7 +75,6 @@ def smart_translate(text: str, glossary: dict = None, is_word_mode: bool = False
     res = re.sub(r' +', ' ', res).strip()
 
     if not has_japanese(res):
-        print(f"[DEBUG Pipeline] 규칙/괄호 해석만으로 완료: {res!r}")
         if is_word_mode:
             res = sanitize_dot_addition(orig_input, res)
         return res
@@ -85,20 +83,17 @@ def smart_translate(text: str, glossary: dict = None, is_word_mode: bool = False
     ko_chars_count = len(KO_PATTERN.findall(res))
 
     if ko_chars_count >= 10 and jp_chars_count <= 4 and not is_word_mode:
-        print(f"[DEBUG Pipeline] [한국어 보호] 문장 전체 API 호출 생략하고 단어만 음차: {res!r}")
         res = fix_embedded_katakana(res)
         if not has_japanese(res):
             return res
 
-    print(f"[DEBUG Pipeline] [API 호출 필요] 잔여 일문 존재 -> Translator 호출: {res!r}")
     try:
         translated = call_translator_safely(res)
-        print(f"[DEBUG Pipeline] Translator 반환 성공: {translated!r}")
         if is_word_mode:
             translated = sanitize_translated_word(translated, orig_text=res)
         res = translated
     except Exception as e:
-        print(f"[WARNING Pipeline] 번역기 호출 실패 ({e}), 폴백 진행", file=sys.stderr)
+        print(f"({e}), 폴백 진행", file=sys.stderr)
 
     res = resolve_arrows_and_memos(res)
     res = resolve_brackets_from_raw(res)
@@ -116,7 +111,6 @@ def smart_translate(text: str, glossary: dict = None, is_word_mode: bool = False
 
                 if len(sub_jp.strip()) >= 3:
                     try:
-                        print(f"[DEBUG Pipeline] 블록 세부 번역 시도: {sub_jp!r}")
                         sub_trans = call_translator_safely(sub_jp)
                         sub_trans = sanitize_translated_word(sub_trans, orig_text=sub_jp)
                     except Exception:
@@ -134,6 +128,4 @@ def smart_translate(text: str, glossary: dict = None, is_word_mode: bool = False
 
     if is_word_mode:
         res = sanitize_translated_word(res, orig_text=orig_input)
-
-    print(f"[DEBUG Pipeline] <<< 최종 완료 출력: {res!r}")
     return res

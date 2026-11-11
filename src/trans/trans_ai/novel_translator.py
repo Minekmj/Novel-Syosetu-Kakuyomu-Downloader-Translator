@@ -57,8 +57,10 @@ async def _translate_light_novel_async(
     ]
 
     out = down.downin.base_data.OUTFOLDER + '/'
-    os.makedirs(f'{out}epub', exist_ok=True)
-    os.makedirs(f'{out}epub\\raw_txt', exist_ok=True)
+    
+    os.makedirs(os.path.join(out, "epub"), exist_ok=True)
+    os.makedirs(os.path.join(out, "epub", "raw_txt"), exist_ok=True)
+    
     safe = re.sub(r'[\\/:*?"<>|]', '_', title).strip()
 
     model_info = ', '.join(
@@ -70,11 +72,11 @@ async def _translate_light_novel_async(
     if log_callback and not (check_i and check_i()):
         log_callback(msg)
 
-    json_path = f'{out}trs\\save_{safe} _ {max_chars}.json'
+    json_path = os.path.join(out, 'trs', f'save_{safe} _ {max_chars}.json')
 
     raw_txt_info = None
     if raw:
-        txt_path = f'{out}epub\\raw_txt\\{safe}.txt'
+        txt_path = os.path.join(out, "epub", "raw_txt", f"{safe}.txt")
         if '_' in title:
             book_title, author = title.rsplit('_', 1)
         else:

@@ -107,8 +107,8 @@ def adjust_split_mid(lines, mid, raw):
 
 def prepare_output_paths(title, max_chars):
     out = down.downin.base_data.OUTFOLDER + '/'
-    os.makedirs(f'{out}trs', exist_ok=True)
+    os.makedirs(os.path.join(out, "trs"), exist_ok=True)
     safe = re.sub(r'[\\/:*?"<>|]', '_', title).strip()
-    ai_dir = f'{out}trs\\ai_down_{safe}_{max_chars}'
+    ai_dir = os.path.join(out, "trs",  f'ai_down_{safe}_{max_chars}')
     os.makedirs(ai_dir, exist_ok=True)
     return out, safe, ai_dir

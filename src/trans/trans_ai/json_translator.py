@@ -151,13 +151,13 @@ async def _TransAi_From_Json_async(
     restored_book_title, author, episode, restored_name = _parse_json_title_metadata(title)
     out = down.downin.base_data.OUTFOLDER + '/'
     safe_title = re.sub(r'[\\/:*?"<>|]', '_', restored_book_title).strip()
-    save_path = f'{out}trs\\save_{safe_title}_{max_chars}_복원.json'
+    save_path = os.path.join(out, "trs", f'save_{safe_title}_{max_chars}_복원.json') 
 
     raw_txt_info = None
     if raw:
-        os.makedirs(f'{out}epub', exist_ok=True)
-        os.makedirs(f'{out}epub\\raw_txt', exist_ok=True)
-        txt_path = f'{out}epub\\raw_txt\\{safe_title}.txt'
+        os.makedirs(os.path.join(out, "epub"), exist_ok=True)
+        os.makedirs(os.path.join(out, "epub", "raw_txt"), exist_ok=True)
+        txt_path = os.path.join(out, "epub", "raw_txt", f"{safe_title}.txt")
         r_title = f'''{restored_book_title}
 {author}
 (raw)
