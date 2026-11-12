@@ -7,12 +7,10 @@ from src.trans.prom import (
     SYSTEM_PROMPT,
     SYSTEM_PROMPT_NO_SPLIT,
     SYSTEM_PROMPT_RAW,
-    
     SYSTEM_PROMPT_MINI,
     SYSTEM_PROMPT_NO_SPLIT_MINI,
     SYSTEM_PROMPT_RAW_MINI,
     GLOSSARY_CONTEXT_MINI,
-    
     IMG_PROMPT_RULE,
     CENSOR_PROMPT_RULE,
     GLOSSARY_CONTEXT
@@ -134,6 +132,7 @@ async def translate_chunk_safe_async(
     attempt = 1
     censor_attempt = 0
     max_censor_attempts = 3
+    rate_limit_hits = 0
     cur_thinking_budget = thinking_budget
 
     while not force_split:
@@ -159,22 +158,6 @@ async def translate_chunk_safe_async(
         response = None
 
         try:
-            system_prompt = _build_chunk_system_prompt(
-                current_chunk, masked_chunk, raw, expected_img_count,
-                is_censored, dicts, log_callback, prefix_log, check_i
-            )
-
-            setting = {
-                "ai_target": ai_target,
-                "api_key": cur_used_key,
-                "model_name": model_name,
-                "system_instruction": system_prompt,
-                "temperature": temperature,
-                "top_p": 0.8,
-                "safety_settings": safety_settings,
-                "thinking_budget": cur_thinking_budget
-            }
-
             sem_ctx = semaphore if semaphore is not None else _NullAsyncContext()
             async with sem_ctx:
                 await rate_limiter.wait()
@@ -183,6 +166,24 @@ async def translate_chunk_safe_async(
                     if log_callback and not (check_i and check_i()):
                         log_callback(f'{prefix_log} 중지: API 호출 직전 작업 중지')
                     return None, 0, True
+
+                cur_used_key = config.API
+
+                system_prompt = _build_chunk_system_prompt(
+                    current_chunk, masked_chunk, raw, expected_img_count,
+                    is_censored, dicts, log_callback, prefix_log, check_i
+                )
+
+                setting = {
+                    "ai_target": ai_target,
+                    "api_key": cur_used_key,
+                    "model_name": model_name,
+                    "system_instruction": system_prompt,
+                    "temperature": temperature,
+                    "top_p": 0.8,
+                    "safety_settings": safety_settings,
+                    "thinking_budget": cur_thinking_budget
+                }
 
                 if log_callback and not (check_i and check_i()):
                     log_callback(f'{prefix_log} 번역 시작: (라인 수: {len(lines)})')
@@ -210,9 +211,25 @@ async def translate_chunk_safe_async(
                         delay = config.ai_route.extract_retry_delay(api_err)
                         can_retry, new_idx, is_leader, wrapped = await config.switch_api_key_safe(cur_used_key, delay, log_callback)
                         if can_retry:
+                            rate_limit_hits += 1
+                            unique_key_count = max(1, len(set(config.API_KEYS)))
+                            if wrapped or rate_limit_hits >= unique_key_count:
+                                rate_limit_hits = 0
+                                attempt += 1
                             if log_callback and not (check_i and check_i()):
-                                if is_leader and not wrapped:
+                                if is_leader and wrapped:
+                                    wait_sec = int(delay) if delay and float(delay) > 0 else 5
+                                    log_callback(f'{prefix_log} 경고: 모든 API 키 Rate Limit 감지 -> [{new_idx}]번 키로 순환 및 {wait_sec}초 쿨다운 적용')
+                                elif is_leader:
                                     log_callback(f'{prefix_log} 경고: Rate Limit 감지 -> 전체 API 키를 [{new_idx}]번으로 전환했습니다.')
+                                elif wrapped:
+                                    rem_sec = int(config.get_cooldown_remaining())
+                                    if rem_sec > 0:
+                                        log_callback(f'{prefix_log} 경고: Rate Limit 감지 -> 쿨다운 대기({rem_sec}초) 적용 ([{new_idx}]번 키)')
+                                    else:
+                                        log_callback(f'{prefix_log} 경고: Rate Limit 감지 -> [{new_idx}]번 키로 재시도합니다.')
+                                else:
+                                    log_callback(f'{prefix_log} 경고: Rate Limit 감지 -> 이미 [{new_idx}]번 키로 전환되어 재시도합니다.')
                             continue
                         else:
                             if log_callback and not (check_i and check_i()):
@@ -450,15 +467,4 @@ async def translate_chunk_safe_async(
         return part1_text, part1_len, True
 
     if part1_text is None:
-        return None, 0, True
-
-    if _is_stopped(check, check_i):
-        return part1_text, len(lines[:mid]), True
-
-    if part2_ignore:
-        return part1_text, len(lines[:mid]), True
-
-    if part2_text is None:
-        return part1_text, len(lines[:mid]), True
-
-    return part1_text.rstrip('\n') + '\n' + part2_text.lstrip('\n'), len(lines), False
+        return

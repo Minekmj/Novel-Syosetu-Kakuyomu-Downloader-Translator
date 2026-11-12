@@ -19,7 +19,7 @@ def build_thinking_config(thinking_val, model_name=""):
         return None
 
     level = None
-    for candidate in ('MINIMAL', 'LOW', 'MEDIUM', 'HIGH'):
+    for candidate in ('MINIMAL', 'LOW', 'MEDIUM', 'HIGH', 'XHIGH'):
         if candidate in val:
             level = candidate
             break
@@ -28,6 +28,10 @@ def build_thinking_config(thinking_val, model_name=""):
     raw_number = int(digits[0]) if digits else None
 
     m = str(model_name).lower()
+    
+    if not 'hydrogen' in m:
+        target_level = 'HIGH' if level == 'XHIGH' else level
+        level = 'HIGH' if level == 'XHIGH' else level
 
     if 'gemma-4' in m:
         target_level = 'HIGH' if level == 'HIGH' or (raw_number is not None and raw_number > 0) else 'MINIMAL'
@@ -147,7 +151,7 @@ class GeminiModel(BaseAiModel):
             exclude_keywords = [
                 "embedding", "robotics", "tts", "audio", "image",
                 "omni", "computer-use", "customtools", "live", "transcribe", "nano",
-                "3.1-flash-lite-preview", "3-pro-preview", "3.7-flash", "2.5"
+                "3.1-flash-lite-preview", "3-pro-preview", "3.7-flash", "2.5", "decision"
             ]
             if any(keyword in m for keyword in exclude_keywords):
                 continue

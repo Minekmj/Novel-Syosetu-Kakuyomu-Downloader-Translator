@@ -15,21 +15,30 @@ AI_TARGET = AiRoute.DEFAULT_TARGET
 MODEL_NAME = AiRoute.DEFAULT_MODEL
 CUSTOM_AI_PROMPT = ''
 
-USE_ADVANCED_CENSOR = False  
-CENSOR_SHUFFLE = True  
-CENSOR_EXTRACT_MODE = "word"  
+USE_ADVANCED_CENSOR = False
+CENSOR_SHUFFLE = True
+CENSOR_EXTRACT_MODE = "word"
 CENSOR_PAPAGO = False
 
 IMG_TAG_PATTERN = re.compile(r'-img-:[^\s\r\n]+')
 
 _LOOP_LOCKS = weakref.WeakKeyDictionary()
 _cooldown_until = 0.0
+_switches_in_cycle = 0
+_last_switch_time = 0.0
 
 ai_route = AiRoute(ai_target=AI_TARGET, api=API)
 
 
 class ForceStopException(Exception):
     pass
+
+
+def _reset_switch_state():
+    global _cooldown_until, _switches_in_cycle, _last_switch_time
+    _cooldown_until = 0.0
+    _switches_in_cycle = 0
+    _last_switch_time = 0.0
 
 
 def set_cooldown(seconds: float):
@@ -97,6 +106,7 @@ def set_api_key(api_key):
         else:
             API_KEYS.append(API)
             API_INDEX = len(API_KEYS) - 1
+    _reset_switch_state()
     data = load_data()
     data['api'] = API
     data['api_keys'] = API_KEYS
@@ -114,6 +124,7 @@ def set_api_keys(keys, active_index=0):
         API_INDEX = max(0, min(int(active_index), len(API_KEYS) - 1))
         API = API_KEYS[API_INDEX]
     ai_route.set_api(API)
+    _reset_switch_state()
     data = load_data()
     data['api'] = API
     data['api_keys'] = API_KEYS
@@ -128,27 +139,45 @@ def set_api_index(index):
     API_INDEX = max(0, min(int(index), len(API_KEYS) - 1))
     API = API_KEYS[API_INDEX]
     ai_route.set_api(API)
+    _reset_switch_state()
     data = load_data()
     data['api'] = API
+    data['api_keys'] = API_KEYS
     data['api_index'] = API_INDEX
     save_data(data)
     return True
 
 
 async def switch_api_key_safe(failed_key: str, wait_seconds: float = 0, log_callback=None):
-    global API, API_KEYS, API_INDEX
+    global API, API_KEYS, API_INDEX, _switches_in_cycle, _last_switch_time
     lock = _get_switch_lock()
     async with lock:
-        if len(API_KEYS) <= 1:
+        unique_keys = set(API_KEYS)
+        if len(unique_keys) <= 1:
             return False, API_INDEX, False, False
 
         if get_cooldown_remaining() > 0:
-            await wait_cooldown()
             return True, API_INDEX, False, True
 
         if API == failed_key:
-            next_index = (API_INDEX + 1) % len(API_KEYS)
-            wrapped = (next_index <= API_INDEX)
+            now = time.time()
+            cooldown_sec = float(wait_seconds) if wait_seconds and float(wait_seconds) > 0 else 5.0
+            if _last_switch_time > 0 and (now - _last_switch_time) > max(cooldown_sec, 60.0):
+                _switches_in_cycle = 0
+            _last_switch_time = now
+
+            next_index = API_INDEX
+            for _ in range(len(API_KEYS)):
+                next_index = (next_index + 1) % len(API_KEYS)
+                if API_KEYS[next_index] != failed_key:
+                    break
+
+            _switches_in_cycle += 1
+            wrapped = _switches_in_cycle >= len(unique_keys)
+            if wrapped:
+                _switches_in_cycle = 0
+                set_cooldown(cooldown_sec)
+
             API_INDEX = next_index
             API = API_KEYS[API_INDEX]
             ai_route.set_api(API)
@@ -170,8 +199,10 @@ def switch_to_next_api_key():
     API_INDEX = (API_INDEX + 1) % len(API_KEYS)
     API = API_KEYS[API_INDEX]
     ai_route.set_api(API)
+    _reset_switch_state()
     data = load_data()
     data['api'] = API
+    data['api_keys'] = API_KEYS
     data['api_index'] = API_INDEX
     save_data(data)
     return True
@@ -205,6 +236,7 @@ def rest():
         API = single_api
 
     ai_route.set_api(API)
+    _reset_switch_state()
 
 
 rest()
