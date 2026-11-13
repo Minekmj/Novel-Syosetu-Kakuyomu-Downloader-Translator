@@ -1,4 +1,5 @@
-from typing import Dict, Any
+import inspect
+from typing import Dict, Any, List
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QSplitter, QMessageBox
@@ -19,6 +20,9 @@ class NovelRecommendDialog(QDialog):
         self.setWindowFlags(self.windowFlags() | Qt.WindowMaximizeButtonHint)
 
         self.recommend_worker = None
+        self.cancel_requested = False
+        self.current_condition = ""
+        self.conversation_history: List[Dict[str, str]] = []
         self.init_ui()
 
     def set_value_detail_ui(ui):
@@ -38,6 +42,7 @@ class NovelRecommendDialog(QDialog):
         self.exclude_panel.hide()
 
         self.control_panel.start_requested.connect(self.on_start_recommendation)
+        self.control_panel.stop_requested.connect(self.on_stop_recommendation)
         self.control_panel.log_requested.connect(self.workspace_panel.append_info_card)
 
         self.workspace_panel.toggle_exclude_requested.connect(self.toggle_exclude_panel)
@@ -58,6 +63,9 @@ class NovelRecommendDialog(QDialog):
         excluded = data.get("recommend_excluded", {})
         if isinstance(excluded, dict):
             self.workspace_panel.set_exclude_count(len(excluded))
+
+    def is_cancel_requested(self) -> bool:
+        return self.cancel_requested
 
     def toggle_exclude_panel(self):
         if self.exclude_panel.isVisible():
@@ -86,39 +94,107 @@ class NovelRecommendDialog(QDialog):
             return
 
         target_name = AiRoute.get_target_name(ai_target)
+        next_session_num = self.workspace_panel.get_next_session_number()
 
-        self.workspace_panel.clear_result_cards()
+        self.cancel_requested = False
+        self.current_condition = condition
         self.control_panel.set_running(True)
         self.workspace_panel.set_status(f"[{target_name}] AI 분석 중...")
-        self.workspace_panel.set_tab_index(1)
+        self.workspace_panel.focus_log_tab()
 
-        self.workspace_panel.append_ai_speech_card("<center><b>새 추천 세션 시작</b></center>")
+        self.workspace_panel.append_ai_speech_card(f"<center><b>추천 세션 #{next_session_num} 시작</b></center>")
         self.workspace_panel.append_info_card(
-            f"추천 세션 가동: [{target_name}] 모델 {model}, 상위 {top_k}작품 선별, 기존 목록 {len(user_data['list'])}개 참조"
+            f"추천 세션 #{next_session_num} 가동: [{target_name}] 모델 {model}, 상위 {top_k}작품 선별, 기존 목록 {len(user_data['list'])}개 참조"
         )
 
-        self.recommend_worker = RecommendWorker(
-            api_key=api_key,
-            model=model,
-            condition=condition,
-            top_k=top_k,
-            user_data=user_data,
-            ai_target=ai_target
-        )
+        worker_kwargs = {
+            "api_key": api_key,
+            "model": model,
+            "condition": condition,
+            "top_k": top_k,
+            "user_data": user_data,
+            "ai_target": ai_target,
+        }
+        try:
+            sig = inspect.signature(RecommendWorker.__init__)
+            params = sig.parameters
+            has_var_kw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
+            if "check" in params or has_var_kw:
+                worker_kwargs["check"] = self.is_cancel_requested
+            if "conversation_history" in params or has_var_kw:
+                worker_kwargs["conversation_history"] = list(self.conversation_history)
+        except Exception:
+            pass
+
+        self.recommend_worker = RecommendWorker(**worker_kwargs)
 
         self.recommend_worker.log_signal.connect(self.on_worker_log)
         self.recommend_worker.finished_signal.connect(self.on_recommendation_finished)
         self.recommend_worker.error_signal.connect(self.on_recommendation_failed)
+        self.recommend_worker.finished.connect(self.on_worker_thread_finished)
         self.recommend_worker.start()
 
+    def on_stop_recommendation(self):
+        if not (self.recommend_worker and self.recommend_worker.isRunning()):
+            self.cancel_requested = False
+            self.control_panel.set_running(False)
+            return
+
+        self.cancel_requested = True
+        self.workspace_panel.set_status("중단 중...")
+        self.workspace_panel.append_info_card("추천 중단을 요청했습니다. 현재 단계를 정리한 뒤 종료합니다...")
+
+        if hasattr(self.recommend_worker, "requestInterruption"):
+            self.recommend_worker.requestInterruption()
+
+        recommender = getattr(self.recommend_worker, "recommender", None)
+        if recommender is not None:
+            recommender.check = self.is_cancel_requested
+            if getattr(recommender, "ai", None) is not None:
+                recommender.ai.check = self.is_cancel_requested
+            if getattr(recommender, "executor", None) is not None:
+                recommender.executor.check = self.is_cancel_requested
+            if getattr(recommender, "agent", None) is not None:
+                recommender.agent.check = self.is_cancel_requested
+            if getattr(recommender, "ranker", None) is not None:
+                recommender.ranker.check = self.is_cancel_requested
+
+        for method_name in ("stop", "cancel"):
+            fn = getattr(self.recommend_worker, method_name, None)
+            if callable(fn):
+                try:
+                    fn()
+                except Exception:
+                    pass
+
     def on_worker_log(self, log_type: str, text: str):
+        if self.cancel_requested and "중단" not in str(text):
+            return
         if log_type == "ai":
             self.workspace_panel.append_ai_speech_card(text)
         else:
             self.workspace_panel.append_info_card(text)
 
+    def on_worker_thread_finished(self):
+        if self.control_panel.is_running:
+            self.control_panel.set_running(False)
+            if self.cancel_requested:
+                self.cancel_requested = False
+                self.workspace_panel.set_status("중단됨")
+                self.workspace_panel.append_info_card("추천 작업이 중단되었습니다.")
+
     def on_recommendation_finished(self, result: Dict[str, Any]):
         self.control_panel.set_running(False)
+
+        if self.cancel_requested or (isinstance(result, dict) and result.get("cancelled")):
+            self.cancel_requested = False
+            self.workspace_panel.set_status("중단됨")
+            self.workspace_panel.focus_log_tab()
+            return
+
+        if isinstance(result, dict) and isinstance(result.get("conversation_history"), list):
+            self.conversation_history = list(result.get("conversation_history", []))
+
         works = result.get("recommended_works", [])
         curator_note = result.get("curator_note", "")
 
@@ -127,17 +203,27 @@ class NovelRecommendDialog(QDialog):
 
         if not works:
             self.workspace_panel.set_status("후보작 없음")
-            self.workspace_panel.display_empty()
-            self.workspace_panel.set_tab_index(0)
+            self.workspace_panel.add_session_results([], curator_note, self, condition=self.current_condition)
             return
 
         self.workspace_panel.set_status(f"{len(works)}작품 추천 완료")
-        self.workspace_panel.display_results(works, curator_note, self)
-        self.workspace_panel.set_tab_index(0)
+        self.workspace_panel.add_session_results(works, curator_note, self, condition=self.current_condition)
 
     def on_recommendation_failed(self, error_msg: str):
         self.control_panel.set_running(False)
+        if self.cancel_requested:
+            self.cancel_requested = False
+            self.workspace_panel.set_status("중단됨")
+            self.workspace_panel.focus_log_tab()
+            return
+
         self.workspace_panel.set_status("추천 실패")
         self.workspace_panel.append_info_card(f"오류 발생: {error_msg}")
-        self.workspace_panel.set_tab_index(1)
+        self.workspace_panel.focus_log_tab()
         QMessageBox.critical(self, "추천 오류", f"추천 파이프라인 수행 중 오류가 발생했습니다:\n{error_msg}")
+
+    def closeEvent(self, event):
+        if self.recommend_worker and self.recommend_worker.isRunning():
+            self.on_stop_recommendation()
+            self.recommend_worker.wait(2000)
+        super().closeEvent(event)

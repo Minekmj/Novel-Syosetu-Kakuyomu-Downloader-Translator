@@ -8,11 +8,130 @@ from PySide6.QtWidgets import (
 from .widgets import SmoothScrollArea
 from . import card as cd
 
+
+class RecommendSessionTab(QWidget):
+    close_requested = Signal(object)
+    count_changed = Signal(object, int)
+
+    def __init__(
+        self,
+        session_number: int,
+        works: List[Dict[str, Any]],
+        curator_note: str,
+        parent_dialog,
+        condition: str = "",
+        parent=None
+    ):
+        super().__init__(parent)
+        self.session_number = session_number
+        self.works = works
+        self.curator_note = curator_note
+        self.parent_dialog = parent_dialog
+        self.condition = condition.strip()
+        self.init_ui()
+
+    def init_ui(self):
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(0, 8, 0, 0)
+        root_layout.setSpacing(0)
+
+        self.scroll_area = SmoothScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFrameShape(QFrame.NoFrame)
+        self.scroll_area.setObjectName("t_123")
+        self.scroll_area.setStyleSheet("#t_123{background: transparent;}")
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+        self.cards_container = QWidget()
+        self.cards_container.setObjectName("t_123")
+        self.cards_container.setStyleSheet("#t_123{background: transparent;}")
+        self.cards_container.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+
+        self.cards_layout = QVBoxLayout(self.cards_container)
+        self.cards_layout.setContentsMargins(10, 8, 8, 8)
+        self.cards_layout.setSpacing(12)
+
+        session_bar = QFrame()
+        session_bar.setObjectName("CardFrame_ui")
+        bar_layout = QHBoxLayout(session_bar)
+        bar_layout.setContentsMargins(14, 8, 14, 8)
+        bar_layout.setSpacing(8)
+
+        summary_text = f"세션 #{self.session_number}"
+        if self.condition:
+            compact_cond = " ".join(self.condition.splitlines()).strip()
+            if len(compact_cond) > 65:
+                compact_cond = compact_cond[:65] + "..."
+            summary_text = f"{summary_text}  ·  {compact_cond}"
+
+        info_lbl = QLabel(summary_text)
+        info_lbl.setObjectName("lbl_url")
+        info_lbl.setStyleSheet("font-size: 12px;")
+        info_lbl.setWordWrap(True)
+        bar_layout.addWidget(info_lbl, stretch=1)
+
+        close_btn = QPushButton("탭 닫기")
+        close_btn.setObjectName("subtleBtn")
+        close_btn.setFixedSize(70, 50)
+        close_btn.setCursor(Qt.PointingHandCursor)
+        close_btn.clicked.connect(lambda: self.close_requested.emit(self))
+        bar_layout.addWidget(close_btn)
+
+        self.cards_layout.addWidget(session_bar)
+
+        if self.curator_note:
+            note_card = QFrame()
+            note_card.setObjectName("CardFrame_ui")
+            n_layout = QVBoxLayout(note_card)
+            n_layout.setContentsMargins(16, 12, 16, 12)
+            n_layout.setSpacing(6)
+            note_desc = QLabel(self.curator_note)
+            note_desc.setObjectName("detail_description")
+            note_desc.setWordWrap(True)
+            n_layout.addWidget(note_desc)
+            self.cards_layout.addWidget(note_card)
+
+        if not self.works:
+            no_lbl = QLabel("조건에 부합하는 작품을 발견하지 못했습니다. 검색 조건을 조정해 보세요.")
+            no_lbl.setObjectName("new_and_now")
+            no_lbl.setAlignment(Qt.AlignCenter)
+            self.cards_layout.addWidget(no_lbl)
+        else:
+            for order, work in enumerate(self.works):
+                card = cd.RecommendedWorkCard(work, order + 1, self.parent_dialog)
+                card.work_excluded.connect(self.parent_dialog.on_work_excluded)
+                card.work_excluded.connect(self.on_card_excluded)
+                self.cards_layout.addWidget(card)
+
+        self.cards_layout.addStretch()
+
+        self.scroll_area.setWidget(self.cards_container)
+        root_layout.addWidget(self.scroll_area)
+
+    def on_card_excluded(self, url: str, title_ja: str, title_ko: str):
+        QTimer.singleShot(0, self.update_count)
+
+    def get_remaining_cards_count(self) -> int:
+        count = 0
+        for i in range(self.cards_layout.count()):
+            w = self.cards_layout.itemAt(i).widget()
+            if isinstance(w, cd.RecommendedWorkCard):
+                count += 1
+        return count
+
+    def update_count(self):
+        cnt = self.get_remaining_cards_count()
+        self.count_changed.emit(self, cnt)
+
+
 class RecommendWorkspacePanel(QWidget):
     toggle_exclude_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.session_counter = 0
+        self.session_tabs: List[RecommendSessionTab] = []
+        self.active_session_tab = None
         self.init_ui()
 
     def init_ui(self):
@@ -55,33 +174,16 @@ class RecommendWorkspacePanel(QWidget):
         self.tab_widget = QTabWidget()
         self.tab_widget.setObjectName("settingsTab")
 
-        tab_results = QWidget()
-        results_vbox = QVBoxLayout(tab_results)
-        results_vbox.setContentsMargins(0, 8, 0, 0)
-        results_vbox.setSpacing(0)
+        self.placeholder_tab = QWidget()
+        placeholder_vbox = QVBoxLayout(self.placeholder_tab)
+        placeholder_vbox.setContentsMargins(0, 8, 0, 0)
+        placeholder_lbl = QLabel("추천을 시작하면 세션별로 결과 탭이 생성됩니다.")
+        placeholder_lbl.setObjectName("lbl_url")
+        placeholder_lbl.setAlignment(Qt.AlignCenter)
+        placeholder_vbox.addWidget(placeholder_lbl)
 
-        self.scroll_area = SmoothScrollArea()
-        self.scroll_area.setWidgetResizable(True)
-        self.scroll_area.setFrameShape(QFrame.NoFrame)
-        self.scroll_area.setObjectName("t_123")
-        self.scroll_area.setStyleSheet("#t_123{background: transparent;}")
-        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-
-        self.cards_container = QWidget()
-        self.cards_container.setObjectName("t_123")
-        self.cards_container.setStyleSheet("#t_123{background: transparent;}")
-        self.cards_container.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
-
-        self.cards_layout = QVBoxLayout(self.cards_container)
-        self.cards_layout.setContentsMargins(10, 8, 8, 8)
-        self.cards_layout.setSpacing(12)
-        self.cards_layout.addStretch()
-
-        self.scroll_area.setWidget(self.cards_container)
-        results_vbox.addWidget(self.scroll_area)
-
-        tab_feed = QWidget()
-        feed_vbox = QVBoxLayout(tab_feed)
+        self.tab_feed = QWidget()
+        feed_vbox = QVBoxLayout(self.tab_feed)
         feed_vbox.setContentsMargins(10, 8, 8, 8)
         feed_vbox.setSpacing(0)
 
@@ -104,8 +206,8 @@ class RecommendWorkspacePanel(QWidget):
         self.feed_scroll.setWidget(self.feed_container)
         feed_vbox.addWidget(self.feed_scroll)
 
-        self.tab_widget.addTab(tab_results, "추천 결과")
-        self.tab_widget.addTab(tab_feed, "실시간 AI 분석 로그")
+        self.tab_widget.addTab(self.placeholder_tab, "추천 결과")
+        self.tab_widget.addTab(self.tab_feed, "실시간 AI 분석 로그")
 
         layout.addWidget(self.tab_widget, stretch=1)
 
@@ -117,6 +219,14 @@ class RecommendWorkspacePanel(QWidget):
 
     def set_tab_index(self, index: int):
         self.tab_widget.setCurrentIndex(index)
+
+    def focus_log_tab(self):
+        idx = self.tab_widget.indexOf(self.tab_feed)
+        if idx >= 0:
+            self.tab_widget.setCurrentIndex(idx)
+
+    def get_next_session_number(self) -> int:
+        return self.session_counter + 1
 
     def clear_feed(self):
         while self.feed_layout.count() > 1:
@@ -170,50 +280,81 @@ class RecommendWorkspacePanel(QWidget):
         bar = self.feed_scroll.verticalScrollBar()
         bar.setValue(bar.maximum())
 
-    def clear_result_cards(self):
-        while self.cards_layout.count() > 1:
-            child = self.cards_layout.takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()
+    def add_session_results(
+        self,
+        works: List[Dict[str, Any]],
+        curator_note: str,
+        parent_dialog,
+        condition: str = ""
+    ):
+        self.session_counter += 1
+        session_num = self.session_counter
 
-    def display_empty(self):
-        no_lbl = QLabel("조건에 부합하는 작품을 발견하지 못했습니다. 검색 조건을 완화해 보세요.")
-        no_lbl.setObjectName("new_and_now")
-        no_lbl.setAlignment(Qt.AlignCenter)
-        self.cards_layout.insertWidget(0, no_lbl)
+        p_idx = self.tab_widget.indexOf(self.placeholder_tab)
+        if p_idx >= 0:
+            self.tab_widget.removeTab(p_idx)
 
-    def get_remaining_cards_count(self) -> int:
-        count = 0
-        for i in range(self.cards_layout.count() - 1):
-            w = self.cards_layout.itemAt(i).widget()
-            if isinstance(w, cd.RecommendedWorkCard):
-                count += 1
-        return count
+        session_tab = RecommendSessionTab(
+            session_number=session_num,
+            works=works,
+            curator_note=curator_note,
+            parent_dialog=parent_dialog,
+            condition=condition,
+            parent=self
+        )
+        session_tab.close_requested.connect(self.close_session_tab)
+        session_tab.count_changed.connect(self.on_session_count_changed)
 
-    def update_result_tab_count(self):
-        cnt = self.get_remaining_cards_count()
-        self.tab_widget.setTabText(0, f"추천 결과 ({cnt})")
-        if cnt == 0:
+        log_idx = self.tab_widget.indexOf(self.tab_feed)
+        if log_idx < 0:
+            log_idx = self.tab_widget.count()
+
+        tab_title = f"추천 {session_num} ({len(works)})"
+        new_idx = self.tab_widget.insertTab(log_idx, session_tab, tab_title)
+        self.session_tabs.append(session_tab)
+        self.active_session_tab = session_tab
+        self.tab_widget.setCurrentIndex(new_idx)
+
+    def on_session_count_changed(self, session_tab: RecommendSessionTab, count: int):
+        idx = self.tab_widget.indexOf(session_tab)
+        if idx >= 0:
+            self.tab_widget.setTabText(idx, f"추천 {session_tab.session_number} ({count})")
+        if session_tab == self.active_session_tab and count == 0:
             self.set_status("후보작 없음")
 
+    def close_session_tab(self, session_tab: RecommendSessionTab):
+        idx = self.tab_widget.indexOf(session_tab)
+        if idx >= 0:
+            self.tab_widget.removeTab(idx)
+        if session_tab in self.session_tabs:
+            self.session_tabs.remove(session_tab)
+        if self.active_session_tab == session_tab:
+            self.active_session_tab = self.session_tabs[-1] if self.session_tabs else None
+        session_tab.deleteLater()
+
+        if not self.session_tabs:
+            log_idx = self.tab_widget.indexOf(self.tab_feed)
+            insert_idx = log_idx if log_idx >= 0 else 0
+            self.tab_widget.insertTab(insert_idx, self.placeholder_tab, "추천 결과")
+            self.set_status("대기 중")
+
+    def clear_result_cards(self):
+        pass
+
+    def display_empty(self):
+        self.add_session_results([], "", self.parent())
+
+    def get_remaining_cards_count(self) -> int:
+        current = self.tab_widget.currentWidget()
+        if isinstance(current, RecommendSessionTab):
+            return current.get_remaining_cards_count()
+        if self.active_session_tab is not None:
+            return self.active_session_tab.get_remaining_cards_count()
+        return 0
+
+    def update_result_tab_count(self):
+        for tab in self.session_tabs:
+            tab.update_count()
+
     def display_results(self, works: List[Dict[str, Any]], curator_note: str, parent_dialog):
-        self.tab_widget.setTabText(0, f"추천 결과 ({len(works)})")
-
-        if curator_note:
-            note_card = QFrame()
-            note_card.setObjectName("CardFrame_ui")
-            n_layout = QVBoxLayout(note_card)
-            n_layout.setContentsMargins(16, 12, 16, 12)
-            n_layout.setSpacing(6)
-            note_desc = QLabel(curator_note)
-            note_desc.setObjectName("detail_description")
-            note_desc.setWordWrap(True)
-            n_layout.addWidget(note_desc)
-            self.cards_layout.insertWidget(self.cards_layout.count() - 1, note_card)
-
-        for order, work in enumerate(works):
-            card = cd.RecommendedWorkCard(work, order + 1, parent_dialog)
-            card.work_excluded.connect(parent_dialog.on_work_excluded)
-            self.cards_layout.insertWidget(self.cards_layout.count() - 1, card)
-
-        self.scroll_area.verticalScrollBar().setValue(0)
+        self.add_session_results(works, curator_note, parent_dialog)

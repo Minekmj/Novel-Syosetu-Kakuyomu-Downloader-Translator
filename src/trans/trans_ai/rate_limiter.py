@@ -1,5 +1,6 @@
 import asyncio
 import time
+import random
 from . import config
 
 
@@ -35,7 +36,7 @@ class AsyncRateLimiter:
 
             sleep_duration = scheduled_time - now
             if sleep_duration > 0:
-                await asyncio.sleep(sleep_duration)
+                await asyncio.sleep(sleep_duration + (random.randrange(-5, 5) / 10))
 
             if config.get_cooldown_remaining() <= 0:
                 break

@@ -2,52 +2,52 @@ from typing import Dict, Any
 from src.find.site import KakuyomuSearch, NaroSearch, SyosetuSearch
 
 PLATFORM_SPEC_TEXT = """
-[3대 소설 플랫폼 완벽 파라미터 규격서]
+[3대 일본 웹소설 플랫폼 검색 파라미터 규격서]
 
-★ 핵심 검색 전략 및 일본 웹소설 엔진 특성:
-1. 웹소설 검색창(query)은 기본적으로 AND 조건입니다.  특정 장르를 보고 싶다먄 0개를 사용하소. 1개 또는 최대 2개의 가장 핵심적인 태그만 입력하여 상세 검색하세요. 단만 매우 상세히 검색 하고 싶을 시에는 4개 이상 사용해도 좋습니다.
-2. 장르와 쿼리를 중복하지 마세요 (예: 러브코미디 장르를 선택했으면 쿼리에 "ラブコメ"를 또 넣지 말고 "すれ違い"나 "甘々" 같은 구체적 상황 태그를 넣으세요).
-3. 컷오프(min_pt, min_chars)를 처음부터 너무 높게 잡으면 작품이 전멸합니다. 적절한 하한선을 설정하세요.
-4. 이전 라운드에서 new_added가 (카쿠요무, 나로우는 15개, 하멜른은 6개 이상)개 이상 나온 성공 쿼리는 재량껏 다음 라운드에서 page: 2, page: 3으로 연속 탐색을 할 수 있습니다.
+[핵심 검색 전략 및 플랫폼 엔진 특성]
+1. 검색창(query)은 기본적으로 AND 조건입니다. 특정 장르 전체를 탐색할 때는 query를 비우고, 세부 검색 시에는 가장 핵심적인 1~2개의 일본어 태그만 입력하여 결과 고갈을 방지하세요. 매우 상세한 교집합 검색이 필요할 때만 3~4개 이상 사용하세요.
+2. 장르(genre)와 검색어(query)를 중복 입력하지 마세요. (예: 러브코미디 장르 선택 시 query에 "ラブコメ"를 넣지 말고 "すれ違い", "甘々" 등 구체적 상황 태그를 입력하세요.)
+3. 컷오프(min_pt, min_chars)를 처음부터 과도하게 높게 설정하면 검색 결과가 0건이 됩니다. 직전 검색 결과 수를 보고 단계적으로 조절하세요. 단, 사용자가 명시한 갱신 기간(last_published), 연재 상태(serial_status), 배제 조건(exclusion_flags)은 절대 완화하거나 위반하지 마세요.
+4. 직전 탐색에서 좋은 작품이 다수 나온 조건은 동일 파라미터에서 page만 1씩 올려 연속 탐색하세요.
 
 1. kakuyomu (카쿠요무)
-- query: 일본어 검색어/태그
-- genre_name: "fantasy"(이세계판타지), "action"(현대판타지), "sf"(SF), "love_story"(연애), "romance"(러브코미디), "drama"(현대드라마), "horror"(호러), "mystery"(미스터리), "nonfiction"(에세이/논픽션), "history"(역사/시대), "criticism"(평론/창작론), "others"(시/기타), "fan_fiction"(2차창작), ""(전체)
+- query: 일본어 검색어/태그 리스트 (예: ["タグ1", "タグ2"])
+- genre: "fantasy"(이세계판타지), "action"(현대판타지), "sf"(SF), "love_story"(연애), "romance"(러브코미디), "drama"(현대드라마), "horror"(호러), "mystery"(미스터리), "nonfiction"(에세이/논픽션), "history"(역사/시대), "criticism"(평론/창작론), "others"(시/기타), "fan_fiction"(2차창작), ""(전체)
 - order: "popular"(인기순), "weekly_ranking"(주간랭킹순), "published_at"(최신작성순), "last_episode_published_at"(최신갱신순), "total_character_count"(글자수순)
 - serial_status: ""(전체), "running"(연재 중), "completed"(완결)
 - last_published: ""(전체), "1days"(1일 이내), "7days"(7일 이내), "1months"(1개월 이내), "6months"(6개월 이내), "1years"(1년 이내)
-- min_start: 리뷰 별점 하한선 정수 (예: 30, 50, 100, 300)
+- min_pt: 리뷰 별점 하한선 정수 (예: 30, 50, 100, 300)
 - min_chars: 총 글자수 하한선 정수 (예: 10000, 30000)
-- exclude_words: 제외 단어 리스트 (예: [""])
-- inclusion_flag: 필수 포함 플래그 리스트 (허용값: "cruel", "violent", "sexual", "has_publication")
-- exclusion_flag: 절대 배제 플래그 리스트 (허용값: "cruel", "violent", "sexual", "has_publication")
+- exclude_words: 제외 단어 리스트
+- inclusion_flags: 필수 포함 플래그 리스트 (허용값: "cruel", "violent", "sexual", "has_publication")
+- exclusion_flags: 절대 배제 플래그 리스트 (허용값: "cruel", "violent", "sexual", "has_publication")
 
 2. naro (소설가가 되자)
-- query: 일본어 검색어/태그
-- genre_val: 정수 코드
-  0(전체), 1(연애전체), 101(이세계 연애), 102(현실 연애), 2(판타지전체), 201(하이 판타지), 202(로우 판타지), 3(문예), 301(순문학), 302(휴먼 드라마), 303(역사), 304(추리), 305(공포), 306(액션), 307(코미디), 4(SF), 401(VR 게임), 402(우주), 403(공산 과학), 404(공황), 99(기타), 98(논픽션)
+- query: 일본어 검색어/태그 리스트
+- genre: 정수 코드 0(전체), 1(연애전체), 101(이세계 연애), 102(현실 연애), 2(판타지전체), 201(하이 판타지), 202(로우 판타지), 3(문예), 301(순문학), 302(휴먼 드라마), 303(역사), 304(추리), 305(공포), 306(액션), 307(코미디), 4(SF), 401(VR 게임), 402(우주), 403(공상과학), 404(공황), 99(기타), 98(논픽션)
 - order: "hyoka"(포인트순), "weeklypoint"(주간포인트순), "monthlypoint"(월간포인트순), "quarterpoint"(분기포인트순), "yearlypoint"(연간포인트순), "new"(신작순), "weekly"(최신갱신순), "length"(글자수순)
 - serial_status: ""(전체), "r"(연재중), "er"(완결), "t"(단편), "re"(연재-예약포함)
 - last_published: 일수 정수 (1, 7, 30, 90, 180, 365, null)
 - min_pt: 종합 포인트 하한선 정수 (예: 300, 1000, 3000)
 - min_chars: 최소 글자수 정수 (예: 10000, 50000)
-- exclude_words: 제외어 리스트 (예: [""])
+- exclude_words: 제외어 리스트
 - inclusion_flags: 필수 포함 태그 리스트 (허용값: "ai", "r15", "zankoku", "bl", "gl", "tensei", "tenni", "stop")
-- exlusion_flags: 배제 태그 리스트 (허용값: "ai", "r15", "zankoku", "bl", "gl", "tensei", "tenni", "stop")
+- exclusion_flags: 배제 태그 리스트 (허용값: "ai", "r15", "zankoku", "bl", "gl", "tensei", "tenni", "stop")
 
 3. hameln (하멜른)
-- query: 일본어 검색어/태그
-- genre_val: "ジャンル：冒険・バトル", "ジャンル：戦記", "ジャンル：恋愛", "ジャンル：スポーツ", "ジャンル：コメディ", "ジャンル：ホラー", "ジャンル：ミステリー", "ジャンル：日常", "ジャンル：文芸", "ジャンル：ノンジャンル", ""(전체)
-- origin: "原作：オリジナル"(오리지널 창작), "原作：二次創作"(2차창작), "原作：(`특정 작품` 일본어 제목)"(`특정 작품` 2차창작)
+- query: 일본어 검색어/태그 리스트
+- genre: "ジャンル：冒険・バトル", "ジャンル：戦記", "ジャンル：恋愛", "ジャンル：スポーツ", "ジャンル：コメディ", "ジャンル：ホラー", "ジャンル：ミステリー", "ジャンル：日常", "ジャンル：文芸", "ジャンル：ノンジャンル", ""(전체)
+- origin: "原作：オリジナル"(오리지널 창작), "原作：二次創作"(2차창작), "原作：(특정 작품 일본어 원제)"(특정 작품 2차창작)
 - order: "45"(최종갱신순), "28"(종합평가순), "4"(평균평가순), "42"(가중평균순), "30"(주간종합평가), "31"(월간종합평가), "32"(분기종합평가), "33"(연간종합평가), "10"(즐겨찾기순), "20"(총글자수순), "24"(화수순), "22"(감상순), "6"(1화문자수순), "8"(첫게시일), "0"(신착순)
 - serial_status: ""(전체), "rensai_s2"(연재중), "rensai_s4"(완결), "rensai_s1"(단편)
 - last_published: 일수 정수 (1, 7, 30, 90, 180, 365, null)
-- min_pt: 종합 평가 포인트(soupt2) 하한 정수 (예: 50, 200, 500)
-- min_chars: 전체 글자수(mozi2_all) 하한 정수 (예: 20000, 50000)
-- exclude_words: 제외어 리스트 (예: [""])
+- min_pt: 종합 평가 포인트 하한 정수 (예: 50, 200, 500)
+- min_chars: 전체 글자수 하한 정수 (예: 20000, 50000)
+- exclude_words: 제외어 리스트
 - inclusion_flags: 추가 포함어 리스트
-- exclusion_flags: 배제 태그 리스트. 허용 태그코드: "tag15"(AI), "tag2"(R15), "tag7"(잔혹), "tag12"(크로스오버), "tag5"(오리주), "tag6"(신전생), "tag9"(환생), "tag10"(빙의), "tag11"(성전환/TS), "tag3"(BL), "tag4"(GL), "tag8"(안티헤이트), "tag13"(게시판형식), "tag14"(대본형식)
+- exclusion_flags: 배제 태그 코드 리스트 (허용값: "tag15"(AI), "tag2"(R15), "tag7"(잔혹), "tag12"(크로스오버), "tag5"(오리주), "tag6"(신전생), "tag9"(환생), "tag10"(빙의), "tag11"(성전환/TS), "tag3"(BL), "tag4"(GL), "tag8"(안티헤이트), "tag13"(게시판형식), "tag14"(대본형식))
 """
+
 
 def build_search_params(site: str, strategy: Dict[str, Any], page: int = 1) -> Dict[str, Any]:
     raw_query = strategy.get("query")
@@ -106,12 +106,18 @@ def build_search_params(site: str, strategy: Dict[str, Any], page: int = 1) -> D
         elif KakuyomuSearch and genre in KakuyomuSearch.GENRES:
             genre_name = KakuyomuSearch.GENRES[genre]
 
-        order_val = order if (KakuyomuSearch and order in KakuyomuSearch.SORT_ORDERS.values()) else "popular"
-        if not order_val and KakuyomuSearch and order in KakuyomuSearch.SORT_ORDERS:
+        order_val = ""
+        if KakuyomuSearch and order in KakuyomuSearch.SORT_ORDERS.values():
+            order_val = order
+        elif KakuyomuSearch and order in KakuyomuSearch.SORT_ORDERS:
             order_val = KakuyomuSearch.SORT_ORDERS[order]
+        if not order_val:
+            order_val = "popular"
 
-        status_val = status if (KakuyomuSearch and status in KakuyomuSearch.SERIAL_STATUSES.values()) else ""
-        if not status_val and KakuyomuSearch and status in KakuyomuSearch.SERIAL_STATUSES:
+        status_val = ""
+        if KakuyomuSearch and status in KakuyomuSearch.SERIAL_STATUSES.values():
+            status_val = status
+        elif KakuyomuSearch and status in KakuyomuSearch.SERIAL_STATUSES:
             status_val = KakuyomuSearch.SERIAL_STATUSES[status]
 
         valid_pub = ["1days", "7days", "1months", "6months", "1years"]
@@ -131,7 +137,7 @@ def build_search_params(site: str, strategy: Dict[str, Any], page: int = 1) -> D
             'last_published': last_pub_str,
             'min_start': min_pt,
             'serial_status': status_val,
-            'order': order_val or "popular",
+            'order': order_val,
             'inclusion_flag': k_inc,
             'exclusion_flag': k_exc,
             'page': page
@@ -146,12 +152,18 @@ def build_search_params(site: str, strategy: Dict[str, Any], page: int = 1) -> D
         elif NaroSearch and genre in NaroSearch.GENRES:
             genre_val = NaroSearch.GENRES[genre]
 
-        order_val = order if (NaroSearch and order in NaroSearch.SORT_ORDERS.values()) else "hyoka"
-        if not order_val and NaroSearch and order in NaroSearch.SORT_ORDERS:
+        order_val = ""
+        if NaroSearch and order in NaroSearch.SORT_ORDERS.values():
+            order_val = order
+        elif NaroSearch and order in NaroSearch.SORT_ORDERS:
             order_val = NaroSearch.SORT_ORDERS[order]
+        if not order_val:
+            order_val = "hyoka"
 
-        status_val = status if (NaroSearch and status in NaroSearch.SERIAL_STATUSES.values()) else ""
-        if not status_val and NaroSearch and status in NaroSearch.SERIAL_STATUSES:
+        status_val = ""
+        if NaroSearch and status in NaroSearch.SERIAL_STATUSES.values():
+            status_val = status
+        elif NaroSearch and status in NaroSearch.SERIAL_STATUSES:
             status_val = NaroSearch.SERIAL_STATUSES[status]
 
         last_pub_val = None
@@ -177,7 +189,7 @@ def build_search_params(site: str, strategy: Dict[str, Any], page: int = 1) -> D
             'min_pt': min_pt,
             'last_published': last_pub_val,
             'serial_status': status_val,
-            'order': order_val or "hyoka",
+            'order': order_val,
             'inclusion_flags': n_inc,
             'exlusion_flags': n_exc,
             'page': page
@@ -190,12 +202,18 @@ def build_search_params(site: str, strategy: Dict[str, Any], page: int = 1) -> D
         elif SyosetuSearch and genre in SyosetuSearch.GENRES:
             genre_val = SyosetuSearch.GENRES[genre]
 
-        order_val = str(order) if (SyosetuSearch and str(order) in SyosetuSearch.SORT_ORDERS.values()) else "45"
-        if SyosetuSearch and order in SyosetuSearch.SORT_ORDERS:
+        order_val = ""
+        if SyosetuSearch and str(order) in SyosetuSearch.SORT_ORDERS.values():
+            order_val = str(order)
+        elif SyosetuSearch and order in SyosetuSearch.SORT_ORDERS:
             order_val = SyosetuSearch.SORT_ORDERS[order]
+        if not order_val:
+            order_val = "45"
 
-        status_val = status if (SyosetuSearch and status in SyosetuSearch.SERIAL_STATUSES.values()) else ""
-        if not status_val and SyosetuSearch and status in SyosetuSearch.SERIAL_STATUSES:
+        status_val = ""
+        if SyosetuSearch and status in SyosetuSearch.SERIAL_STATUSES.values():
+            status_val = status
+        elif SyosetuSearch and status in SyosetuSearch.SERIAL_STATUSES:
             status_val = SyosetuSearch.SERIAL_STATUSES[status]
 
         origin_val = strategy.get("origin") or strategy.get("flags_main") or strategy.get("gensaku") or "原作：オリジナル"
@@ -223,7 +241,7 @@ def build_search_params(site: str, strategy: Dict[str, Any], page: int = 1) -> D
             "게시판 형식": "tag13", "tag13": "tag13",
             "대본 형식": "tag14", "tag14": "tag14",
         }
-        h_exc = [h_exc_map[f] for f in exc_flags if f in h_exc_map]
+        h_exc = [h_exc_map[f.strip()] for f in exc_flags if f.strip() in h_exc_map]
 
         res = {
             'query': query,

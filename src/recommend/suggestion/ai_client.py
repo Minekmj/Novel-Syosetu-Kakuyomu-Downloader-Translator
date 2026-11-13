@@ -1,8 +1,9 @@
-import time
+import re
 import traceback
 from typing import Optional
+from collections.abc import Callable
 from src.ai import AiRoute, AiTarget
-from .utils import PrintIo
+from .utils import PrintIo, RecommendationCancelled, check_cancelled, sleep_with_cancel
 
 
 class SuggestionAIClient:
@@ -11,11 +12,16 @@ class SuggestionAIClient:
         api_key: Optional[str] = None,
         model: Optional[str] = None,
         ai_target: Optional[int] = None,
-        ai_route: Optional[AiRoute] = None
+        ai_route: Optional[AiRoute] = None,
+        log_callback: Optional[Callable] = None,
+        check_callback: Optional[Callable[[], bool]] = None
     ):
         self.model = model or AiRoute.DEFAULT_MODEL
         self.ai_target = int(ai_target) if ai_target is not None else AiRoute.detect_target(self.model)
         self.target_name = AiRoute.get_target_name(self.ai_target)
+        self.log = log_callback or (lambda *args, **kwargs: None)
+        self.check = check_callback or (lambda: False)
+        self.last_error = ""
 
         self.api_key = (api_key or "").strip()
         if not self.api_key:
@@ -31,8 +37,27 @@ class SuggestionAIClient:
         PrintIo(f"[{self.target_name}] 추천 클라이언트 가동 (모델: {self.model})")
         self.route = ai_route if ai_route is not None else AiRoute(ai_target=self.ai_target, api=self.api_key)
 
+    def _check_cancelled(self):
+        check_cancelled(self.check)
+
+    def _extract_error_code(self, e: Exception) -> str:
+        for attr in ("code", "status_code", "status"):
+            val = getattr(e, attr, None)
+            if val is not None and str(val).strip():
+                return str(val).strip()
+        msg = str(e)
+        m = re.search(
+            r'\b([45]\d{2}|RESOURCE_EXHAUSTED|UNAVAILABLE|INVALID_ARGUMENT|PERMISSION_DENIED|UNAUTHENTICATED|DEADLINE_EXCEEDED|NOT_FOUND)\b',
+            msg
+        )
+        if m:
+            return m.group(1)
+        return type(e).__name__
+
     def generate(self, prompt: str, system_instruction: str = "", max_retries: int = 5) -> str:
+        self._check_cancelled()
         PrintIo(f"[{self.target_name}] 프롬프트 요청: {len(prompt)}자 (모델: {self.model})")
+        self.last_error = ""
 
         setting = {
             "model_name": self.model,
@@ -44,12 +69,21 @@ class SuggestionAIClient:
         }
 
         for attempt in range(1, max_retries + 1):
+            self._check_cancelled()
             try:
                 response = self.route.send_text_sync(prompt, setting=setting)
+                self._check_cancelled()
                 res_text = response.text if response else ""
                 if res_text:
                     return res_text
+                if attempt == max_retries:
+                    self.last_error = "EMPTY_RESPONSE"
+                    self.log("info", 'AI 호출 에러 "EMPTY_RESPONSE"')
+                    return ""
+            except RecommendationCancelled:
+                raise
             except Exception as e:
+                self._check_cancelled()
                 is_rate = self.route.is_rate_limit_error(e)
                 is_conn = self.route.is_connection_error(e)
                 is_transient = is_rate or is_conn or any(
@@ -63,9 +97,12 @@ class SuggestionAIClient:
                     delay = self.route.extract_retry_delay(e) if is_rate else 3.0
                     delay = min(max(delay, 2.0), 30.0)
                     print(f"[{self.target_name} 일시 오류] {int(delay)}초 대기 후 재시도... ({attempt}/{max_retries})")
-                    time.sleep(delay)
+                    sleep_with_cancel(delay, self.check)
                     continue
 
+                err_code = self._extract_error_code(e)
+                self.last_error = err_code
+                self.log("info", f'AI 호출 에러 "{err_code}"')
                 print(f"[{self.target_name} 에러]: {e}\n{traceback.format_exc()}")
                 return ""
 

@@ -3,13 +3,14 @@ from typing import Dict, Any
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QPushButton, QFrame, QSizePolicy
+    QLabel, QPushButton, QFrame, QSizePolicy, QMenu
 )
 from src.find.site_list import site_point_text
 from src.main.thread_pyqt import TitleTranslateWorker
 from .widgets import ClickableTitleLabel
 
 detail_ui = None
+
 
 class RecommendedWorkCard(QFrame):
     work_excluded = Signal(str, str, str)
@@ -84,6 +85,14 @@ class RecommendedWorkCard(QFrame):
         )
         score_lbl.setAlignment(Qt.AlignCenter)
         badge_box.addWidget(score_lbl)
+
+        self.more_btn = QPushButton("⋮")
+        self.more_btn.setObjectName("subtleBtn")
+        self.more_btn.setFixedSize(24, 26)
+        self.more_btn.setCursor(Qt.PointingHandCursor)
+        self.more_btn.setStyleSheet("font-size: 15px; font-weight: bold; padding: 0px;")
+        self.more_btn.clicked.connect(self.show_more_menu)
+        badge_box.addWidget(self.more_btn)
 
         header_layout.addLayout(badge_box)
         layout.addLayout(header_layout)
@@ -179,13 +188,6 @@ class RecommendedWorkCard(QFrame):
         self.add_work_btn.clicked.connect(self.save_to_user_list)
         btn_box.addWidget(self.add_work_btn)
 
-        self.exclude_btn = QPushButton("제외 추가")
-        self.exclude_btn.setObjectName("subtleBtn")
-        self.exclude_btn.setFixedSize(76, 28)
-        self.exclude_btn.setCursor(Qt.PointingHandCursor)
-        self.exclude_btn.clicked.connect(self.on_exclude_clicked)
-        btn_box.addWidget(self.exclude_btn)
-
         footer_layout.addLayout(btn_box)
         layout.addLayout(footer_layout)
 
@@ -193,6 +195,14 @@ class RecommendedWorkCard(QFrame):
             self.trans_worker = TitleTranslateWorker(title_ja)
             self.trans_worker.finished.connect(self.on_title_translated)
             self.trans_worker.start()
+
+    def show_more_menu(self):
+        menu = QMenu(self)
+        exclude_action = menu.addAction("제외 작품 추가")
+        exclude_action.triggered.connect(self.on_exclude_clicked)
+        pos = self.more_btn.mapToGlobal(self.more_btn.rect().bottomRight())
+        pos.setX(pos.x() - menu.sizeHint().width())
+        menu.exec(pos)
 
     def on_title_translated(self, translated: str):
         if translated and translated != self.item_data.get("title_ja"):

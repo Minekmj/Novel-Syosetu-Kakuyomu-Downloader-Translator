@@ -1,15 +1,17 @@
-import time
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+from collections.abc import Callable
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
 
 import src.find.site as datas
 from .cache import get_cached, set_cached
-from .utils import PrintIo, site_delay, site_delay_all
+from .utils import PrintIo, RecommendationCancelled, check_cancelled, sleep_with_cancel, site_delay, site_delay_all
+
 
 class SearchExecutor:
-    def __init__(self):
+    def __init__(self, check_callback: Optional[Callable[[], bool]] = None):
+        self.check = check_callback or (lambda: False)
         self.http_session = requests.Session()
 
         retry_strategy = Retry(
@@ -31,6 +33,7 @@ class SearchExecutor:
 
     def run_search_with_retry(self, site: str, site_cls, params: Dict[str, Any], max_attempts: int = 5) -> Dict[str, Any]:
         for attempt in range(1, max_attempts + 1):
+            check_cancelled(self.check)
             try:
                 PrintIo(f"[{site}] 검색 호출 (시도 {attempt}/{max_attempts}) - p.{params.get('page', 1)}, 파라미터: {params}")
 
@@ -54,6 +57,7 @@ class SearchExecutor:
                         "Accept-Language": "ja,ko-KR;q=0.9,ko;q=0.8,en-US;q=0.7,en;q=0.6",
                     })
                     resp = self.http_session.get(search_url, headers=headers, timeout=12)
+                    check_cancelled(self.check)
 
                     if resp.status_code == 503:
                         raise RuntimeError("HTTP 503 Service Unavailable")
@@ -64,20 +68,25 @@ class SearchExecutor:
 
                 elif site in ('naro', 'hameln'):
                     res = site_cls.fetch_search_results(params)
+                    check_cancelled(self.check)
                     return res
 
+            except RecommendationCancelled:
+                raise
             except Exception as e:
+                check_cancelled(self.check)
                 err_msg = str(e)
                 is_transient = any(k in err_msg for k in ["503", "Service Unavailable", "Timeout", "429"])
                 if is_transient and attempt < max_attempts:
                     PrintIo(f"[{site}] 일시적 연결 장애 감지 ({err_msg}). 3초 대기 후 재시도... ({attempt}/{max_attempts})")
-                    time.sleep(3)
+                    sleep_with_cancel(3.0, self.check)
                     continue
                 raise
 
         raise RuntimeError(f"[{site}] 검색 {max_attempts}회 재시도 실패")
 
     def enrich_description(self, site: str, site_cls, item: Dict[str, Any]) -> str:
+        check_cancelled(self.check)
         existing_story = item.get("story", "") or ""
         current_keywords = list(item.get("keywords", []))
 
@@ -102,17 +111,19 @@ class SearchExecutor:
             return existing_story
 
         fetch_fn = getattr(site_cls, 'fetch_detail_description', None)
-        
+
         data = get_cached(work_url)
         if callable(fetch_fn):
             for attempt in range(1, 4):
+                check_cancelled(self.check)
                 try:
                     if data:
                         detail = data
                     else:
                         detail = fetch_fn(work_url)
+                        check_cancelled(self.check)
                         set_cached(work_url, detail)
-                        
+
                     if isinstance(detail, str):
                         story_text = detail
                         if '_____1234_____' in detail:
@@ -129,21 +140,25 @@ class SearchExecutor:
                         if story_text and len(story_text) > len(existing_story):
                             return story_text.strip()
                     break
+                except RecommendationCancelled:
+                    raise
                 except Exception as e:
+                    check_cancelled(self.check)
                     if "503" in str(e) and attempt < 3:
                         PrintIo(f"[{site}] 상세 페이지 조회 503 감지. 3초 대기...")
-                        time.sleep(3)
+                        sleep_with_cancel(3.0, self.check)
                         continue
                     PrintIo(f"[{site}] 상세 페이지 수집 실패 ({work_url}): {e}")
-        if not data:  
-            site_delay(site)
+        if not data:
+            site_delay(site, self.check)
 
         return existing_story
-    
+
     def get_description(self, site: str, site_cls, work_url: str):
+        check_cancelled(self.check)
         story = ""
         current_keywords = []
-        
+
         fetch_fn = getattr(site_cls, 'fetch_detail_description', None)
         if not fetch_fn:
             fetch_fn = getattr(site_cls, 'fetch_detail_description_real', None)
@@ -151,13 +166,15 @@ class SearchExecutor:
         data = get_cached(work_url)
         if callable(fetch_fn):
             for attempt in range(1, 4):
+                check_cancelled(self.check)
                 try:
                     if data:
                         detail = data
                     else:
                         detail = fetch_fn(work_url)
+                        check_cancelled(self.check)
                         set_cached(work_url, detail)
-                        
+
                     if isinstance(detail, str):
                         story_text = detail
                         if '_____1234_____' in detail:
@@ -171,14 +188,17 @@ class SearchExecutor:
                                         current_keywords.append(nt)
                             story = story_text
                     break
+                except RecommendationCancelled:
+                    raise
                 except Exception as e:
+                    check_cancelled(self.check)
                     if "503" in str(e) and attempt < 3:
                         PrintIo(f"[{site}] 상세 페이지 조회 503 감지. 3초 대기...")
-                        time.sleep(3)
+                        sleep_with_cancel(3.0, self.check)
                         continue
                     PrintIo(f"[{site}] 상세 페이지 수집 실패 ({work_url}): {e}")
-        
+
         if not data:
-            site_delay_all(site)
+            site_delay_all(site, self.check)
 
         return story, current_keywords

@@ -14,11 +14,14 @@ from .widgets import SmoothListWidget
 
 class RecommendControlPanel(QWidget):
     start_requested = Signal(str, str, str, int, dict, int)
+    stop_requested = Signal()
     log_requested = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.model_load_thread = None
+        self.is_running = False
+        self.is_stopping = False
 
         self.api_timer = QTimer(self)
         self.api_timer.setSingleShot(True)
@@ -149,12 +152,12 @@ class RecommendControlPanel(QWidget):
         self.top_k_combo.setCurrentIndex(1)
         rec_count_box.addWidget(self.top_k_combo, stretch=1)
         layout.addLayout(rec_count_box)
-        
+
         self.start_btn = QPushButton("추천 시작")
         self.start_btn.setObjectName("primaryBtn")
         self.start_btn.setFixedHeight(44)
         self.start_btn.setCursor(Qt.PointingHandCursor)
-        self.start_btn.clicked.connect(self.start_recommendation)
+        self.start_btn.clicked.connect(self.on_action_btn_clicked)
         layout.addWidget(self.start_btn)
 
     def get_current_target(self) -> int:
@@ -304,8 +307,23 @@ class RecommendControlPanel(QWidget):
             self.log_requested.emit(f"모델 {len(models)}개를 불러왔습니다.")
 
     def set_running(self, running: bool):
-        self.start_btn.setEnabled(not running)
-        self.start_btn.setText("추천 탐색 진행 중..." if running else "추천 시작")
+        self.is_running = running
+        self.is_stopping = False
+        self.start_btn.setEnabled(True)
+        self.start_btn.setText("추천 중단" if running else "추천 시작")
+
+    def set_stopping(self):
+        self.is_stopping = True
+        self.start_btn.setEnabled(False)
+        self.start_btn.setText("중단 중...")
+
+    def on_action_btn_clicked(self):
+        if self.is_running:
+            if not self.is_stopping:
+                self.set_stopping()
+                self.stop_requested.emit()
+            return
+        self.start_recommendation()
 
     def start_recommendation(self):
         api_key = self.api_key_edit.text().strip()
