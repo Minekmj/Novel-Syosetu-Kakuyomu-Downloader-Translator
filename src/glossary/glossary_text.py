@@ -11,6 +11,33 @@ from src.trans.trans_ai_utils import SYSTEM_PROMPT_EXTRACTION, FILTER_SYSTEM_PRO
 
 get_japanese_ratio = None  # 참조용
 
+_COMMON_GLOSSARY_STOPWORDS = {
+    "私", "僕", "俺", "彼", "彼女", "君", "お前", "あなた", "貴方", "貴女",
+    "貴様", "自分", "みんな", "誰", "何", "どれ", "これ", "それ", "あれ",
+    "ここ", "そこ", "あそこ", "どこ", "いつ", "なぜ", "どう", "そう",
+    "人", "男", "女", "子", "子供", "大人", "少年", "少女", "青年",
+    "父", "母", "兄", "姉", "弟", "妹", "両親", "家族", "友達", "仲間",
+    "部屋", "家", "学校", "場所", "空間", "風景", "景色", "手", "目", "口",
+    "耳", "顔", "頭", "体", "心", "声", "音", "言葉", "名前", "意味", "理由",
+    "方法", "時間", "今日", "明日", "昨日", "今", "昔", "未来", "過去", "現在",
+    "最初", "最後", "気持ち", "記憶", "笑顔", "視線", "表情", "空気", "問題",
+    "結果", "状況", "関係", "約束", "食事", "飯", "水", "酒", "服", "靴",
+    "道", "空", "海", "山", "森", "さん", "ちゃん", "くん", "さま", "様",
+    "殿", "たち", "達", "こと", "もの", "ため", "よう", "わけ", "はず",
+    "とき", "ところ",
+}
+
+_RE_COUNTER_ONLY = re.compile(r"^\d+[人つ個回階分秒時間年月日本枚匹頭冊本円歳番目度]+$")
+_RE_SOURCE_FORBIDDEN_CHARS = re.compile(r"[\r\n。、「」『』！？!?]")
+
+_CATEGORY_PRIORITY = {
+    "일반": 0,
+    "명칭": 1,
+    "제도": 2,
+    "고유명사": 3,
+    "이름": 4,
+}
+
 
 class AsyncRateLimiter:
     def __init__(self, rpm: float):
@@ -80,6 +107,14 @@ def _split_glossary_text(text, chunk):
     return chunks
 
 
+def _is_kanji_char(code):
+    return (
+        0x3400 <= code <= 0x4DBF
+        or 0x4E00 <= code <= 0x9FFF
+        or 0xF900 <= code <= 0xFAFF
+    )
+
+
 def _is_japanese_text(text):
     if not text:
         return False
@@ -88,9 +123,9 @@ def _is_japanese_text(text):
         if (
             0x3040 <= code <= 0x309F
             or 0x30A0 <= code <= 0x30FF
-            or 0x3400 <= code <= 0x4DBF
-            or 0x4E00 <= code <= 0x9FFF
-            or 0xF900 <= code <= 0xFAFF
+            or 0x31F0 <= code <= 0x31FF
+            or 0xFF65 <= code <= 0xFF9F
+            or _is_kanji_char(code)
         ):
             return True
     return False
@@ -102,13 +137,86 @@ def _is_korean_text(text):
     return any(0xAC00 <= ord(char) <= 0xD7A3 for char in text)
 
 
+def _has_any_hangul(text):
+    if not text:
+        return False
+    for char in text:
+        code = ord(char)
+        if (
+            0x1100 <= code <= 0x11FF
+            or 0x3130 <= code <= 0x318F
+            or 0xAC00 <= code <= 0xD7A3
+        ):
+            return True
+    return False
+
+
+def _has_cjk_or_japanese(text):
+    if not text:
+        return False
+    for char in text:
+        code = ord(char)
+        if (
+            0x2E80 <= code <= 0x2FDF
+            or 0x3005 <= code <= 0x3007
+            or 0x303B <= code <= 0x30FF
+            or 0x3100 <= code <= 0x312F
+            or 0x31A0 <= code <= 0x31BF
+            or 0x31F0 <= code <= 0x31FF
+            or 0x3400 <= code <= 0x4DBF
+            or 0x4E00 <= code <= 0x9FFF
+            or 0xF900 <= code <= 0xFAFF
+            or 0xFF65 <= code <= 0xFF9F
+            or 0x20000 <= code <= 0x2CEAF
+            or 0x2F800 <= code <= 0x2FA1F
+        ):
+            return True
+    return False
+
+
+def _is_valid_source_term(source, normalized_chunk=None):
+    if not source:
+        return False
+    if source in _COMMON_GLOSSARY_STOPWORDS:
+        return False
+    if len(source) == 1 and not _is_kanji_char(ord(source[0])):
+        return False
+    if _RE_SOURCE_FORBIDDEN_CHARS.search(source):
+        return False
+    if _RE_COUNTER_ONLY.match(source):
+        return False
+    if _has_any_hangul(source):
+        return False
+    if not _is_japanese_text(source):
+        return False
+    if normalized_chunk is not None:
+        normalized_source = re.sub(r"\s+", "", source)
+        if not normalized_source or normalized_source not in normalized_chunk:
+            return False
+    return True
+
+
+def _is_valid_target_term(source, target):
+    if not target:
+        return False
+    if target == source:
+        return False
+    if not _is_korean_text(target):
+        return False
+    if _has_cjk_or_japanese(target):
+        return False
+    return True
+
+
 VALID_CATEGORIES = {"이름", "고유명사", "일반", "제도", "명칭"}
 
 
-def _parse_glossary_response(response_text, log_callback=None):
+def _parse_glossary_response(response_text, log_callback=None, chunk_text=None):
     result = {}
     if not response_text:
         return result
+
+    normalized_chunk = re.sub(r"\s+", "", chunk_text) if chunk_text else None
 
     text = response_text.strip()
     if text.startswith("```"):
@@ -150,7 +258,9 @@ def _parse_glossary_response(response_text, log_callback=None):
                 else:
                     category = "일반"
 
-            if not _is_japanese_text(source) or not _is_korean_text(target):
+            if not _is_valid_source_term(source, normalized_chunk):
+                continue
+            if not _is_valid_target_term(source, target):
                 continue
 
             result[source] = (target, category)
@@ -183,6 +293,7 @@ def _is_blocked_by_safety(response=None, exception=None) -> bool:
                 return True
 
     return False
+
 
 async def _call_chunk_api_once(
     chunk_text,
@@ -219,7 +330,7 @@ async def _call_chunk_api_once(
         if not response or not response.text:
             return False, None, False
 
-        parsed = _parse_glossary_response(response.text, log_callback)
+        parsed = _parse_glossary_response(response.text, log_callback, chunk_text=chunk_text)
         return True, parsed, False
 
     except Exception as e:
@@ -238,6 +349,21 @@ async def _call_chunk_api_once(
         return False, None, False
 
 
+def _parse_filter_keywords(raw_text):
+    keywords = set()
+    for part in raw_text.replace("\n", ",").split(","):
+        item = part.strip()
+        if not item:
+            continue
+        item = re.sub(r"^\d+\.\s*", "", item)
+        item = item.lstrip("-•* ").strip().strip("\"'`")
+        if ":" in item:
+            item = item.split(":", 1)[0].strip()
+        if item:
+            keywords.add(item)
+    return keywords
+
+
 async def _filter_system_and_terms_async(
     terms_to_check,
     rate_limiter: AsyncRateLimiter,
@@ -248,59 +374,66 @@ async def _filter_system_and_terms_async(
     if not terms_to_check:
         return {}
 
-    terms_list_str = "\n".join([f"{k}: {v}" for k, v in terms_to_check.items()])
-
     if log_callback:
         log_callback(f"[2차 검증] {len(terms_to_check)}개 항목 중 당연한 일반 어휘 필터링 시작...")
 
-    await rate_limiter.wait()
-    route, target, model_name = _get_route(model, ai_target)
+    items = list(terms_to_check.items())
+    batch_size = 80
+    remove_keywords = set()
 
-    setting = {
-        "ai_target": target,
-        "model_name": model_name,
-        "system_instruction": FILTER_SYSTEM_PROMPT,
-        "temperature": 0.0,
-        "top_p": 0.8,
-        "safety_settings": get_safety_settings(),
-    }
+    for start in range(0, len(items), batch_size):
+        batch = items[start:start + batch_size]
+        terms_list_str = "\n".join([f"{k}: {v}" for k, v in batch])
 
-    try:
-        response = await route.send_text(
-            message=f"다음 목록 중 제외할 너무 당연한 일반 단어를 골라내십시오.\n\n{terms_list_str}",
-            setting=setting
-        )
+        await rate_limiter.wait()
+        route, target, model_name = _get_route(model, ai_target)
 
-        if _is_blocked_by_safety(response=response):
-            if log_callback:
-                log_callback("[2차 검증] 검열 차단됨 (해당 항목 원본 유지)")
-            return terms_to_check
-
-        if not response or not response.text:
-            return terms_to_check
-
-        raw_text = response.text.strip()
-        if not raw_text:
-            return terms_to_check
-
-        remove_keywords = {
-            item.strip()
-            for item in raw_text.replace("\n", ",").split(",")
-            if item.strip()
+        setting = {
+            "ai_target": target,
+            "model_name": model_name,
+            "system_instruction": FILTER_SYSTEM_PROMPT,
+            "temperature": 0.0,
+            "top_p": 0.8,
+            "safety_settings": get_safety_settings(),
         }
 
-        filtered = {k: v for k, v in terms_to_check.items() if k not in remove_keywords}
-        removed_count = len(terms_to_check) - len(filtered)
+        try:
+            response = await route.send_text(
+                message=f"다음 목록 중 제외할 너무 당연한 일반 단어를 골라내십시오.\n\n{terms_list_str}",
+                setting=setting
+            )
 
-        if log_callback:
-            log_callback(f"[2차 검증 완료] 불필요한 제도/명칭 단어 {removed_count}개 제외 완료")
+            if _is_blocked_by_safety(response=response):
+                if log_callback:
+                    log_callback("[2차 검증] 검열 차단됨 (해당 항목 원본 유지)")
+                continue
 
-        return filtered
+            if not response or not response.text:
+                continue
 
-    except Exception as e:
-        if log_callback:
-            log_callback(f"[2차 검증 오류] {e} (해당 항목 원본 유지)")
-        return terms_to_check
+            raw_text = response.text.strip()
+            if raw_text:
+                remove_keywords.update(_parse_filter_keywords(raw_text))
+
+        except Exception as e:
+            if log_callback:
+                log_callback(f"[2차 검증 오류] {e} (해당 항목 원본 유지)")
+
+    filtered = {k: v for k, v in terms_to_check.items() if k not in remove_keywords}
+    removed_count = len(terms_to_check) - len(filtered)
+
+    if log_callback:
+        log_callback(f"[2차 검증 완료] 불필요한 제도/명칭 단어 {removed_count}개 제외 완료")
+
+    return filtered
+
+
+def _select_best_category(categories):
+    counts = Counter(categories)
+    return max(
+        counts.keys(),
+        key=lambda cat: (counts[cat], -_CATEGORY_PRIORITY.get(cat, 99)),
+    )
 
 
 async def _extract_glossary_async(
@@ -391,6 +524,7 @@ async def _extract_glossary_async(
     safe_glossary = {}
     check_glossary = {}
     ignored_general = 0
+    ignored_invalid = 0
 
     for source, data in glossary_raw_data.items():
         targets = data["targets"]
@@ -400,9 +534,14 @@ async def _extract_glossary_async(
             continue
 
         best_target, _ = Counter(targets).most_common(1)[0]
-        best_category, _ = Counter(categories).most_common(1)[0]
+        best_category = _select_best_category(categories)
 
-        if get_japanese_ratio and get_japanese_ratio(best_category) != 0:
+        if not _is_valid_source_term(source) or not _is_valid_target_term(source, best_target):
+            ignored_invalid += 1
+            continue
+
+        if get_japanese_ratio and get_japanese_ratio(best_target) != 0:
+            ignored_invalid += 1
             continue
 
         if best_category == "일반":
@@ -417,7 +556,7 @@ async def _extract_glossary_async(
         log_callback(
             f"1차 분류 집계: 확정 보존 {len(safe_glossary)}개, "
             f"검증 대상 {len(check_glossary)}개, "
-            f"자동 탈락 {ignored_general}개"
+            f"자동 탈락 {ignored_general + ignored_invalid}개"
         )
 
     filtered_terms = await _filter_system_and_terms_async(

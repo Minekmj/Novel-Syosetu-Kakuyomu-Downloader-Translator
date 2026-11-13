@@ -291,7 +291,7 @@ class DictionaryDialog(QDialog):
                 for key, child in value.items():
                     key_lower = str(key).lower()
 
-                    if key_lower in source_keys and isinstance(child, str):
+                    if (key_lower in source_keys or key_lower.endswith('-j')) and isinstance(child, str):
                         if child.strip():
                             texts.append(child)
 
@@ -365,7 +365,6 @@ class DictionaryDialog(QDialog):
         self.ai_glossary_thread.log_signal.connect(self.on_ai_glossary_log)
         self.ai_glossary_thread.finished_signal.connect(self.on_ai_glossary_finished)
         self.ai_glossary_thread.start()
-
 
     def on_ai_glossary_log(self, text):
         parent = self.parent()
