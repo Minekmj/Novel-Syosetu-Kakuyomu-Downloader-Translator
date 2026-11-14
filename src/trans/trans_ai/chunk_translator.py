@@ -463,8 +463,15 @@ async def translate_chunk_safe_async(
         await asyncio.gather(task1, task2, return_exceptions=True)
         raise ForceStopException()
 
-    if part1_ignore:
-        return part1_text, part1_len, True
+    if part1_ignore or part2_ignore:
+        return None, 0, True
 
-    if part1_text is None:
-        return
+    if part1_text is None or part2_text is None:
+        return None, 0, True
+
+    if part1_text and part2_text:
+        combined_text = f"{part1_text}\n{part2_text}"
+    else:
+        combined_text = part1_text or part2_text
+
+    return combined_text, part1_len + part2_len, False

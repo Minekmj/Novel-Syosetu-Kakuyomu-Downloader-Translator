@@ -66,9 +66,8 @@ def repair_chunk_boundaries(chunks, raw=False):
                     chunks.pop(i + 1)
                 continue
 
-            i += 1
+        i += 1
 
-        return chunks
     return chunks
 
 
@@ -86,29 +85,28 @@ def adjust_split_mid(lines, mid, raw):
             mid = min(n - 1, mid + 2)
             changed = True
 
-            if raw:
-                left = lines[mid - 1].strip()
-                right = lines[mid].strip()
+        if raw:
+            left = lines[mid - 1].strip()
+            right = lines[mid].strip()
 
-                if re.fullmatch(r'={4,}', left):
-                    mid = min(n - 1, mid + 2)
+            if re.fullmatch(r'={4,}', left):
+                mid = min(n - 1, mid + 2)
+                changed = True
+            elif re.fullmatch(r'={4,}', right):
+                if mid >= 2 and lines[mid - 2].strip():
+                    mid = max(1, mid - 1)
                     changed = True
 
-                elif re.fullmatch(r'={4,}', right):
-                    if mid >= 2 and lines[mid - 2].strip():
-                        mid = max(1, mid - 1)
-                        changed = True
+        if not changed:
+            break
 
-            if not changed:
-                break
-
-        return max(1, min(mid, n - 1))
+    return max(1, min(mid, n - 1))
 
 
 def prepare_output_paths(title, max_chars):
     out = down.downin.base_data.OUTFOLDER + '/'
     os.makedirs(os.path.join(out, "trs"), exist_ok=True)
     safe = re.sub(r'[\\/:*?"<>|]', '_', title).strip()
-    ai_dir = os.path.join(out, "trs",  f'ai_down_{safe}_{max_chars}')
+    ai_dir = os.path.join(out, "trs", f'ai_down_{safe}_{max_chars}')
     os.makedirs(ai_dir, exist_ok=True)
     return out, safe, ai_dir

@@ -160,7 +160,6 @@ class GeminiModel(BaseAiModel):
                 continue
             model_names.append(name)
         try:
-            model_names.insert(0, "gemini-3-flash-preview")
             model_names.remove("gemini-3.5-flash")
         except Exception:
             pass
