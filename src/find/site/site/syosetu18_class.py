@@ -1,5 +1,5 @@
-from .base import register_search
-from .module.hameln_base import HamelnSearchBase
+from ..base import register_search
+from ..module.hameln_base import HamelnSearchBase
 
 
 @register_search

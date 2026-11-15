@@ -1,5 +1,5 @@
-from .base import register_search
-from .module.naro_base import SyosetuApiSearchBase
+from ..base import register_search
+from ..module.naro_base import SyosetuApiSearchBase
 
 
 @register_search
