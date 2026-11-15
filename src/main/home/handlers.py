@@ -1,3 +1,5 @@
+from src.app_state import state
+
 import os
 
 from PySide6.QtWidgets import QFileDialog, QMessageBox
@@ -25,7 +27,7 @@ def init_system_config():
 
     if data.get("src"):
         down.downin.base_data.OUTFOLDER = data["src"]
-        os.environ["minedown_setting_src"] = data["src"]
+        state["minedown_setting_src"] = data["src"]
         trans_view.OUT = data["src"]
 
 def check_app_version(parent_window):
@@ -54,7 +56,7 @@ def handle_settings_dialog(parent_window):
         selected_path = new_settings.get("src", "").strip()
         if selected_path:
             down.downin.base_data.OUTFOLDER = selected_path
-            os.environ["minedown_setting_src"] = selected_path
+            state["minedown_setting_src"] = selected_path
             trans_view.OUT = selected_path
 
         down.downin.base_data.EXPORT_TEXT = new_settings.get("RAW_TEXT", False)

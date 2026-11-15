@@ -1,3 +1,5 @@
+from src.app_state import state
+
 import os
 import re
 
@@ -12,7 +14,7 @@ def extract_number(filename):
 
 def process_text_line(line):
     cleaned = line.strip()
-    if os.environ.get("minedown_setting_change_no_mark", "False") == "False":
+    if state.get("minedown_setting_change_no_mark", "False") == "False":
         cleaned = cleaned.replace('「', '“').replace('」', '”')
     return cleaned
 

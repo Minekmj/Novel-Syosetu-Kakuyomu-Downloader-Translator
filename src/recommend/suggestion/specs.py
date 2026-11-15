@@ -196,6 +196,7 @@ def build_search_params(site: str, strategy: Dict[str, Any], page: int = 1) -> D
         }
 
     elif site == 'hameln':
+        SyosetuSearch.set_flag()
         genre_val = ""
         if SyosetuSearch and genre in SyosetuSearch.GENRES.values():
             genre_val = genre

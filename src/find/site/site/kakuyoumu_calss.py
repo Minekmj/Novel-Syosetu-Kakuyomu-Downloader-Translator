@@ -202,11 +202,11 @@ class KakuyomuSearch(BaseSearchSite):
     def fetch_search_results(cls, params):
         url = cls.build_search_url(
             query=params.get("query", ""),
-            genre_name=params.get("genre_val", ""),
+            genre_name=params.get("genre_name", ""),
             exclude_words=params.get("exclude_words", []),
             min_chars=params.get("min_chars"),
             last_published=params.get("last_published"),
-            min_start=params.get("min_pt"),
+            min_start=params.get("min_start"),
             serial_status=params.get("serial_status"),
             order=params.get("order", "popular"),
             inclusion_flag=params.get("inclusion_flags"),

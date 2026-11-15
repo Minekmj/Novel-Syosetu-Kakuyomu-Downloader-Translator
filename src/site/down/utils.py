@@ -1,3 +1,5 @@
+from src.app_state import state
+
 import os
 import re
 
@@ -66,7 +68,7 @@ def prepare_title_path(book_title: str, raw_title: str, base_data):
     r_book_title = re.sub(r'[\\/:*?"<>|]', "_", r_book_title).strip()
     r_book_title = base_data.sanitize_file_name(r_book_title)
 
-    outfolder = os.environ.get("minedown_setting_src", "./out/")
+    outfolder = state.get("minedown_setting_src", "./out/")
     title_path = os.path.join(outfolder, "list", r_book_title)
     os.makedirs(title_path, exist_ok=True)
     return book_title, title_path

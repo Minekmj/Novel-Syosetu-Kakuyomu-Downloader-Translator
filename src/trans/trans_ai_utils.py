@@ -1,3 +1,5 @@
+from src.app_state import state
+
 import json
 import os
 import re
@@ -179,7 +181,7 @@ def apply_japanese_corrections(json_path, corrections):
 
         title = data.get('name', 'restored')
         max_chars = data.get('chunk', 5000)
-        out = os.environ.get('minedown_setting_src', './out/')
+        out = state.get('minedown_setting_src', './out/')
         safe = re.sub(r'[\\/:*?"<>|]', '_', title).strip()
         ai_dir = os.path.join(out, "trs", f'ai_down_{safe}_{max_chars}')
 

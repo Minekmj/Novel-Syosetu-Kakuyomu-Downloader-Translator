@@ -34,22 +34,8 @@ class SearchWorker(QThread):
             config = sl.get_site(self.site)
             search_class = config['search_class']
 
-            if self.site == sl.Sites.KAKUYOMU:
-                url = search_class.build_search_url(**self.params)
-                response = requests.get(
-                    url,
-                    headers=search_class.HEADERS,
-                    timeout=10
-                )
-
-                if response.status_code == 200:
-                    result = search_class.parse_search_results(response.text)
-                    self.finished.emit(result)
-                else:
-                    self.finished.emit({'is_last_page': True, 'items': []})
-            else:
-                result = search_class.fetch_search_results(self.params)
-                self.finished.emit(result)
+            result = search_class.fetch_search_results(self.params)
+            self.finished.emit(result)
 
         except Exception as e:
             print(f'검색 오류: {e}')

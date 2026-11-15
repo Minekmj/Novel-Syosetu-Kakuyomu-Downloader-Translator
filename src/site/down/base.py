@@ -1,3 +1,5 @@
+from src.app_state import state
+
 import os
 import re
 import threading
@@ -116,7 +118,7 @@ class BaseSite:
                     if not content_element:
                         raise Exception("본문 태그 없음")
 
-                    outfolder = os.environ.get("minedown_setting_src", "./out/")
+                    outfolder = state.get("minedown_setting_src", "./out/")
                     has_downloaded_img = MediaHandler.process_images(
                         content_element,
                         page_url,

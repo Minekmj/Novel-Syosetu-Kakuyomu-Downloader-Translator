@@ -1,3 +1,5 @@
+from src.app_state import state
+
 import os
 import json
 from cryptography.fernet import Fernet
@@ -20,7 +22,7 @@ class Data_set:
         try:
             type_s = type(data_type)
             if type_s in (str, int, float):
-                os.environ[f"minedown_setting_{data_name}"] = str(self.data_dict[self.src][data_name])
+                state[f"minedown_setting_{data_name}"] = str(self.data_dict[self.src][data_name])
         except Exception:
             pass
 

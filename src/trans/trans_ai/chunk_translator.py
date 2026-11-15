@@ -1,3 +1,5 @@
+from src.app_state import state
+
 import os
 import asyncio
 import re
@@ -43,7 +45,7 @@ class _NullAsyncContext:
 
 
 def _build_chunk_system_prompt(current_chunk, masked_chunk, raw, expected_img_count, is_censored, dicts, log_callback, prefix_log, check_i):
-    data = os.environ.get("minedown_setting_miniprom", "False") == "True"
+    data = state.get("minedown_setting_miniprom", "False") == "True"
     if raw:
         system_prompt = SYSTEM_PROMPT_RAW_MINI if data else SYSTEM_PROMPT_RAW
     else:

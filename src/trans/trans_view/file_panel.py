@@ -1,3 +1,5 @@
+from src.app_state import state
+
 import os
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QWidget, QLineEdit, QFileDialog, QMessageBox
@@ -33,7 +35,7 @@ class FilePanel(QWidget):
         layout.addLayout(file_row)
 
     def browse_file(self):
-        path, _ = QFileDialog.getOpenFileName(self, '번역할 파일 선택', os.environ.get("minedown_setting_src", "./out/"), '지원 파일 (*.txt *.json)')
+        path, _ = QFileDialog.getOpenFileName(self, '번역할 파일 선택', state.get("minedown_setting_src", "./out/"), '지원 파일 (*.txt *.json)')
         if path:
             self.set_file(path)
 

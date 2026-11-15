@@ -1,3 +1,5 @@
+from src.app_state import state
+
 import os
 import re
 import threading
@@ -228,7 +230,8 @@ class TranslateThread(QThread):
                 self.log_changed.emit("=" * 60)
                 self.finished_signal.emit(True, "번역이 완료되었습니다.", output_dir)
                 
-                if json != "" and os.environ.get("minedown_setting_auto_check", False):
+                F = json != "" and state.get("minedown_setting_auto_check", False) in ("True", "true", "1")
+                if F:
                     result = inspect_json_japanese(json, ratio_threshold=0.0, char_count_threshold=1)
                     is_change = JapaneseCheckCode(result, self.log_changed.emit)
                     if is_change:

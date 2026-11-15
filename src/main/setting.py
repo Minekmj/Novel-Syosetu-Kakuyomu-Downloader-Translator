@@ -1,3 +1,4 @@
+from src.app_state import state
 
 import os
 from PySide6.QtWidgets import (
@@ -23,12 +24,12 @@ def export_env_settings(settings_dict):
     for data_name, val in settings_dict.items():
         type_s = type(val)
         if type_s == bool:
-            os.environ[f"minedown_setting_{data_name}"] = str(val)
+            state[f"minedown_setting_{data_name}"] = str(val)
         elif type_s == str:
             if "\n" not in val and "\r" not in val:
-                os.environ[f"minedown_setting_{data_name}"] = val
+                state[f"minedown_setting_{data_name}"] = val
         elif type_s == int or type_s == float:
-            os.environ[f"minedown_setting_{data_name}"] = str(val)
+            state[f"minedown_setting_{data_name}"] = str(val)
 
 
 class BaseSettingItem:

@@ -1,3 +1,5 @@
+from src.app_state import state
+
 import os
 from typing import Optional
 from PySide6.QtCore import Qt, Signal
@@ -322,7 +324,7 @@ class SettingsPanel(QTabWidget):
         self.inspect_count_widget.setVisible(not is_ratio)
 
     def run_japanese_inspection(self):
-        trs_dir = os.path.abspath(os.path.join(os.environ.get("minedown_setting_src", "./out/"), 'trs'))
+        trs_dir = os.path.abspath(os.path.join(state.get("minedown_setting_src", "./out/"), 'trs'))
         if not os.path.exists(trs_dir):
             os.makedirs(trs_dir, exist_ok=True)
 

@@ -1,3 +1,4 @@
+from src.app_state import state
 
 import os
 import json
@@ -35,8 +36,8 @@ def _serialize(data):
 
 
 def _sync_to_env_locked():
-    os.environ["minedown_APP_COOKIES"] = _serialize(COOKIES)
-    os.environ["minedown_APP_BASE_HEADERS"] = _serialize(BASE_HEADERS)
+    state["minedown_APP_COOKIES"] = _serialize(COOKIES)
+    state["minedown_APP_BASE_HEADERS"] = _serialize(BASE_HEADERS)
 
 
 def sync_to_env():
@@ -46,7 +47,7 @@ def sync_to_env():
 
 def _get_env(key):
     try:
-        value = json.loads(os.environ.get(key, "{}"))
+        value = json.loads(state.get(key, "{}"))
         return value if isinstance(value, dict) else {}
     except (ValueError, TypeError):
         return {}

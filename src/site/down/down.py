@@ -1,3 +1,5 @@
+from src.app_state import state
+
 import os
 import re
 import shutil
@@ -73,7 +75,7 @@ def Download(
 
     clean_title = re.sub(r'[\\/:*?"<>|]', '_', book_title)
 
-    outfolder = os.environ.get("minedown_setting_src", "./out/")
+    outfolder = state.get("minedown_setting_src", "./out/")
     if not os.path.exists(outfolder):
         os.makedirs(outfolder, exist_ok=True)
 

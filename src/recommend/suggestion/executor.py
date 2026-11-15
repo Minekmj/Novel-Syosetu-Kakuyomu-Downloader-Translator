@@ -37,39 +37,9 @@ class SearchExecutor:
             try:
                 PrintIo(f"[{site}] 검색 호출 (시도 {attempt}/{max_attempts}) - p.{params.get('page', 1)}, 파라미터: {params}")
 
-                if site == 'kakuyomu':
-                    url_kwargs = {
-                        "query": params.get("query", ""),
-                        "genre_name": params.get("genre_name", ""),
-                        "exclude_words": params.get("exclude_words"),
-                        "min_chars": params.get("min_chars"),
-                        "last_published": params.get("last_published"),
-                        "min_start": params.get("min_start"),
-                        "serial_status": params.get("serial_status"),
-                        "order": params.get("order", "popular"),
-                        "inclusion_flag": params.get("inclusion_flag"),
-                        "exclusion_flag": params.get("exclusion_flag"),
-                        "page": params.get("page", 1)
-                    }
-                    search_url = site_cls.build_search_url(**url_kwargs)
-                    headers = getattr(site_cls, "HEADERS", {
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36",
-                        "Accept-Language": "ja,ko-KR;q=0.9,ko;q=0.8,en-US;q=0.7,en;q=0.6",
-                    })
-                    resp = self.http_session.get(search_url, headers=headers, timeout=12)
-                    check_cancelled(self.check)
-
-                    if resp.status_code == 503:
-                        raise RuntimeError("HTTP 503 Service Unavailable")
-                    if resp.status_code != 200:
-                        raise RuntimeError(f"HTTP {resp.status_code} 오류")
-
-                    return site_cls.parse_search_results(resp.text)
-
-                elif site in ('naro', 'hameln'):
-                    res = site_cls.fetch_search_results(params)
-                    check_cancelled(self.check)
-                    return res
+                res = site_cls.fetch_search_results(params)
+                check_cancelled(self.check)
+                return res
 
             except RecommendationCancelled:
                 raise

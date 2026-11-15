@@ -222,8 +222,6 @@ def create_epub_from_merged_txt(input_txt_path="", base_dir=".", txt_value="", R
             toc_items.append('<navPoint id="title" playOrder="0"><navLabel><text>title</text></navLabel><content src="title.xhtml"/></navPoint>')
             total_chapters = len(chapter_sections)
             for chapter_index, (chapter_title, chapter_body_lines) in enumerate(chapter_sections, 1):
-                if "print_progress" in globals():
-                    print_progress(chapter_index, total_chapters, "EPUB 변환")
                 chapter_title = chapter_title.replace("<", "〈").replace(">", "〉")
                 processed_lines = []
                 for line in chapter_body_lines:
