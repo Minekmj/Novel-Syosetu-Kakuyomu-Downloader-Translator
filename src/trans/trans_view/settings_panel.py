@@ -293,7 +293,8 @@ class SettingsPanel(QTabWidget):
             save_data(data)
             self.set_api_key(target, profile)
             self.update_api_status_display(target, len(profiles), idx)
-
+            if self.model_panel:
+                self.model_panel.load_models(profile, target_idx=target, manual=False)
             QMessageBox.information(self, "로그인 완료", msg)
         else:
             self.update_api_status_display(target, len(profiles), idx)

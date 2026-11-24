@@ -68,6 +68,9 @@ def load_app_settings(settings_panel, model_panel, status_callback, log_callback
         model_panel.select_model(0, save_current=False)
 
     active_target = int(model_panel.selected_models[0].get('ai_target', AiRoute.DEFAULT_TARGET)) if model_panel.selected_models else AiRoute.DEFAULT_TARGET
+    idx_top = model_panel.target_add_combo.findData(active_target)
+    if idx_top >= 0:
+        model_panel.target_add_combo.setCurrentIndex(idx_top)
     active_api = settings_panel.get_api_key(active_target)
 
     if active_target == int(AiTarget.OLLAMA):
@@ -79,6 +82,7 @@ def load_app_settings(settings_panel, model_panel, status_callback, log_callback
         active_api = active_api or 'default'
         settings_panel.set_api_key(active_target, active_api)
         if AiRoute(ai_target=active_target, api=active_api).check_login(api_key=active_api, target=active_target):
+            model_panel.load_models(active_api, target_idx=active_target, manual=False)
             settings_panel.setCurrentIndex(0)
         else:
             settings_panel.setCurrentIndex(3)

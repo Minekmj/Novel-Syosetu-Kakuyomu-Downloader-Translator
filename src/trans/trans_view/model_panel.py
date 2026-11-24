@@ -8,6 +8,8 @@ from .ui_factory import (
     set_combo_value, clear_layout
 )
 
+from src.app_state import state
+
 
 class ModelPanel(QWidget):
     log_requested = Signal(str)
@@ -19,7 +21,11 @@ class ModelPanel(QWidget):
         self.active_model_index = -1
         self.model_load_thread = None
         self.settings_panel = None
-        self._cached_models = {}
+        cached = state.get("cached_models")
+        if not isinstance(cached, dict):
+            cached = {}
+            state.set("cached_models", cached)
+        self._cached_models = cached
         self._load_queue = []
         self.init_ui()
 
@@ -91,8 +97,14 @@ class ModelPanel(QWidget):
 
     def _get_available_models_for_target(self, target_idx: int):
         base_models = list(AiRoute.get_popular_models(target_idx))
-        return_models = []
         target_name = AiRoute.get_target_name(target_idx)
+
+        if target_idx == int(AiTarget.PLAYGROUND) and target_name not in self._cached_models:
+            from src.system.load_save import load_data
+            saved_pg = load_data().get("playground_cached_models", [])
+            if isinstance(saved_pg, list) and saved_pg:
+                self._cached_models[target_name] = list(saved_pg)
+
         if target_name not in self._cached_models:
             if self.settings_panel and target_idx in self.settings_panel.api_edits:
                 api_key = self.settings_panel.api_edits[target_idx].text().strip()
@@ -101,16 +113,13 @@ class ModelPanel(QWidget):
                     api_key = str(load_data().get("ollama_url", "http://localhost:11434")).strip()
                     self.settings_panel.set_api_key(target_idx, api_key)
                 if target_idx == int(AiTarget.PLAYGROUND):
-                    pass
+                    if AiRoute(ai_target=target_idx, api=api_key).check_login(api_key=api_key, target=target_idx):
+                        self.load_models(api_key, target_idx, manual=False)
                 elif target_idx == int(AiTarget.OLLAMA) or api_key:
                     self.load_models(api_key, target_idx, manual=False)
+
         data = self._cached_models.get(target_name, [])
-        if data:
-            for m in data:
-                return_models.append(m)
-        if not return_models:
-            return_models = base_models
-        return return_models
+        return list(data) if data else base_models
 
     def on_manual_refresh_clicked(self, target_idx=None):
         if target_idx is None or isinstance(target_idx, bool) or target_idx < 0:
@@ -373,6 +382,13 @@ class ModelPanel(QWidget):
         if target_idx < 0:
             target_idx = self.get_current_target()
 
+        target_name = AiRoute.get_target_name(target_idx)
+        if not manual and target_idx != int(AiTarget.OLLAMA):
+            cached = state.get("cached_models") or {}
+            if cached.get(target_name):
+                self._cached_models[target_name] = list(cached[target_name])
+                return True
+
         if target_idx == int(AiTarget.OLLAMA) and not api_key:
             from src.system.load_save import load_data
             api_key = str(load_data().get("ollama_url", "http://localhost:11434")).strip()
@@ -452,7 +468,18 @@ class ModelPanel(QWidget):
             if manual:
                 QMessageBox.critical(self, '모델 조회 실패', error_msg)
         else:
-            self._cached_models[AiRoute.get_target_name(target_idx)] = list(model_names)
+            target_name = AiRoute.get_target_name(target_idx)
+            popular = set(AiRoute.get_popular_models(target_idx))
+            is_real_list = bool(model_names) and (
+                target_idx == int(AiTarget.OLLAMA) or set(model_names) != popular
+            )
+            if is_real_list:
+                cached = state.get("cached_models")
+                if not isinstance(cached, dict):
+                    cached = {}
+                    state.set("cached_models", cached)
+                cached[target_name] = list(model_names)
+                self._cached_models[target_name] = list(model_names)
 
             if self.get_current_target() == target_idx:
                 current = self.model_add_combo.currentText()
