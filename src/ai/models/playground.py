@@ -15,6 +15,8 @@ try:
     from playground_on_python import PlayGroundPool
 except ImportError:
     PlayGroundPool = None
+    
+import shutil
 
 
 def _strip_playground_prefix(model_name: str) -> str:
@@ -252,26 +254,33 @@ class PlaygroundModel(BaseAiModel):
 
     def get_raw_client(self, api_key: Optional[str] = None) -> Any:
         return self.get_client(api_key)
-
+    
     def SetLogin(self, api_key: Optional[str] = None, force: bool = False, verbose: bool = True) -> bool:
         profile_key = self._get_profile_key(api_key)
         lock = self._get_profile_lock(profile_key)
         with lock:
             self._drop_client(profile_key)
             PlaygroundModel._verified_profiles.discard(profile_key)
+
+            save_dir = self._get_save_dir()
+            for target_dir in [save_dir / profile_key, *save_dir.glob(f"{profile_key}_worker_*")]:
+                if target_dir.exists():
+                    shutil.rmtree(target_dir, ignore_errors=True)
+
             pg = PlayGround(
                 profile_name=profile_key,
-                base_dir=self._get_save_dir(),
+                base_dir=save_dir,
                 encrypt=False,
                 verbose=verbose,
             )
             try:
-                pg.setting(first=True if force else "auto", backup=True)
+                pg.setting(first=True, backup=True)
             finally:
                 self._close_obj(pg)
+
             PlaygroundModel._verified_profiles.add(profile_key)
             return True
-
+        
     async def set_login_async(self, api_key: Optional[str] = None, force: bool = False, verbose: bool = True) -> bool:
         return await asyncio.to_thread(self.SetLogin, api_key=api_key, force=force, verbose=verbose)
 
