@@ -97,7 +97,8 @@ async def translate_chunk_safe_async(
     isno_x=False,
     thinking_budget=None,
     ai_target=AiTarget.GEMINI,
-    semaphore=None
+    semaphore=None,
+    concurrency=4
 ):
     if dicts is None:
         dicts = {}
@@ -178,13 +179,14 @@ async def translate_chunk_safe_async(
 
                 setting = {
                     "ai_target": ai_target,
-                    "api_key": cur_used_key,
+                    "api_key": None if int(ai_target) == int(AiTarget.PLAYGROUND) else cur_used_key,
                     "model_name": model_name,
                     "system_instruction": system_prompt,
                     "temperature": temperature,
                     "top_p": 0.8,
                     "safety_settings": safety_settings,
-                    "thinking_budget": cur_thinking_budget
+                    "thinking_budget": cur_thinking_budget,
+                    "concurrency": concurrency
                 }
 
                 if log_callback and not (check_i and check_i()):
@@ -211,6 +213,12 @@ async def translate_chunk_safe_async(
                         continue
                     elif config.ai_route.is_rate_limit_error(api_err):
                         delay = config.ai_route.extract_retry_delay(api_err)
+                        if int(ai_target) in (int(AiTarget.PLAYGROUND), int(AiTarget.OLLAMA)):
+                            if log_callback and not (check_i and check_i()):
+                                log_callback(f'{prefix_log} 경고: Rate Limit 감지 (대기 시간: {int(delay)}초) -> {int(delay)}초 대기 후 재시도')
+                            await asyncio.sleep(delay)
+                            attempt += 1
+                            continue
                         can_retry, new_idx, is_leader, wrapped = await config.switch_api_key_safe(cur_used_key, delay, log_callback)
                         if can_retry:
                             rate_limit_hits += 1

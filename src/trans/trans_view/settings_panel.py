@@ -16,6 +16,7 @@ from .ui_factory import (
     create_layout, create_label, create_button, create_combo, set_combo_value
 )
 from .api_dialog import ApiManagerDialog
+from .api_dialog_playground import PlaygroundLoginThread
 
 
 class SettingsPanel(QTabWidget):
@@ -31,11 +32,15 @@ class SettingsPanel(QTabWidget):
 
         self.api_edits = {}
         self.api_status_lbls = {}
-        
+        self.api_sub_tab_indices = {}
+        self.pg_login_btn = None
+        self.pg_relogin_btn = None
+        self.pg_login_thread = None
+
         self.model_panel = None
 
         self.init_tabs()
-        
+
     def set_model_panel(self, model_panel):
         self.model_panel = model_panel
 
@@ -125,6 +130,7 @@ class SettingsPanel(QTabWidget):
 
             is_vertex = False
             is_local = (target_int == int(AiTarget.OLLAMA))
+            is_playground = (target_int == int(AiTarget.PLAYGROUND))
 
             api_edit = preset.PasteOnlyLineEdit()
             api_edit.setMinimumHeight(34)
@@ -142,6 +148,22 @@ class SettingsPanel(QTabWidget):
                 show_btn.setChecked(True)
             show_btn.toggled.connect(lambda c, e=api_edit, b=show_btn: self._toggle_vis(e, b, c))
             srow.addWidget(show_btn)
+
+            if is_playground:
+                self.pg_login_btn = create_button(
+                    '로그인',
+                    lambda _, t=target_int: self.run_playground_login(t, force=False),
+                    'primaryBtn',
+                    h=34
+                )
+                self.pg_relogin_btn = create_button(
+                    '재로그인',
+                    lambda _, t=target_int: self.run_playground_login(t, force=True),
+                    'subtleBtn',
+                    h=34
+                )
+                srow.addWidget(self.pg_login_btn, 1)
+                srow.addWidget(self.pg_relogin_btn, 1)
 
             more_btn = create_button('더보기', lambda _, t=target_int: self.open_api_manager(t), w=64)
             srow.addWidget(more_btn)
@@ -162,6 +184,12 @@ class SettingsPanel(QTabWidget):
                 show_btn.hide()
                 more_btn.setText("로컬 모델 설정")
                 more_btn.setFixedWidth(400)
+            elif is_playground:
+                api_edit.hide()
+                clear_btn.hide()
+                show_btn.hide()
+                more_btn.setText("세션 관리")
+                more_btn.setFixedWidth(90)
             else:
                 api_edit.setPlaceholderText(f"{target_name} API Key 또는 Endpoint")
                 api_edit.setEchoMode(QLineEdit.EchoMode.Password)
@@ -170,7 +198,8 @@ class SettingsPanel(QTabWidget):
 
             self.api_edits[target_int] = api_edit
             self.api_status_lbls[target_int] = status_lbl
-            self.api_sub_tabs.addTab(sub_w, target_name)
+            tab_idx = self.api_sub_tabs.addTab(sub_w, target_name)
+            self.api_sub_tab_indices[target_int] = tab_idx
 
         tl.addWidget(self.api_sub_tabs)
 
@@ -218,8 +247,65 @@ class SettingsPanel(QTabWidget):
 
         self.update_glossary_button()
 
+    def run_playground_login(self, target: int = int(AiTarget.PLAYGROUND), force: bool = False):
+        if self.pg_login_thread is not None and self.pg_login_thread.isRunning():
+            return
+
+        profile = self.get_api_key(target) or "default"
+        if self.pg_login_btn:
+            self.pg_login_btn.setEnabled(False)
+        if self.pg_relogin_btn:
+            self.pg_relogin_btn.setEnabled(False)
+
+        lbl = self.api_status_lbls.get(int(target))
+        if lbl:
+            lbl.setText("로그인 진행 중... 브라우저에서 Google 로그인을 완료하세요.")
+        self.log_requested.emit(f"Playground 로그인 시작 (프로필: {profile})")
+
+        self.pg_login_thread = PlaygroundLoginThread(profile, force=force, parent=self)
+        self.pg_login_thread.finished_signal.connect(
+            lambda ok, msg, t=target, p=profile: self._on_playground_login_finished(ok, msg, t, p)
+        )
+        self.pg_login_thread.start()
+
+    def _on_playground_login_finished(self, success: bool, msg: str, target: int, profile: str):
+        if self.pg_login_btn:
+            self.pg_login_btn.setEnabled(True)
+        if self.pg_relogin_btn:
+            self.pg_relogin_btn.setEnabled(True)
+
+        self.pg_login_thread = None
+        self.log_requested.emit(msg)
+
+        data = load_data()
+        single_k, list_k, idx_k = AiRoute.get_storage_keys(target)
+        profiles = data.get(list_k, [])
+        if not isinstance(profiles, list) or not profiles:
+            profiles = [profile]
+        if profile not in profiles:
+            profiles.append(profile)
+        idx = profiles.index(profile)
+
+        if success:
+            data[single_k] = profile
+            data[list_k] = profiles
+            data[idx_k] = idx
+            save_data(data)
+            self.set_api_key(target, profile)
+            self.update_api_status_display(target, len(profiles), idx)
+
+            QMessageBox.information(self, "로그인 완료", msg)
+        else:
+            self.update_api_status_display(target, len(profiles), idx)
+            QMessageBox.critical(self, "로그인 실패", msg)
+
+    def focus_api_sub_tab(self, target: int):
+        idx = self.api_sub_tab_indices.get(int(target))
+        if idx is not None:
+            self.api_sub_tabs.setCurrentIndex(idx)
+
     def on_api_key_changed(self, target: int, text: str):
-        if target == int(AiTarget.OLLAMA):
+        if target in (int(AiTarget.OLLAMA), int(AiTarget.PLAYGROUND)):
             return
         clean_text = text.strip()
         data = load_data()
@@ -280,8 +366,12 @@ class SettingsPanel(QTabWidget):
             if target in self.api_edits:
                 self.api_edits[target].setText(active_key)
             self.update_api_status_display(target, len(keys), idx)
-        if target == AiTarget.OLLAMA:
+        else:
+            if int(target) == int(AiTarget.PLAYGROUND):
+                self.update_api_status_display(target, 1, 0)
+        if int(target) == int(AiTarget.OLLAMA) and self.model_panel:
             self.model_panel.load_models(target_idx=target, manual=False)
+
 
     def update_api_status_display(self, target: int, total_count: int, active_idx: int):
         lbl = self.api_status_lbls.get(int(target))
@@ -290,6 +380,17 @@ class SettingsPanel(QTabWidget):
         t_name = AiRoute.get_target_name(target)
         if int(target) == int(AiTarget.OLLAMA):
             lbl.setText(f"{t_name} 로컬 엔드포인트 설정 완료")
+        elif int(target) == int(AiTarget.PLAYGROUND):
+            profile = self.get_api_key(target) or "default"
+            logged_in = False
+            try:
+                logged_in = AiRoute(ai_target=target, api=profile).check_login(api_key=profile, target=target)
+            except Exception:
+                logged_in = False
+            if logged_in:
+                lbl.setText(f"{t_name} 로그인됨 (프로필: {profile})")
+            else:
+                lbl.setText(f"{t_name} 로그인 필요 (로그인 버튼을 눌러주세요)")
         elif total_count > 1:
             lbl.setText(f"등록된 {t_name} API: 총 {total_count}개 / 현재 활성: [{active_idx}]")
         elif total_count == 1:

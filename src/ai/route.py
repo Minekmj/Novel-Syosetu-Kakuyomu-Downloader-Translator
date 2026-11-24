@@ -158,3 +158,12 @@ class AiRoute(metaclass=_AiRouteMeta):
 
     def is_connection_error(self, err: Exception) -> bool:
         return self.get_model().is_connection_error(err)
+    
+    def SetLogin(self, api_key: Optional[str] = None, target: Optional[int] = None, **kwargs) -> bool:
+        model = self.get_model(target)
+        if api_key is not None:
+            model.set_api(api_key)
+        return model.SetLogin(api_key=api_key, **kwargs)
+
+    def check_login(self, api_key: Optional[str] = None, target: Optional[int] = None, verify: bool = False) -> bool:
+        return self.get_model(target).check_login(api_key=api_key, verify=verify)

@@ -386,4 +386,13 @@ class TranslateDialog(QDialog):
             event.ignore()
         else:
             self.save_settings()
+            try:
+                import threading
+                from src.ai import AiRoute, AiTarget
+                threading.Thread(
+                    target=lambda: AiRoute(ai_target=AiTarget.PLAYGROUND).get_model(AiTarget.PLAYGROUND).close(),
+                    daemon=True,
+                ).start()
+            except Exception:
+                pass
             super().closeEvent(event)

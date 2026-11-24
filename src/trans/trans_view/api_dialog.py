@@ -16,13 +16,16 @@ class ApiManagerDialog(QDialog):
         if int(ai_target) == int(AiTarget.OLLAMA):
             from .api_dialog_ollama import OllamaManagerDialog
             return OllamaManagerDialog(parent)
+        if int(ai_target) == int(AiTarget.PLAYGROUND):
+            from .api_dialog_playground import PlaygroundManagerDialog
+            return PlaygroundManagerDialog(parent)
         return super().__new__(cls)
 
     def __init__(self, parent=None, ai_target: int = AiTarget.GEMINI):
         super().__init__(parent)
         self.ai_target = int(ai_target)
         self.target_name = AiRoute.get_target_name(self.ai_target)
-        self.is_vertex = False #(self.ai_target == int(AiTarget.VERTEX))
+        self.is_vertex = False
 
         title_suffix = "인증 키(JSON) 관리" if self.is_vertex else "API 키 관리"
         self.setWindowTitle(f"{self.target_name} {title_suffix}")

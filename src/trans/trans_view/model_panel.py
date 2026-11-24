@@ -31,10 +31,14 @@ class ModelPanel(QWidget):
 
         model_row = create_layout('h')
 
-        target_list = [AiRoute.get_target_name(t) for t in sorted(AiRoute.TARGET_NAMES.keys())]
-        self.target_add_combo = create_combo(target_list, AiRoute.get_target_name(AiRoute.DEFAULT_TARGET), h=35)
+        self.target_add_combo = create_combo([], h=35)
         self.target_add_combo.setFixedWidth(95)
-        self.target_add_combo.currentIndexChanged.connect(self.on_add_target_changed)
+        for t in sorted(AiRoute.TARGET_NAMES.keys()):
+            self.target_add_combo.addItem(AiRoute.get_target_name(t), int(t))
+        default_combo_idx = self.target_add_combo.findData(int(AiRoute.DEFAULT_TARGET))
+        if default_combo_idx >= 0:
+            self.target_add_combo.setCurrentIndex(default_combo_idx)
+        self.target_add_combo.currentIndexChanged.connect(self.on_add_target_combo_changed)
         model_row.addWidget(self.target_add_combo)
 
         self.model_add_combo = create_combo([], h=35)
@@ -65,6 +69,11 @@ class ModelPanel(QWidget):
 
         self.on_add_target_changed(AiRoute.DEFAULT_TARGET)
 
+    def on_add_target_combo_changed(self, combo_idx):
+        target_data = self.target_add_combo.itemData(combo_idx)
+        target_idx = int(target_data) if target_data is not None else int(AiRoute.DEFAULT_TARGET)
+        self.on_add_target_changed(target_idx)
+
     def on_add_target_changed(self, target_idx):
         target_idx = int(target_idx)
         models = self._get_available_models_for_target(target_idx)
@@ -85,13 +94,16 @@ class ModelPanel(QWidget):
         return_models = []
         target_name = AiRoute.get_target_name(target_idx)
         if target_name not in self._cached_models:
-            if self.settings_panel:
+            if self.settings_panel and target_idx in self.settings_panel.api_edits:
                 api_key = self.settings_panel.api_edits[target_idx].text().strip()
                 if target_idx == int(AiTarget.OLLAMA) and not api_key:
                     from src.system.load_save import load_data
                     api_key = str(load_data().get("ollama_url", "http://localhost:11434")).strip()
                     self.settings_panel.set_api_key(target_idx, api_key)
-                self.load_models(api_key, target_idx, manual=False)
+                if target_idx == int(AiTarget.PLAYGROUND):
+                    pass
+                elif target_idx == int(AiTarget.OLLAMA) or api_key:
+                    self.load_models(api_key, target_idx, manual=False)
         data = self._cached_models.get(target_name, [])
         if data:
             for m in data:
@@ -103,7 +115,7 @@ class ModelPanel(QWidget):
     def on_manual_refresh_clicked(self, target_idx=None):
         if target_idx is None or isinstance(target_idx, bool) or target_idx < 0:
             target_idx = self.get_current_target()
-        if self.settings_panel:
+        if self.settings_panel and target_idx in self.settings_panel.api_edits:
             api_key = self.settings_panel.api_edits[target_idx].text().strip()
             if target_idx == int(AiTarget.OLLAMA) and not api_key:
                 from src.system.load_save import load_data
@@ -113,7 +125,7 @@ class ModelPanel(QWidget):
 
     def rebuild_model_list(self):
         clear_layout(self.model_list_layout)
-        target_list = [AiRoute.get_target_name(t) for t in sorted(AiRoute.TARGET_NAMES.keys())]
+        sorted_targets = sorted(AiRoute.TARGET_NAMES.keys())
 
         for i, item in enumerate(self.selected_models):
             name = str(item.get('model', '')).strip()
@@ -129,10 +141,17 @@ class ModelPanel(QWidget):
             indicator.setAlignment(Qt.AlignmentFlag.AlignCenter)
             rl.addWidget(indicator)
 
-            row_target_combo = create_combo(target_list, AiRoute.get_target_name(target_int), h=50)
+            row_target_combo = create_combo([], h=50)
+            for t in sorted_targets:
+                row_target_combo.addItem(AiRoute.get_target_name(t), int(t))
+            t_combo_idx = row_target_combo.findData(target_int)
+            if t_combo_idx >= 0:
+                row_target_combo.setCurrentIndex(t_combo_idx)
             row_target_combo.setFixedWidth(90)
             row_target_combo.setToolTip('이 모델의 AI 종류 변경')
-            row_target_combo.activated.connect(lambda _, idx=i, c=row_target_combo: self.change_selected_target(idx, c.currentIndex()))
+            row_target_combo.activated.connect(
+                lambda _, idx=i, c=row_target_combo: self.change_selected_target(idx, int(c.currentData()))
+            )
             rl.addWidget(row_target_combo)
 
             row_model_combo = create_combo([], h=32)
@@ -360,9 +379,20 @@ class ModelPanel(QWidget):
             if self.settings_panel:
                 self.settings_panel.set_api_key(target_idx, api_key)
 
-        if not api_key and target_idx != int(AiTarget.OLLAMA):
+        if target_idx == int(AiTarget.PLAYGROUND):
+            api_key = (api_key or "default").strip()
+            if not AiRoute(ai_target=target_idx, api=api_key).check_login(api_key=api_key, target=target_idx):
+                if manual:
+                    QMessageBox.warning(
+                        self,
+                        '알림',
+                        'Playground 로그인이 필요합니다.\n[API 설정 -> Playground]에서 로그인을 진행하세요.'
+                    )
+                return False
+        elif not api_key and target_idx != int(AiTarget.OLLAMA):
             if manual:
-                msg = 'JSON 키 파일 경로 또는 인증 정보를 먼저 입력하세요.' if target_idx == int(AiTarget.VERTEX) else 'API 키를 먼저 입력하세요.'
+                is_vertex = hasattr(AiTarget, "VERTEX") and target_idx == int(getattr(AiTarget, "VERTEX"))
+                msg = 'JSON 키 파일 경로 또는 인증 정보를 먼저 입력하세요.' if is_vertex else 'API 키를 먼저 입력하세요.'
                 QMessageBox.warning(self, '알림', msg)
             return False
 
@@ -412,16 +442,18 @@ class ModelPanel(QWidget):
             self._process_next_load()
 
     def get_current_target(self):
-        return self.target_add_combo.currentIndex()
+        data = self.target_add_combo.currentData()
+        return int(data) if data is not None else int(AiRoute.DEFAULT_TARGET)
 
     def on_models_loaded(self, model_names, error_msg, target_idx: int, manual=False):
         if error_msg:
+            self.log_requested.emit(f"모델 조회 실패: {error_msg}")
+            self.status_requested.emit("모델 조회 실패")
             if manual:
-                self.log_requested.emit(f"모델 조회 실패: {error_msg}")
                 QMessageBox.critical(self, '모델 조회 실패', error_msg)
         else:
             self._cached_models[AiRoute.get_target_name(target_idx)] = list(model_names)
-            
+
             if self.get_current_target() == target_idx:
                 current = self.model_add_combo.currentText()
                 models = self._get_available_models_for_target(target_idx)
@@ -429,10 +461,11 @@ class ModelPanel(QWidget):
                 self.model_add_combo.clear()
                 self.model_add_combo.addItems(models)
 
+                default_model = AiRoute.get_default_model(target_idx)
                 if current and current in models:
                     self.model_add_combo.setCurrentText(current)
-                elif AiRoute.DEFAULT_MODEL in models:
-                    self.model_add_combo.setCurrentText(AiRoute.DEFAULT_MODEL)
+                elif default_model in models:
+                    self.model_add_combo.setCurrentText(default_model)
                 elif models:
                     self.model_add_combo.setCurrentIndex(0)
 

@@ -1,6 +1,7 @@
 import asyncio
 import os
 import src.down.down as down
+from src.ai import AiTarget
 from src.trans.prompt_sanitizer import get_safety_settings
 from src.trans.trans_ai_utils import save_translation_json, save_translation_txt
 from .config import ForceStopException
@@ -109,7 +110,8 @@ async def run_translation_batch(
                     isno_x=worker.isno_x,
                     thinking_budget=worker.thinking_budget,
                     ai_target=worker.ai_target,
-                    semaphore=worker.semaphore
+                    semaphore=worker.semaphore,
+                    concurrency=worker.max_concurrent
                 )
 
                 if result_ignore or result_text is None or _is_stopped(check, check_i):
@@ -189,20 +191,125 @@ error 청크 next
                     if progress_callback:
                         progress_callback(completed_count, total_items, f'{completed_count}/{total_items} 청크 완료')
 
-    async def model_worker(worker, worker_number):
-        while True:
-            if _is_stopped(check, check_i):
-                return
-            try:
-                pos, item = queue.get_nowait()
-            except asyncio.QueueEmpty:
-                return
-            try:
-                await process_item(pos, item, worker)
-            finally:
-                queue.task_done()
+    has_playground = any(int(getattr(w, 'ai_target', -1)) == int(AiTarget.PLAYGROUND) for w in workers)
 
-    await run_worker_pool(workers, model_worker, check_i)
+    if has_playground:
+        pending = list(enumerate(items))
+        wave_retries = {}
+        max_wave_retries = 3
+        wave_size = max(1, sum(max(1, int(w.max_concurrent)) for w in workers))
+        primary_worker = workers[0]
+
+        async def _run_wave_item(pos, item, worker):
+            nonlocal completed_count, ignored
+            if _is_stopped(check, check_i):
+                return True, None
+            file_path = f'{ai_dir}/{item.idx}.txt'
+            if item.check_disk_cache and os.path.exists(file_path):
+                await process_item(pos, item, worker)
+                return True, None
+            if item.pre_translated is not None:
+                await process_item(pos, item, worker)
+                return True, None
+            try:
+                result_text, result_lines, result_ignore = await translate_chunk_safe_async(
+                    chunk=item.source_text,
+                    model_name=worker.model_name,
+                    safety_settings=safety_settings,
+                    rate_limiter=worker.rate_limiter,
+                    temperature=worker.temperature,
+                    log_callback=log_callback,
+                    chunk_idx=item.idx,
+                    raw=raw,
+                    dicts=dicts or {},
+                    check=check,
+                    check_i=check_i,
+                    br_start=worker.br_start,
+                    isno_x=worker.isno_x,
+                    thinking_budget=worker.thinking_budget,
+                    ai_target=worker.ai_target,
+                    semaphore=worker.semaphore,
+                    concurrency=worker.max_concurrent,
+                )
+                if result_ignore or result_text is None or _is_stopped(check, check_i):
+                    async with lock:
+                        ignored = True
+                    return True, None
+                try:
+                    with open(file_path, 'w', encoding='utf-8') as f:
+                        f.write(result_text)
+                except Exception as save_err:
+                    if log_callback and not (check_i and check_i()):
+                        log_callback(f'[{item.idx}번 청크] 파일 저장 실패: {save_err}')
+                async with lock:
+                    translated_parts[pos] = result_text
+                    original_chunks[pos] = item.orig_text
+                    completed_count += 1
+                    if progress_callback and not (check_i and check_i()):
+                        progress_callback(completed_count, total_items, f'{completed_count}/{total_items} 청크 완료')
+                if log_callback and not (check_i and check_i()):
+                    log_callback(f'[{item.idx}/{total_items}] [{worker.model_name}] 청크 번역 완료: 성공')
+                return True, None
+            except (ForceStopException, asyncio.CancelledError):
+                raise ForceStopException()
+            except Exception as e:
+                return False, e
+
+        try:
+            while pending:
+                if _is_stopped(check, check_i):
+                    break
+                wave = pending[:wave_size]
+                pending = pending[wave_size:]
+
+                tasks = [
+                    asyncio.create_task(_run_wave_item(pos, item, workers[i % len(workers)]))
+                    for i, (pos, item) in enumerate(wave)
+                ]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                retry_front = []
+                for (pos, item), res in zip(wave, results):
+                    if isinstance(res, ForceStopException):
+                        raise res
+                    if isinstance(res, Exception):
+                        ok, err = False, res
+                    else:
+                        ok, err = res
+                    if not ok:
+                        cnt = wave_retries.get(pos, 0) + 1
+                        wave_retries[pos] = cnt
+                        if cnt < max_wave_retries:
+                            if log_callback and not (check_i and check_i()):
+                                log_callback(f' └ [{item.idx}번 청크] 실패로 다음 배치에서 재시도 ({cnt}/{max_wave_retries}): {err}')
+                            retry_front.append((pos, item))
+                        else:
+                            await process_item(pos, item, primary_worker)
+
+                if retry_front:
+                    pending = retry_front + pending
+        finally:
+            try:
+                from . import config as trans_config
+                if getattr(trans_config, 'ai_route', None) is not None:
+                    await asyncio.to_thread(trans_config.ai_route.get_model(AiTarget.PLAYGROUND).close)
+            except Exception:
+                pass
+    else:
+        async def model_worker(worker, worker_number):
+            while True:
+                if _is_stopped(check, check_i):
+                    return
+                try:
+                    pos, item = queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    return
+                try:
+                    await process_item(pos, item, worker)
+                finally:
+                    queue.task_done()
+
+        await run_worker_pool(workers, model_worker, check_i)
 
     _is_stopped(check, check_i)
 

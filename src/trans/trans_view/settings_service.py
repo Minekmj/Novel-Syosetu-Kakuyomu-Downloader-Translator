@@ -23,6 +23,12 @@ def load_app_settings(settings_panel, model_panel, status_callback, log_callback
             keys_val = [api_val]
             idx_val = 0
 
+        if target == int(AiTarget.PLAYGROUND):
+            api_val = api_val or 'default'
+            if not keys_val:
+                keys_val = [api_val]
+                idx_val = 0
+
         if not api_val and keys_val:
             try:
                 api_val = str(keys_val[idx_val]).strip()
@@ -69,14 +75,25 @@ def load_app_settings(settings_panel, model_panel, status_callback, log_callback
         settings_panel.set_api_key(active_target, active_api)
         model_panel.load_models(active_api, target_idx=active_target, manual=False)
         settings_panel.setCurrentIndex(0)
+    elif active_target == int(AiTarget.PLAYGROUND):
+        active_api = active_api or 'default'
+        settings_panel.set_api_key(active_target, active_api)
+        if AiRoute(ai_target=active_target, api=active_api).check_login(api_key=active_api, target=active_target):
+            settings_panel.setCurrentIndex(0)
+        else:
+            settings_panel.setCurrentIndex(3)
+            settings_panel.focus_api_sub_tab(active_target)
+            status_callback('Playground 로그인이 필요합니다.')
     elif active_api:
         model_panel.load_models(active_api, target_idx=active_target, manual=False)
         settings_panel.setCurrentIndex(0)
     else:
         settings_panel.setCurrentIndex(3)
+        settings_panel.focus_api_sub_tab(active_target)
         status_callback('API 키를 설정하세요.')
 
     log_callback('저장된 번역 설정을 불러왔습니다.')
+
 
 def save_app_settings(settings_panel, model_panel, log_callback):
     try:
@@ -88,6 +105,10 @@ def save_app_settings(settings_panel, model_panel, log_callback):
 
             if target == int(AiTarget.OLLAMA) and not key_val:
                 key_val = str(data.get('ollama_url', 'http://localhost:11434')).strip()
+                edit_widget.setText(key_val)
+
+            if target == int(AiTarget.PLAYGROUND) and not key_val:
+                key_val = 'default'
                 edit_widget.setText(key_val)
 
             keys_val = data.get(list_k, [])

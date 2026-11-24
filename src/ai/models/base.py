@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 
 class AiResponse:
@@ -26,6 +26,15 @@ class BaseAiModel(ABC):
 
     def get_raw_client(self, api_key: Optional[str] = None) -> Any:
         return None
+
+    def list_models(self, api_key: Optional[str] = None) -> List[str]:
+        return []
+
+    def SetLogin(self, api_key: Optional[str] = None, **kwargs) -> bool:
+        return False
+
+    def check_login(self, api_key: Optional[str] = None, verify: bool = False) -> bool:
+        return bool((api_key if api_key is not None else self.api_key).strip())
 
     @abstractmethod
     async def send_text(self, message: str, setting: Optional[Dict[str, Any]] = None) -> AiResponse:
