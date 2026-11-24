@@ -70,6 +70,7 @@
   * 젬마 모델 지원
   * 추론 기능 지원
   * 다중 api 사용 가능
+* Google Aistudio PlayGround를 통한 번역
 * Ollama를 이용한 로컬 번역
 * Naver Papago를 이용한 일반 번역
 * 청크 방식의 분할 번역

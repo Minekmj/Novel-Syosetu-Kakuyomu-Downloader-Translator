@@ -49,6 +49,10 @@ class RecommendControlPanel(QWidget):
         for target_id, name in sorted(AiRoute.TARGET_NAMES.items()):
             if target_id == AiTarget.OLLAMA:
                 continue
+            
+            if target_id == AiTarget.PLAYGROUND:
+                continue
+            
             self.target_combo.addItem(name, target_id)
         self.target_combo.currentIndexChanged.connect(self.on_target_combo_changed)
         api_box.addWidget(self.target_combo)

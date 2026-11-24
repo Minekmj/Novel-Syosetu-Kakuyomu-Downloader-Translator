@@ -183,6 +183,7 @@ class PlaygroundModel(BaseAiModel):
                 encrypt=False,
                 verbose=verbose,
             )
+            pg.logger.level = 2
             try:
                 pg.connect(backup=True, headless=True, auto_login=False)
             except Exception as err:
@@ -273,6 +274,7 @@ class PlaygroundModel(BaseAiModel):
                 encrypt=False,
                 verbose=verbose,
             )
+            pg.logger.level = 2
             try:
                 pg.setting(first=True, backup=True)
             finally:
@@ -298,6 +300,7 @@ class PlaygroundModel(BaseAiModel):
                 encrypt=False,
                 verbose=False,
             )
+            pg.logger.level = 2
             return bool(pg.storage.has_any_saved_session())
 
         lock = self._get_profile_lock(profile_key)
@@ -308,6 +311,7 @@ class PlaygroundModel(BaseAiModel):
                 encrypt=False,
                 verbose=False,
             )
+            pg.logger.level = 2
             try:
                 ok = bool(pg.is_logged_in(backup=True))
                 if ok:
