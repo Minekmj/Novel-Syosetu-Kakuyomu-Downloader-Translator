@@ -1,5 +1,7 @@
 import os
 import json
+import uuid
+import threading
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QLabel,
     QDialog, QMessageBox, QComboBox, QScrollArea, QWidget
@@ -7,6 +9,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 
 from src.ai import AiTarget
+from src.ai.models.playground import PlaygroundModel
 import src.trans.trans_ai.config as trans_config
 from src.main.thread_pyqt import GlossaryExtractThread
 
@@ -95,6 +98,9 @@ class DictionaryDialog(QDialog):
         self.model = model or trans_config.MODEL_NAME
         self.rpm = rpm
         self.ai_target = trans_config.AI_TARGET if ai_target is None else ai_target
+        self.ai_glossary_thread = None
+        self.current_glossary_session_id = None
+        self._ai_glossary_cancelled = False
         self.setWindowTitle('용어집 설정')
         self.resize(620, 560)
         self.setMinimumSize(500, 450)
@@ -351,7 +357,12 @@ class DictionaryDialog(QDialog):
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
 
+        if self.ai_glossary_thread is not None and self.ai_glossary_thread.isRunning():
+            return
+
         percent, chunk = dialog.get_values()
+        self._ai_glossary_cancelled = False
+        self.current_glossary_session_id = f"glossary_{uuid.uuid4().hex[:8]}"
 
         self.ai_glossary_thread = GlossaryExtractThread(
             all_text,
@@ -360,11 +371,32 @@ class DictionaryDialog(QDialog):
             self.model,
             self.rpm,
             self,
-            ai_target=self.ai_target
+            ai_target=self.ai_target,
+            session_id=self.current_glossary_session_id,
+            check=self.is_ai_glossary_cancelled
         )
         self.ai_glossary_thread.log_signal.connect(self.on_ai_glossary_log)
         self.ai_glossary_thread.finished_signal.connect(self.on_ai_glossary_finished)
         self.ai_glossary_thread.start()
+
+    def is_ai_glossary_cancelled(self):
+        return self._ai_glossary_cancelled
+
+    def _stop_ai_glossary_thread(self):
+        self._ai_glossary_cancelled = True
+        sid = self.current_glossary_session_id
+        if sid:
+            threading.Thread(target=PlaygroundModel.force_stop_session, args=(sid,), daemon=True).start()
+        if self.ai_glossary_thread is not None and self.ai_glossary_thread.isRunning():
+            self.ai_glossary_thread.wait(3000)
+
+    def reject(self):
+        self._stop_ai_glossary_thread()
+        super().reject()
+
+    def closeEvent(self, event):
+        self._stop_ai_glossary_thread()
+        super().closeEvent(event)
 
     def on_ai_glossary_log(self, text):
         parent = self.parent()
@@ -373,6 +405,13 @@ class DictionaryDialog(QDialog):
 
     def on_ai_glossary_finished(self, glossary, error):
         parent = self.parent()
+        sid = self.current_glossary_session_id
+        self.current_glossary_session_id = None
+        if sid:
+            threading.Thread(target=PlaygroundModel.close_session, args=(sid,), daemon=True).start()
+
+        if self._ai_glossary_cancelled:
+            return
 
         if error:
             if hasattr(parent, 'log_panel'):

@@ -148,8 +148,6 @@ class TranslateThread(QThread):
         self.thinking_budget = thinking_budget
         self.ai_target = ai_target
         self.session_id = session_id
-        self.check = check
-        self.session_id = session_id
 
     def run(self):
         try:
@@ -279,7 +277,7 @@ class GlossaryExtractThread(QThread):
     log_signal = Signal(str)
     finished_signal = Signal(dict, str)
 
-    def __init__(self, all_text, paserent, chunk, model, rpm, parent=None, ai_target=None):
+    def __init__(self, all_text, paserent, chunk, model, rpm, parent=None, ai_target=None, session_id=None, check=None):
         super().__init__(parent)
         self.all_text = all_text
         self.paserent = paserent
@@ -287,6 +285,8 @@ class GlossaryExtractThread(QThread):
         self.model = model
         self.rpm = rpm
         self.ai_target = ai_target
+        self.session_id = session_id
+        self.check = check
 
     def run(self):
         try:
@@ -347,7 +347,8 @@ class RecommendWorker(QThread):
         user_data: dict,
         ai_target: Optional[int] = None,
         session_id: Optional[str] = None,
-        check=None
+        check=None,
+        conversation_history=None
     ):
         super().__init__()
         self.api_key = api_key
@@ -356,6 +357,10 @@ class RecommendWorker(QThread):
         self.top_k = top_k
         self.user_data = user_data
         self.ai_target = ai_target
+        self.session_id = session_id
+        self.check = check
+        self.conversation_history = list(conversation_history) if conversation_history else []
+        self.recommender = None
 
     def run(self):
         try:
@@ -370,8 +375,12 @@ class RecommendWorker(QThread):
                 model=self.model,
                 user_data=self.user_data,
                 log=log_callback,
-                ai_target=self.ai_target
+                ai_target=self.ai_target,
+                conversation_history=self.conversation_history,
+                check=self.check,
+                session_id=self.session_id
             )
+            self.recommender = recommender
 
             result = recommender.run_recommendation(
                 top_k=self.top_k,

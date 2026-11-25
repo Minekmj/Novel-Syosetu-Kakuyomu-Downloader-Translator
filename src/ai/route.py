@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 from typing import Any, Dict, List, Optional, Tuple
 
 from .registry import AiRegistry, register_ai
@@ -99,7 +100,7 @@ class AiRoute(metaclass=_AiRouteMeta):
         return merged
 
     def __init__(self, ai_target: Optional[int] = None, api: str = ""):
-        self.ai_target = self.DEFAULT_TARGET if ai_target is None else int(ai_target)
+        self.ai_target = AiRoute.DEFAULT_TARGET if ai_target is None else int(ai_target)
         self.api = api.strip() if api else ""
         self._models: Dict[int, BaseAiModel] = {}
         self._init_target(self.ai_target)
@@ -111,9 +112,10 @@ class AiRoute(metaclass=_AiRouteMeta):
             if info:
                 self._models[target] = info.model_class(api_key=self.api)
             else:
-                def_info = AiRegistry.get(self.DEFAULT_TARGET)
+                def_target = AiRoute.DEFAULT_TARGET
+                def_info = AiRegistry.get(def_target)
                 if def_info:
-                    self._models[self.DEFAULT_TARGET] = def_info.model_class(api_key=self.api)
+                    self._models[def_target] = def_info.model_class(api_key=self.api)
 
     def set_target(self, ai_target: int):
         self.ai_target = int(ai_target)
@@ -129,10 +131,19 @@ class AiRoute(metaclass=_AiRouteMeta):
     def get_model(self, target: Optional[int] = None) -> BaseAiModel:
         t = self.ai_target if target is None else int(target)
         self._init_target(t)
-        return self._models[t]
+        if t in self._models:
+            return self._models[t]
+        return self._models[AiRoute.DEFAULT_TARGET]
 
-    def refresh_client(self, api_key: Optional[str] = None):
-        return self.get_model().refresh_client(api_key)
+    def refresh_client(self, api_key: Optional[str] = None, session_id: Optional[str] = None):
+        model = self.get_model()
+        try:
+            params = inspect.signature(model.refresh_client).parameters
+            if "session_id" in params:
+                return model.refresh_client(api_key, session_id=session_id)
+        except Exception:
+            pass
+        return model.refresh_client(api_key)
 
     def get_raw_client(self, api_key: Optional[str] = None) -> Any:
         return self.get_model().get_raw_client(api_key)

@@ -7,7 +7,7 @@ from typing import Optional
 from src.ai import AiRoute, AiTarget
 from src.trans.prompt_sanitizer import get_safety_settings
 from src.glossary.glossary import extract_glossary_sample as _extract_glossary_sample
-from src.trans.trans_ai_utils import SYSTEM_PROMPT_EXTRACTION, FILTER_SYSTEM_PROMPT
+from src.trans.prom import SYSTEM_PROMPT_EXTRACTION, FILTER_SYSTEM_PROMPT
 
 get_japanese_ratio = None  # 참조용
 
@@ -303,8 +303,14 @@ async def _call_chunk_api_once(
     log_callback=None,
     model=None,
     ai_target=None,
+    session_id=None,
+    check=None,
 ):
+    if check and check():
+        return False, None, False
     await rate_limiter.wait()
+    if check and check():
+        return False, None, False
     route, target, model_name = _get_route(model, ai_target)
 
     setting = {
@@ -314,6 +320,7 @@ async def _call_chunk_api_once(
         "temperature": 0.1,
         "top_p": 0.8,
         "safety_settings": get_safety_settings(),
+        "session_id": session_id,
     }
 
     try:
@@ -340,7 +347,7 @@ async def _call_chunk_api_once(
             return False, None, True
 
         if route.is_connection_error(e):
-            route.refresh_client()
+            route.refresh_client(session_id=session_id)
             if log_callback:
                 log_callback(f"[용어집 {chunk_idx}/{total_chunks}] 세션 연결 끊김 -> 재연결 완료")
 
@@ -370,8 +377,10 @@ async def _filter_system_and_terms_async(
     log_callback=None,
     model=None,
     ai_target=None,
+    session_id=None,
+    check=None,
 ):
-    if not terms_to_check:
+    if not terms_to_check or (check and check()):
         return {}
 
     if log_callback:
@@ -382,10 +391,14 @@ async def _filter_system_and_terms_async(
     remove_keywords = set()
 
     for start in range(0, len(items), batch_size):
+        if check and check():
+            break
         batch = items[start:start + batch_size]
         terms_list_str = "\n".join([f"{k}: {v}" for k, v in batch])
 
         await rate_limiter.wait()
+        if check and check():
+            break
         route, target, model_name = _get_route(model, ai_target)
 
         setting = {
@@ -395,6 +408,7 @@ async def _filter_system_and_terms_async(
             "temperature": 0.0,
             "top_p": 0.8,
             "safety_settings": get_safety_settings(),
+            "session_id": session_id,
         }
 
         try:
@@ -445,6 +459,8 @@ async def _extract_glossary_async(
     RPM=5,
     max_retries=2,
     ai_target=None,
+    session_id=None,
+    check=None,
 ):
     if not all_text:
         if log_callback:
@@ -480,7 +496,7 @@ async def _extract_glossary_async(
     glossary_raw_data = {}
 
     for round_num in range(1, max_retries + 2):
-        if not pending_queue:
+        if not pending_queue or (check and check()):
             break
 
         failed_queue = []
@@ -488,6 +504,8 @@ async def _extract_glossary_async(
             log_callback(f"[재시도 {round_num - 1}] 남은 실패 청크 {len(pending_queue)}개 후순위 재시도 시작")
 
         for idx, chunk_text in pending_queue:
+            if check and check():
+                break
             if log_callback:
                 log_callback(f"[용어집 {idx}/{total_chunks}] 추출 요청 중...")
 
@@ -499,6 +517,8 @@ async def _extract_glossary_async(
                 log_callback=log_callback,
                 model=resolved_model,
                 ai_target=target,
+                session_id=session_id,
+                check=check,
             )
 
             if is_censored:
@@ -565,6 +585,8 @@ async def _extract_glossary_async(
         log_callback=log_callback,
         model=resolved_model,
         ai_target=target,
+        session_id=session_id,
+        check=check,
     )
 
     final_glossary = {**safe_glossary, **filtered_terms}
@@ -583,6 +605,8 @@ def extract_glossary(
     model=None,
     RPM=5,
     ai_target=None,
+    session_id=None,
+    check=None,
 ):
     return asyncio.run(
         _extract_glossary_async(
@@ -593,5 +617,7 @@ def extract_glossary(
             model=model,
             RPM=RPM,
             ai_target=ai_target,
+            session_id=session_id,
+            check=check,
         )
     )
