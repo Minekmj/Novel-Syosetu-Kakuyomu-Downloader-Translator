@@ -1,4 +1,8 @@
+import json
+import os
+from datetime import datetime
 from typing import List, Optional
+from src.system.config import DATA_FILE_BACK_MODEL
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
@@ -26,7 +30,8 @@ class RecommendControlPanel(QWidget):
         self.api_timer = QTimer(self)
         self.api_timer.setSingleShot(True)
         self.api_timer.setInterval(700)
-        self.api_timer.timeout.connect(self.fetch_models)
+        self._auto_checked_targets = set()
+        self.api_timer.timeout.connect(lambda: self.fetch_models(manual=False))
 
         self.init_ui()
         self.load_initial_data()
@@ -48,9 +53,6 @@ class RecommendControlPanel(QWidget):
         self.target_combo.setFixedWidth(85)
         for target_id, name in sorted(AiRoute.TARGET_NAMES.items()):
             if target_id == AiTarget.OLLAMA:
-                continue
-            
-            if target_id == AiTarget.PLAYGROUND:
                 continue
             
             self.target_combo.addItem(name, target_id)
@@ -84,7 +86,7 @@ class RecommendControlPanel(QWidget):
         self.refresh_model_btn.setObjectName("subtleBtn")
         self.refresh_model_btn.setFixedSize(60, 34)
         self.refresh_model_btn.setCursor(Qt.PointingHandCursor)
-        self.refresh_model_btn.clicked.connect(self.fetch_models)
+        self.refresh_model_btn.clicked.connect(lambda: self.fetch_models(manual=True))
         model_box.addWidget(self.refresh_model_btn)
         layout.addLayout(model_box)
 
@@ -164,6 +166,29 @@ class RecommendControlPanel(QWidget):
         self.start_btn.clicked.connect(self.on_action_btn_clicked)
         layout.addWidget(self.start_btn)
 
+    @staticmethod
+    def _load_back_models():
+        try:
+            if os.path.exists(DATA_FILE_BACK_MODEL):
+                with open(DATA_FILE_BACK_MODEL, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+        except Exception:
+            pass
+        return {}
+
+    @staticmethod
+    def _save_back_models(data):
+        try:
+            parent = os.path.dirname(DATA_FILE_BACK_MODEL)
+            if parent:
+                os.makedirs(parent, exist_ok=True)
+            with open(DATA_FILE_BACK_MODEL, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
     def get_current_target(self) -> int:
         data = self.target_combo.currentData()
         return int(data) if data is not None else AiRoute.DEFAULT_TARGET
@@ -171,7 +196,15 @@ class RecommendControlPanel(QWidget):
     def on_target_combo_changed(self, index: int):
         target = self.get_current_target()
         target_name = AiRoute.get_target_name(target)
-        self.api_key_edit.setPlaceholderText(f"{target_name} API Key 또는 Endpoint")
+        is_pg = (target == int(AiTarget.PLAYGROUND))
+        if is_pg:
+            self.api_key_edit.setPlaceholderText("Playground 프로필 (기본: default)")
+            self.api_key_edit.setEchoMode(QLineEdit.Normal)
+            self.api_toggle_btn.hide()
+        else:
+            self.api_key_edit.setPlaceholderText(f"{target_name} API Key 또는 Endpoint")
+            self.api_key_edit.setEchoMode(QLineEdit.Normal if self.api_toggle_btn.isChecked() else QLineEdit.Password)
+            self.api_toggle_btn.show()
 
         user_data = load_data()
         single_k, list_k, _ = AiRoute.get_storage_keys(target)
@@ -180,33 +213,46 @@ class RecommendControlPanel(QWidget):
             keys = user_data.get(list_k, [])
             if isinstance(keys, list) and keys:
                 saved_api = str(keys[0]).strip()
+        if is_pg and not saved_api:
+            saved_api = "default"
 
         self.api_key_edit.blockSignals(True)
         self.api_key_edit.setText(saved_api)
         self.api_key_edit.blockSignals(False)
 
-        popular_models = AiRoute.get_popular_models(target)
+        models = list(AiRoute.get_popular_models(target))
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        is_fresh_today = False
+        if target != int(AiTarget.OLLAMA):
+            entry = self._load_back_models().get(target_name)
+            if isinstance(entry, dict) and isinstance(entry.get('models'), list) and entry['models']:
+                models = list(entry['models'])
+                if str(entry.get('date') or '') == today_str:
+                    is_fresh_today = True
+
         self.model_combo.clear()
-        self.model_combo.addItems(popular_models)
+        self.model_combo.addItems(models)
 
         def_model = AiRoute.get_default_model(target)
-        if def_model in popular_models:
+        if def_model in models:
             self.model_combo.setCurrentText(def_model)
-        elif popular_models:
+        elif models:
             self.model_combo.setCurrentIndex(0)
 
         self.refresh_model_btn.setEnabled(True)
-        if saved_api or target == int(AiTarget.OLLAMA):
-            QTimer.singleShot(100, self.fetch_models)
+        if not is_fresh_today and (target, today_str) not in self._auto_checked_targets:
+            if is_pg:
+                if AiRoute(ai_target=target, api=saved_api).check_login(api_key=saved_api, target=target):
+                    self._auto_checked_targets.add((target, today_str))
+                    QTimer.singleShot(100, lambda: self.fetch_models(manual=False))
+            elif saved_api or target == int(AiTarget.OLLAMA):
+                self._auto_checked_targets.add((target, today_str))
+                QTimer.singleShot(100, lambda: self.fetch_models(manual=False))
 
     def load_initial_data(self):
         user_data = load_data()
 
-        saved_target = user_data.get("translate_ai_target", AiRoute.DEFAULT_TARGET)
-        try:
-            curr_target = int(saved_target)
-        except (ValueError, TypeError):
-            curr_target = AiRoute.DEFAULT_TARGET
+        curr_target = int(AiTarget.GEMINI)
 
         t_idx = self.target_combo.findData(curr_target)
         if t_idx >= 0:
@@ -236,7 +282,7 @@ class RecommendControlPanel(QWidget):
 
     def on_api_key_changed(self):
         key = self.api_key_edit.text().strip()
-        if len(key) >= 20 and self.get_current_target() != int(AiTarget.OLLAMA):
+        if len(key) >= 20 and self.get_current_target() not in (int(AiTarget.OLLAMA), int(AiTarget.PLAYGROUND)):
             self.api_timer.start()
 
     def toggle_api_visibility(self, checked: bool):
@@ -264,12 +310,25 @@ class RecommendControlPanel(QWidget):
             item = self.history_list_widget.item(i)
             item.setCheckState(target_state)
 
-    def fetch_models(self):
-        name = AiRoute.get_target_name(self.get_current_target())
+    def fetch_models(self, manual=True):
+        target = self.get_current_target()
+        name = AiRoute.get_target_name(target)
+        today_str = datetime.now().strftime('%Y-%m-%d')
 
         api_key = self.api_key_edit.text().strip()
-        if not api_key and self.get_current_target() != int(AiTarget.OLLAMA):
+        if target == int(AiTarget.PLAYGROUND):
+            api_key = api_key or "default"
+            if not AiRoute(ai_target=target, api=api_key).check_login(api_key=api_key, target=target):
+                if manual:
+                    QMessageBox.warning(self, "알림", "Playground 로그인이 필요합니다.\n[번역 -> API 설정 -> Playground]에서 로그인을 진행하세요.")
+                return
+        elif not api_key and target != int(AiTarget.OLLAMA):
             return
+
+        if not manual and target != int(AiTarget.OLLAMA):
+            entry = self._load_back_models().get(name)
+            if isinstance(entry, dict) and isinstance(entry.get('models'), list) and entry['models'] and str(entry.get('date') or '') == today_str:
+                return
 
         if ModelLoadThread is None:
             return
@@ -281,32 +340,47 @@ class RecommendControlPanel(QWidget):
         self.log_requested.emit(f"{name} 사용 가능 모델 목록을 조회 중입니다...")
 
         self.model_load_thread = ModelLoadThread(
-            api_key, ai_target=self.get_current_target()
+            api_key, ai_target=target
         )
-        self.model_load_thread.finished.connect(self.on_models_fetched)
+        self.model_load_thread.finished.connect(lambda m, e, t=target: self.on_models_fetched(m, e, t))
         self.model_load_thread.start()
 
-    def on_models_fetched(self, models: List[str], err_msg: str):
+    def on_models_fetched(self, models: List[str], err_msg: str, target_idx: Optional[int] = None):
         self.refresh_model_btn.setEnabled(True)
         if err_msg:
             self.log_requested.emit(f"모델 목록 조회 실패: {err_msg}")
             return
 
+        if target_idx is None:
+            target_idx = self.get_current_target()
+
         if models:
-            current = self.model_combo.currentText()
-            all_models = list(models)
-            if not all_models:
-                all_models = AiRoute.get_popular_models(self.get_current_target())
+            if target_idx != int(AiTarget.OLLAMA):
+                popular = set(AiRoute.get_popular_models(target_idx))
+                if set(models) != popular:
+                    back = self._load_back_models()
+                    back[AiRoute.get_target_name(target_idx)] = {
+                        'date': datetime.now().strftime('%Y-%m-%d'),
+                        'models': list(models)
+                    }
+                    self._save_back_models(back)
 
-            self.model_combo.clear()
-            self.model_combo.addItems(all_models)
+            if self.get_current_target() == target_idx:
+                current = self.model_combo.currentText()
+                all_models = list(models)
+                if not all_models:
+                    all_models = AiRoute.get_popular_models(target_idx)
 
-            if current and current in all_models:
-                self.model_combo.setCurrentText(current)
-            elif AiRoute.DEFAULT_MODEL in all_models:
-                self.model_combo.setCurrentText(AiRoute.DEFAULT_MODEL)
-            elif all_models:
-                self.model_combo.setCurrentIndex(0)
+                self.model_combo.clear()
+                self.model_combo.addItems(all_models)
+
+                def_model = AiRoute.get_default_model(target_idx)
+                if current and current in all_models:
+                    self.model_combo.setCurrentText(current)
+                elif def_model in all_models:
+                    self.model_combo.setCurrentText(def_model)
+                elif all_models:
+                    self.model_combo.setCurrentIndex(0)
 
             self.log_requested.emit(f"모델 {len(models)}개를 불러왔습니다.")
 
@@ -334,14 +408,18 @@ class RecommendControlPanel(QWidget):
         target = self.get_current_target()
         target_name = AiRoute.get_target_name(target)
 
-        if not api_key and target != int(AiTarget.OLLAMA):
+        if target == int(AiTarget.PLAYGROUND):
+            api_key = api_key or "default"
+            if not AiRoute(ai_target=target, api=api_key).check_login(api_key=api_key, target=target):
+                QMessageBox.warning(self, "알림", "Playground 로그인이 필요합니다.\n[번역 -> API 설정 -> Playground]에서 로그인을 진행하세요.")
+                return
+        elif not api_key and target != int(AiTarget.OLLAMA):
             QMessageBox.warning(self, "알림", f"{target_name} API 키를 입력하세요.")
             self.api_key_edit.setFocus()
             return
 
         model = self.model_combo.currentText().strip() or AiRoute.get_default_model(target)
-        detected_target = AiRoute.detect_target(model)
-        final_target = detected_target if detected_target != AiRoute.DEFAULT_TARGET else target
+        final_target = target
 
         condition = self.prompt_edit.toPlainText().strip()
         top_k = self.top_k_combo.currentData() or 5

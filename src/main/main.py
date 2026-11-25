@@ -2,6 +2,7 @@ import ctypes
 
 import src.main.home as main_ui
 
+import os
 import sys
 from PySide6.QtWidgets import (
     QApplication
@@ -36,7 +37,13 @@ def main(callback = None):
     window.setWindowIcon(QIcon(resource_path("main.ico")))
     callback()
     window.show()
-    sys.exit(app.exec())
+    code = app.exec()
+    try:
+        from src.ai.models.playground import PlaygroundModel
+        PlaygroundModel.force_stop_all()
+    except Exception:
+        pass
+    os._exit(code)
     
 if __name__ == "__main__":
     main()

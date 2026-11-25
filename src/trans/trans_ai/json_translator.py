@@ -67,7 +67,8 @@ async def _TransAi_From_Json_async(
     br_start=0,
     isno_x=False,
     thinking_budget=None,
-    ai_target=None
+    ai_target=None,
+    session_id=None
 ):
     target = config.AI_TARGET if ai_target is None else ai_target
 
@@ -199,7 +200,8 @@ async def _TransAi_From_Json_async(
         progress_callback=progress_callback,
         log_callback=log_callback,
         raw_txt_info=raw_txt_info,
-        epub_text_builder=build_epub_text
+        epub_text_builder=build_epub_text,
+        session_id=session_id
     )
 
     if final_result == 'ignore' or not saved_json_path:
@@ -222,7 +224,8 @@ def TransAi_From_Json(
     br_start=0,
     isno_x=False,
     thinking_budget=None,
-    ai_target=None
+    ai_target=None,
+    session_id=None
 ):
     try:
         res = asyncio.run(
@@ -240,7 +243,8 @@ def TransAi_From_Json(
                 br_start,
                 isno_x,
                 thinking_budget,
-                ai_target=ai_target
+                ai_target=ai_target,
+                session_id=session_id
             )
         )
         if not res or res in ('ignore', 'error'):

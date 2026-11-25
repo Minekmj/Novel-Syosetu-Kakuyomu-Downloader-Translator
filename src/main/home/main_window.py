@@ -251,4 +251,10 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         thread_pyqt.STOP_CLICK = True
         self.click_watcher.stop()
+        try:
+            from src.ai.models.playground import PlaygroundModel
+            PlaygroundModel.force_stop_all()
+        except Exception:
+            pass
         super().closeEvent(event)
+        QApplication.quit()

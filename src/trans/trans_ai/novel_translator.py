@@ -32,11 +32,14 @@ async def _translate_light_novel_async(
     br_start=0,
     isno_x=False,
     thinking_budget=None,
-    ai_target=None
+    ai_target=None,
+    session_id=None
 ):
     target = config.AI_TARGET if ai_target is None else ai_target
 
-    if config.API == '' and config.AI_TARGET != t.AiTarget.OLLAMA:
+    target_list = target if isinstance(target, (list, tuple)) else [target]
+    needs_api_key = any(int(x) not in (int(t.AiTarget.OLLAMA), int(t.AiTarget.PLAYGROUND)) for x in target_list)
+    if config.API == '' and needs_api_key:
         if log_callback:
             log_callback('에러: API 키가 설정되지 않았습니다.')
         return 'error', ''
@@ -103,7 +106,8 @@ async def _translate_light_novel_async(
         check_i=check_i,
         progress_callback=progress_callback,
         log_callback=log_callback,
-        raw_txt_info=raw_txt_info
+        raw_txt_info=raw_txt_info,
+        session_id=session_id
     )
 
 
@@ -124,7 +128,8 @@ def translate_light_novel(
     br_start=0,
     isno_x=False,
     thinking_budget=None,
-    ai_target=None
+    ai_target=None,
+    session_id=None
 ):
     return asyncio.run(
         _translate_light_novel_async(
@@ -144,7 +149,8 @@ def translate_light_novel(
             br_start,
             isno_x,
             thinking_budget,
-            ai_target=ai_target
+            ai_target=ai_target,
+            session_id=session_id
         )
     )
 
@@ -164,7 +170,8 @@ def TransAi_All(
     br_start=0,
     isno_x=False,
     thinking_budget=None,
-    ai_target=None
+    ai_target=None,
+    session_id=None
 ):
     try:
         raw = detect_raw_text(txt)
@@ -199,7 +206,8 @@ def TransAi_All(
                 br_start=br_start,
                 isno_x=isno_x,
                 thinking_budget=thinking_budget,
-                ai_target=ai_target
+                ai_target=ai_target,
+                session_id=session_id
             )
 
             if trans_out in ('ignore', 'error') or not saved_json_path:
@@ -260,7 +268,8 @@ def TransAi_All(
             br_start=br_start,
             isno_x=isno_x,
             thinking_budget=thinking_budget,
-            ai_target=ai_target
+            ai_target=ai_target,
+            session_id=session_id
         )
 
         if trans_out in ('ignore', 'error') or not saved_json_path:

@@ -1,4 +1,7 @@
 import inspect
+import threading
+import uuid
+from src.ai.models.playground import PlaygroundModel
 from typing import Dict, Any, List
 
 from PySide6.QtCore import Qt
@@ -20,6 +23,7 @@ class NovelRecommendDialog(QDialog):
         self.setWindowFlags(self.windowFlags() | Qt.WindowMaximizeButtonHint)
 
         self.recommend_worker = None
+        self.current_session_id = None
         self.cancel_requested = False
         self.current_condition = ""
         self.conversation_history: List[Dict[str, str]] = []
@@ -107,7 +111,9 @@ class NovelRecommendDialog(QDialog):
             f"추천 세션 #{next_session_num} 가동: [{target_name}] 모델 {model}, 상위 {top_k}작품 선별, 기존 목록 {len(user_data['list'])}개 참조"
         )
 
+        self.current_session_id = f"rec_{uuid.uuid4().hex[:8]}"
         worker_kwargs = {
+            "session_id": self.current_session_id,
             "api_key": api_key,
             "model": model,
             "condition": condition,
@@ -123,6 +129,8 @@ class NovelRecommendDialog(QDialog):
                 worker_kwargs["check"] = self.is_cancel_requested
             if "conversation_history" in params or has_var_kw:
                 worker_kwargs["conversation_history"] = list(self.conversation_history)
+            if "session_id" not in params and not has_var_kw:
+                worker_kwargs.pop("session_id", None)
         except Exception:
             pass
 
@@ -141,6 +149,8 @@ class NovelRecommendDialog(QDialog):
             return
 
         self.cancel_requested = True
+        if self.current_session_id:
+            threading.Thread(target=PlaygroundModel.force_stop_session, args=(self.current_session_id,), daemon=True).start()
         self.workspace_panel.set_status("중단 중...")
         self.workspace_panel.append_info_card("추천 중단을 요청했습니다. 현재 단계를 정리한 뒤 종료합니다...")
 
@@ -226,4 +236,7 @@ class NovelRecommendDialog(QDialog):
         if self.recommend_worker and self.recommend_worker.isRunning():
             self.on_stop_recommendation()
             self.recommend_worker.wait(2000)
+        if self.current_session_id:
+            threading.Thread(target=PlaygroundModel.close_session, args=(self.current_session_id,), daemon=True).start()
+        threading.Thread(target=PlaygroundModel.close_session, args=("shared",), daemon=True).start()
         super().closeEvent(event)

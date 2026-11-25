@@ -5,9 +5,11 @@ from . import config
 
 
 class AsyncRateLimiter:
-    def __init__(self, rpm):
+    def __init__(self, rpm, burst=1):
         self.rpm = max(1, int(rpm))
         self.interval = 60.0 / self.rpm
+        self.burst = max(1, int(burst))
+        self._burst_remaining = self.burst
         self._lock = None
         self._loop = None
         self.next_call = 0.0
@@ -22,6 +24,7 @@ class AsyncRateLimiter:
             self._lock = asyncio.Lock()
             self._loop = loop
             self.next_call = 0.0
+            self._burst_remaining = self.burst
         return self._lock
 
     async def wait(self):
@@ -31,8 +34,14 @@ class AsyncRateLimiter:
             lock = self._get_lock()
             async with lock:
                 now = time.time()
-                scheduled_time = max(now, self.next_call)
-                self.next_call = scheduled_time + self.interval
+                if self._burst_remaining > 0:
+                    self._burst_remaining -= 1
+                    scheduled_time = now
+                    if self._burst_remaining == 0:
+                        self.next_call = now + self.interval
+                else:
+                    scheduled_time = max(now, self.next_call)
+                    self.next_call = scheduled_time + self.interval
 
             sleep_duration = scheduled_time - now
             if sleep_duration > 0:
@@ -43,3 +52,4 @@ class AsyncRateLimiter:
 
     def reset(self):
         self.next_call = 0.0
+        self._burst_remaining = self.burst

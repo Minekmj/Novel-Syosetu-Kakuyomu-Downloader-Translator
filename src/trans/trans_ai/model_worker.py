@@ -1,5 +1,6 @@
 import asyncio
 from src.ai import AiTarget
+from . import config
 from .rate_limiter import AsyncRateLimiter
 
 
@@ -23,7 +24,8 @@ class ModelWorker:
         self.isno_x = bool(isno_x)
         self.thinking_budget = thinking_budget
         self.ai_target = ai_target
-        self.rate_limiter = AsyncRateLimiter(self.rpm)
+        burst = self.max_concurrent if getattr(config, 'ONE_MAX', False) else 1
+        self.rate_limiter = AsyncRateLimiter(self.rpm, burst=burst)
         self._semaphore = None
         self._loop = None
 

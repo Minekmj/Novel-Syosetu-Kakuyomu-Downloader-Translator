@@ -85,7 +85,7 @@ async def translate_chunk_safe_async(
     safety_settings,
     rate_limiter,
     temperature=0.2,
-    max_retries=3,
+    max_retries=None,
     depth=0,
     log_callback=None,
     chunk_idx=0,
@@ -98,10 +98,16 @@ async def translate_chunk_safe_async(
     thinking_budget=None,
     ai_target=AiTarget.GEMINI,
     semaphore=None,
-    concurrency=4
+    concurrency=4,
+    session_id=None
 ):
     if dicts is None:
         dicts = {}
+    if max_retries is None:
+        try:
+            max_retries = max(1, min(20, int(getattr(config, 'MAX_RETRIES', 3))))
+        except (ValueError, TypeError):
+            max_retries = 3
 
     lines = chunk.splitlines(keepends=True)
     if not lines:
@@ -186,7 +192,8 @@ async def translate_chunk_safe_async(
                     "top_p": 0.8,
                     "safety_settings": safety_settings,
                     "thinking_budget": cur_thinking_budget,
-                    "concurrency": concurrency
+                    "concurrency": concurrency,
+                    "session_id": session_id
                 }
 
                 if log_callback and not (check_i and check_i()):
@@ -201,7 +208,7 @@ async def translate_chunk_safe_async(
                     raise ForceStopException()
                 except Exception as api_err:
                     _is_stopped(check, check_i)
-                    if config.ai_route.is_connection_error(api_err):
+                    if int(ai_target) != int(AiTarget.PLAYGROUND) and config.ai_route.is_connection_error(api_err):
                         if log_callback and not (check_i and check_i()):
                             log_callback(f'{prefix_log} 알림: 세션 재연결 중...')
                         config.ai_route.refresh_client(cur_used_key)
@@ -371,12 +378,14 @@ async def translate_chunk_safe_async(
         except (ForceStopException, asyncio.CancelledError):
             raise ForceStopException()
         except Exception as e:
+            if check_i and check_i():
+                raise ForceStopException()
             if _is_stopped(check, check_i):
                 if log_callback and not (check_i and check_i()):
                     log_callback(f'{prefix_log} 중지: 현재 API 요청 종료 후 중지')
                 return None, 0, True
 
-            if config.ai_route.is_connection_error(e):
+            if int(ai_target) != int(AiTarget.PLAYGROUND) and config.ai_route.is_connection_error(e):
                 config.ai_route.refresh_client(cur_used_key)
                 if log_callback and not (check_i and check_i()):
                     log_callback(f'{prefix_log} 세션 재연결 완료 -> 재시도')
@@ -404,7 +413,11 @@ async def translate_chunk_safe_async(
             log_callback(f'[{chunk_idx} - {model_name}] [{depth}] 중지: 분할 작업을 실행하지 않습니다.')
         return None, 0, True
 
-    if len(lines) <= 2 or depth >= 4:
+    try:
+        max_split_depth = max(0, min(8, int(getattr(config, 'MAX_SPLIT_DEPTH', 4))))
+    except (ValueError, TypeError):
+        max_split_depth = 4
+    if len(lines) <= 2 or depth >= max_split_depth:
         if log_callback and not (check_i and check_i()):
             log_callback(f'[{chunk_idx} - {model_name}] [{depth}] 오류: [최대초과] 분할 한계 도달 -> 원문 유지')
         return chunk, len(lines), False
@@ -438,7 +451,9 @@ async def translate_chunk_safe_async(
             isno_x=isno_x,
             thinking_budget=cur_thinking_budget,
             ai_target=ai_target,
-            semaphore=semaphore
+            semaphore=semaphore,
+            concurrency=concurrency,
+            session_id=session_id
         )
     )
 
@@ -461,7 +476,9 @@ async def translate_chunk_safe_async(
             isno_x=isno_x,
             thinking_budget=cur_thinking_budget,
             ai_target=ai_target,
-            semaphore=semaphore
+            semaphore=semaphore,
+            concurrency=concurrency,
+            session_id=session_id
         )
     )
 

@@ -24,6 +24,9 @@ def init_system_config():
     trans_view.trans_ai.CENSOR_SHUFFLE = data.get("CENSOR_SHUFFLE", True)
     trans_view.trans_ai.CENSOR_EXTRACT_MODE = data.get("CENSOR_MODE", "word")
     trans_view.trans_ai.CENSOR_PAPAGO = data.get("CENSOR_PAPAGO", False)
+    trans_view.trans_ai.MAX_RETRIES = int(data.get("MAX_RETRIES", 3))
+    trans_view.trans_ai.MAX_SPLIT_DEPTH = int(data.get("MAX_SPLIT_DEPTH", 4))
+    trans_view.trans_ai.ONE_MAX = bool(data.get("ONE_MAX", False))
 
     if data.get("src"):
         down.downin.base_data.OUTFOLDER = data["src"]
@@ -69,6 +72,9 @@ def handle_settings_dialog(parent_window):
         trans_view.trans_ai.CENSOR_SHUFFLE = new_settings.get("CENSOR_SHUFFLE", True)
         trans_view.trans_ai.CENSOR_EXTRACT_MODE = new_settings.get("CENSOR_MODE", "word")
         trans_view.trans_ai.CENSOR_PAPAGO = new_settings.get("CENSOR_PAPAGO", False)
+        trans_view.trans_ai.MAX_RETRIES = int(new_settings.get("MAX_RETRIES", 3))
+        trans_view.trans_ai.MAX_SPLIT_DEPTH = int(new_settings.get("MAX_SPLIT_DEPTH", 4))
+        trans_view.trans_ai.ONE_MAX = bool(new_settings.get("ONE_MAX", False))
 
         if data.get("theme") and data["theme"] != data_iteam.THEME_NAME:
             data_iteam.THEME_NAME = data["theme"]

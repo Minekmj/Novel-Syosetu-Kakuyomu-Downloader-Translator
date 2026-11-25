@@ -1,5 +1,8 @@
 import re
+import threading
+import time
 import traceback
+import uuid
 from typing import Optional
 from collections.abc import Callable
 from src.ai import AiRoute, AiTarget
@@ -14,7 +17,8 @@ class SuggestionAIClient:
         ai_target: Optional[int] = None,
         ai_route: Optional[AiRoute] = None,
         log_callback: Optional[Callable] = None,
-        check_callback: Optional[Callable[[], bool]] = None
+        check_callback: Optional[Callable[[], bool]] = None,
+        session_id: Optional[str] = None
     ):
         self.model = model or AiRoute.DEFAULT_MODEL
         self.ai_target = int(ai_target) if ai_target is not None else AiRoute.detect_target(self.model)
@@ -22,6 +26,15 @@ class SuggestionAIClient:
         self.log = log_callback or (lambda *args, **kwargs: None)
         self.check = check_callback or (lambda: False)
         self.last_error = ""
+        self.session_id = session_id or f"rec_{uuid.uuid4().hex[:8]}"
+        self._rate_lock = threading.Lock()
+        self._next_request_time = 0.0
+        default_cfg = AiRoute.get_default_config(self.ai_target)
+        try:
+            self._rpm = max(1, int(default_cfg.get("rpm", 10)))
+        except (ValueError, TypeError):
+            self._rpm = 10
+        self._min_interval = 60.0 / self._rpm
 
         self.api_key = (api_key or "").strip()
         if not self.api_key:
@@ -33,12 +46,25 @@ class SuggestionAIClient:
                 keys = data.get(list_k, [])
                 if isinstance(keys, list) and keys:
                     self.api_key = str(keys[0]).strip()
+            if self.ai_target == int(AiTarget.PLAYGROUND) and not self.api_key:
+                self.api_key = "default"
 
         PrintIo(f"[{self.target_name}] 추천 클라이언트 가동 (모델: {self.model})")
         self.route = ai_route if ai_route is not None else AiRoute(ai_target=self.ai_target, api=self.api_key)
 
     def _check_cancelled(self):
         check_cancelled(self.check)
+
+    def _wait_rate_limit(self):
+        if self.ai_target != int(AiTarget.PLAYGROUND):
+            return
+        with self._rate_lock:
+            now = time.time()
+            scheduled = max(now, self._next_request_time)
+            self._next_request_time = scheduled + self._min_interval
+            wait_sec = scheduled - now
+        if wait_sec > 0:
+            sleep_with_cancel(wait_sec, self.check)
 
     def _extract_error_code(self, e: Exception) -> str:
         for attr in ("code", "status_code", "status"):
@@ -66,9 +92,13 @@ class SuggestionAIClient:
             "system_instruction": system_instruction if system_instruction else None,
             "temperature": 1.0,
             "thinking_budget": "HIGH",
+            "concurrency": 1,
+            "session_id": self.session_id,
         }
 
         for attempt in range(1, max_retries + 1):
+            self._check_cancelled()
+            self._wait_rate_limit()
             self._check_cancelled()
             try:
                 response = self.route.send_text_sync(prompt, setting=setting)
@@ -90,12 +120,12 @@ class SuggestionAIClient:
                     k in str(e).upper() for k in ["503", "UNAVAILABLE", "RESOURCE_EXHAUSTED", "429", "OVERLOADED", "TIMEOUT"]
                 )
 
-                if is_conn:
+                if is_conn and self.ai_target != int(AiTarget.PLAYGROUND):
                     self.route.refresh_client(self.api_key)
 
                 if is_transient and attempt < max_retries:
                     delay = self.route.extract_retry_delay(e) if is_rate else 3.0
-                    delay = min(max(delay, 2.0), 30.0)
+                    delay = min(max(delay, 2.0), 45.0)
                     print(f"[{self.target_name} 일시 오류] {int(delay)}초 대기 후 재시도... ({attempt}/{max_retries})")
                     sleep_with_cancel(delay, self.check)
                     continue

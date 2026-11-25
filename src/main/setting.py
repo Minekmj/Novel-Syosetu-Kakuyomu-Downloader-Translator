@@ -133,6 +133,8 @@ class SettingComboBox(BaseSettingItem):
 
         if items:
             self.set_items(items)
+            if default is not None:
+                self.set_value(default)
 
     def set_items(self, items):
         self.combo.clear()
@@ -407,6 +409,30 @@ class TranslationTab(BaseSettingsTab):
         censor_layout.addWidget(censor_desc)
 
         layout.addWidget(censor_group)
+
+        exec_group = QGroupBox("번역 실행 옵션")
+        exec_group.setObjectName('group_box')
+        exec_layout = QVBoxLayout(exec_group)
+        exec_layout.setSpacing(10)
+
+        retry_items = [(f"{i}회", i) for i in range(1, 21)]
+        self.max_retries_item = self.register_item(
+            SettingComboBox("MAX_RETRIES", label_text="시도 횟수:", items=retry_items, default=3, stretch=False, parent=self)
+        )
+        exec_layout.addWidget(self.max_retries_item.widget)
+
+        split_items = [(f"{i}단계", i) for i in range(0, 9)]
+        self.max_split_depth_item = self.register_item(
+            SettingComboBox("MAX_SPLIT_DEPTH", label_text="청크 분할 한계:", items=split_items, default=4, stretch=False, parent=self)
+        )
+        exec_layout.addWidget(self.max_split_depth_item.widget)
+
+        self.one_max_item = self.register_item(
+            SettingCheckBox("ONE_MAX", text="One-Max (첫 요청 시 동시 작업 수만큼 즉시 동시 요청)", default=False, clickable_label=True, parent=self)
+        )
+        exec_layout.addWidget(self.one_max_item.widget)
+
+        layout.addWidget(exec_group)
         layout.addStretch()
 
         scroll.setWidget(widget)

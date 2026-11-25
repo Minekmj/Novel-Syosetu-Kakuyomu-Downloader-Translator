@@ -4,7 +4,8 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List
 from collections.abc import Callable
 
-from src.ai import AiRoute
+from src.ai import AiRoute, AiTarget
+from src.ai.models.playground import PlaygroundModel
 from src.system.data import load_data
 from src.find.site import KakuyomuSearch, NaroSearch, SyosetuSearch
 from .ai_client import SuggestionAIClient
@@ -24,7 +25,8 @@ class NovelRecommender:
         ai_target: Optional[int] = None,
         ai_route: Optional[AiRoute] = None,
         conversation_history: Optional[List[Dict[str, str]]] = None,
-        check: Optional[Callable[[], bool]] = None
+        check: Optional[Callable[[], bool]] = None,
+        session_id: Optional[str] = None
     ):
         chosen_model = model or AiRoute.DEFAULT_MODEL
         chosen_target = ai_target if ai_target is not None else AiRoute.detect_target(chosen_model)
@@ -37,7 +39,8 @@ class NovelRecommender:
             ai_target=chosen_target,
             ai_route=ai_route,
             log_callback=self.log,
-            check_callback=self.check
+            check_callback=self.check,
+            session_id=session_id
         )
         self.executor = SearchExecutor(check_callback=self.check)
         self.user_data = user_data if user_data != {'list': {}} else {"list": {"없음": {"src": "None"}}}
@@ -255,3 +258,9 @@ class NovelRecommender:
             self.log("info", f'AI 호출 에러 "{err_code}"')
             PrintIo(f"[치명적 오류]: {e}\n{traceback.format_exc()}")
             return {"error": str(e), "recommended_works": []}
+        finally:
+            if getattr(self.ai, "ai_target", None) == int(AiTarget.PLAYGROUND):
+                try:
+                    PlaygroundModel.close_session(self.ai.session_id)
+                except Exception:
+                    pass

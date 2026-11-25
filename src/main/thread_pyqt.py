@@ -130,7 +130,8 @@ class TranslateThread(QThread):
         br_start,
         isno_x,
         thinking_budget=None,
-        ai_target=None
+        ai_target=None,
+        session_id=None
     ):
         super().__init__()
         self.file_path = file_path
@@ -146,6 +147,9 @@ class TranslateThread(QThread):
         self.isno_x = isno_x
         self.thinking_budget = thinking_budget
         self.ai_target = ai_target
+        self.session_id = session_id
+        self.check = check
+        self.session_id = session_id
 
     def run(self):
         try:
@@ -183,7 +187,8 @@ class TranslateThread(QThread):
                     br_start=self.br_start,
                     isno_x=self.isno_x,
                     thinking_budget=self.thinking_budget,
-                    ai_target=self.ai_target
+                    ai_target=self.ai_target,
+                    session_id=self.session_id
                 )
 
             else:
@@ -219,7 +224,8 @@ class TranslateThread(QThread):
                     br_start=self.br_start,
                     isno_x=self.isno_x,
                     thinking_budget=self.thinking_budget,
-                    ai_target=self.ai_target
+                    ai_target=self.ai_target,
+                    session_id=self.session_id
                 )
 
             if not self.check():
@@ -298,7 +304,9 @@ class GlossaryExtractThread(QThread):
                 log_callback=log_callback,
                 model=self.model,
                 RPM=self.rpm,
-                ai_target=self.ai_target
+                ai_target=self.ai_target,
+                session_id=self.session_id,
+                check=self.check
             )
 
             if not isinstance(result, dict):
@@ -337,7 +345,9 @@ class RecommendWorker(QThread):
         condition: str,
         top_k: int,
         user_data: dict,
-        ai_target: Optional[int] = None
+        ai_target: Optional[int] = None,
+        session_id: Optional[str] = None,
+        check=None
     ):
         super().__init__()
         self.api_key = api_key

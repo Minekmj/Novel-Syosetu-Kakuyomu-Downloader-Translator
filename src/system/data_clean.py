@@ -71,6 +71,9 @@ def data_clean(data: dict):
     d.get_data("CENSOR_PAPAGO", False)
     d.get_data("miniprom", False)
     d.get_data("auto_check", False)
+    d.get_data("MAX_RETRIES", 3)
+    d.get_data("MAX_SPLIT_DEPTH", 4)
+    d.get_data("ONE_MAX", False)
 
     d.set_src(DATA_FILE_LIST)
     d.get_data("list", {})

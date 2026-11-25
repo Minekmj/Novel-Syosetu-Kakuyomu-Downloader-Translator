@@ -1,4 +1,8 @@
+import json
+import os
+from datetime import datetime
 from PySide6.QtCore import Qt, Signal
+from src.system.config import DATA_FILE_BACK_MODEL
 from PySide6.QtWidgets import QSizePolicy, QWidget, QScrollArea, QFrame, QMessageBox
 from src.ai import AiRoute, AiTarget
 from src.main.thread_pyqt import ModelLoadThread
@@ -27,6 +31,7 @@ class ModelPanel(QWidget):
             state.set("cached_models", cached)
         self._cached_models = cached
         self._load_queue = []
+        self._auto_checked_targets = set()
         self.init_ui()
 
     def set_settings_panel(self, settings_panel):
@@ -95,9 +100,57 @@ class ModelPanel(QWidget):
 
         self.refresh_model_btn.setEnabled(True)
 
+    @staticmethod
+    def _load_back_models():
+        try:
+            if os.path.exists(DATA_FILE_BACK_MODEL):
+                with open(DATA_FILE_BACK_MODEL, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+        except Exception:
+            pass
+        return {}
+
+    @staticmethod
+    def _save_back_models(data):
+        try:
+            parent = os.path.dirname(DATA_FILE_BACK_MODEL)
+            if parent:
+                os.makedirs(parent, exist_ok=True)
+            with open(DATA_FILE_BACK_MODEL, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+    def _get_back_model_entry(self, target_name: str):
+        data = self._load_back_models()
+        entry = data.get(target_name)
+        if isinstance(entry, dict) and isinstance(entry.get('models'), list) and entry['models']:
+            return list(entry['models']), str(entry.get('date') or '')
+        return None, ''
+
+    def _save_back_model_entry(self, target_name: str, models: list):
+        data = self._load_back_models()
+        data[target_name] = {
+            'date': datetime.now().strftime('%Y-%m-%d'),
+            'models': list(models)
+        }
+        self._save_back_models(data)
+
     def _get_available_models_for_target(self, target_idx: int):
         base_models = list(AiRoute.get_popular_models(target_idx))
         target_name = AiRoute.get_target_name(target_idx)
+
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        is_fresh_today = False
+        if target_idx != int(AiTarget.OLLAMA):
+            backed_models, backed_date = self._get_back_model_entry(target_name)
+            if backed_models:
+                if target_name not in self._cached_models:
+                    self._cached_models[target_name] = list(backed_models)
+                if backed_date == today_str:
+                    is_fresh_today = True
 
         if target_idx == int(AiTarget.PLAYGROUND) and target_name not in self._cached_models:
             from src.system.load_save import load_data
@@ -105,7 +158,8 @@ class ModelPanel(QWidget):
             if isinstance(saved_pg, list) and saved_pg:
                 self._cached_models[target_name] = list(saved_pg)
 
-        if target_name not in self._cached_models:
+        need_auto = (target_name not in self._cached_models) or (target_idx != int(AiTarget.OLLAMA) and not is_fresh_today)
+        if need_auto and (target_idx, today_str) not in self._auto_checked_targets:
             if self.settings_panel and target_idx in self.settings_panel.api_edits:
                 api_key = self.settings_panel.api_edits[target_idx].text().strip()
                 if target_idx == int(AiTarget.OLLAMA) and not api_key:
@@ -114,8 +168,10 @@ class ModelPanel(QWidget):
                     self.settings_panel.set_api_key(target_idx, api_key)
                 if target_idx == int(AiTarget.PLAYGROUND):
                     if AiRoute(ai_target=target_idx, api=api_key).check_login(api_key=api_key, target=target_idx):
+                        self._auto_checked_targets.add((target_idx, today_str))
                         self.load_models(api_key, target_idx, manual=False)
                 elif target_idx == int(AiTarget.OLLAMA) or api_key:
+                    self._auto_checked_targets.add((target_idx, today_str))
                     self.load_models(api_key, target_idx, manual=False)
 
         data = self._cached_models.get(target_name, [])
@@ -344,6 +400,7 @@ class ModelPanel(QWidget):
             matches = [self.settings_panel.thinking_combo.itemText(i) for i in range(self.settings_panel.thinking_combo.count())]
             match = next((x for x in matches if value.lower() in x.lower()), value)
             set_combo_value(self.settings_panel.thinking_combo, match)
+            self.settings_panel.set_thinking_visible(target_int != int(AiTarget.OLLAMA))
 
         self.rebuild_model_list()
 
@@ -384,8 +441,13 @@ class ModelPanel(QWidget):
 
         target_name = AiRoute.get_target_name(target_idx)
         if not manual and target_idx != int(AiTarget.OLLAMA):
+            today_str = datetime.now().strftime('%Y-%m-%d')
+            backed_models, backed_date = self._get_back_model_entry(target_name)
+            if backed_models and backed_date == today_str:
+                self._cached_models[target_name] = list(backed_models)
+                return True
             cached = state.get("cached_models") or {}
-            if cached.get(target_name):
+            if cached.get(target_name) and (target_idx, today_str) in self._auto_checked_targets:
                 self._cached_models[target_name] = list(cached[target_name])
                 return True
 
@@ -480,6 +542,8 @@ class ModelPanel(QWidget):
                     state.set("cached_models", cached)
                 cached[target_name] = list(model_names)
                 self._cached_models[target_name] = list(model_names)
+                if target_idx != int(AiTarget.OLLAMA):
+                    self._save_back_model_entry(target_name, model_names)
 
             if self.get_current_target() == target_idx:
                 current = self.model_add_combo.currentText()

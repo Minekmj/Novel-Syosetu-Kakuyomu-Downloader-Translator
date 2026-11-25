@@ -44,6 +44,10 @@ class SettingsPanel(QTabWidget):
     def set_model_panel(self, model_panel):
         self.model_panel = model_panel
 
+    def set_thinking_visible(self, visible: bool):
+        self.thinking_label.setVisible(bool(visible))
+        self.thinking_combo.setVisible(bool(visible))
+
     def _tab(self, title, obj):
         tab = QWidget()
         tab.setObjectName(obj)
@@ -80,7 +84,8 @@ class SettingsPanel(QTabWidget):
 
         self.censor_combo.setToolTip('사용: 검열 시도 후 분할 / 사용 안함: 검열 건너뛰고 바로 분할')
 
-        grid.addWidget(create_label('추론', 'optionLabel'), 3, 0)
+        self.thinking_label = create_label('추론', 'optionLabel')
+        grid.addWidget(self.thinking_label, 3, 0)
         self.thinking_combo = create_combo(['기본값', 'minimal', 'low', 'medium', 'high', 'xhigh'], '기본값', self.notify_params_changed)
         grid.addWidget(self.thinking_combo, 3, 1, 1, 3)
         tl.addLayout(grid)

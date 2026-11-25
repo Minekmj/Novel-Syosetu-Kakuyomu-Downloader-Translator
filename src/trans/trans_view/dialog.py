@@ -1,4 +1,7 @@
+import threading
+import uuid
 from PySide6.QtCore import Qt
+from src.ai.models.playground import PlaygroundModel
 from PySide6.QtWidgets import (
     QDialog, QWidget, QSizePolicy, QProgressBar, QMessageBox
 )
@@ -29,6 +32,7 @@ class TranslateDialog(QDialog):
         self.file_title = ''
         self.current_dictionary = {}
         self.thread = None
+        self.current_run_id = None
 
         self.setWindowTitle('AI 번역')
         self.resize(1000, 750)
@@ -293,7 +297,10 @@ class TranslateDialog(QDialog):
         self.log_panel.add_log('용어집: ' + (f"활성 ({len(dict_data)}개)" if self.settings_panel.glossary_enabled else '비활성'))
         self.log_panel.add_log('=' * 55)
 
+        self.current_run_id = uuid.uuid4().hex[:10]
+
         thread_kwargs = {
+            'session_id': self.current_run_id,
             'dicts': dict_data,
             'check': self.get_out,
             'check_i': self.get_out_i,
@@ -336,6 +343,9 @@ class TranslateDialog(QDialog):
         self.log_panel.add_log('중지: 번역 강제 중지 요청 중...')
         self.start_btn.setEnabled(False)
         self.start_btn.setText('중지 중...')
+        run_id = self.current_run_id
+        if run_id:
+            threading.Thread(target=PlaygroundModel.force_stop_session, args=(run_id,), daemon=True).start()
 
     def get_out(self):
         return self.is_stop
@@ -358,6 +368,10 @@ class TranslateDialog(QDialog):
         self.is_trans = False
         self.is_stop = False
         self.is_stop_i = False
+        run_id = self.current_run_id
+        self.current_run_id = None
+        if run_id:
+            threading.Thread(target=PlaygroundModel.close_session, args=(run_id,), daemon=True).start()
 
         if success:
             self.progress_bar.setValue(100)
@@ -385,14 +399,10 @@ class TranslateDialog(QDialog):
             )
             event.ignore()
         else:
+            run_id = self.current_run_id
+            self.current_run_id = None
+            if run_id:
+                threading.Thread(target=PlaygroundModel.close_session, args=(run_id,), daemon=True).start()
+            threading.Thread(target=PlaygroundModel.close_session, args=('shared',), daemon=True).start()
             self.save_settings()
-            try:
-                import threading
-                from src.ai import AiRoute, AiTarget
-                threading.Thread(
-                    target=lambda: AiRoute(ai_target=AiTarget.PLAYGROUND).get_model(AiTarget.PLAYGROUND).close(),
-                    daemon=True,
-                ).start()
-            except Exception:
-                pass
             super().closeEvent(event)

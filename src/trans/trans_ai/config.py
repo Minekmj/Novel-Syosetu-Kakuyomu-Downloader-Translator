@@ -14,6 +14,9 @@ API_INDEX = 0
 AI_TARGET = AiRoute.DEFAULT_TARGET
 MODEL_NAME = AiRoute.DEFAULT_MODEL
 CUSTOM_AI_PROMPT = ''
+MAX_RETRIES = 3
+MAX_SPLIT_DEPTH = 4
+ONE_MAX = False
 
 USE_ADVANCED_CENSOR = False
 CENSOR_SHUFFLE = True
@@ -209,8 +212,17 @@ def switch_to_next_api_key():
 
 
 def rest():
-    global API, API_KEYS, API_INDEX
+    global API, API_KEYS, API_INDEX, MAX_RETRIES, MAX_SPLIT_DEPTH, ONE_MAX
     data = load_data()
+    try:
+        MAX_RETRIES = max(1, min(20, int(data.get('MAX_RETRIES', 3))))
+    except (ValueError, TypeError):
+        MAX_RETRIES = 3
+    try:
+        MAX_SPLIT_DEPTH = max(0, min(8, int(data.get('MAX_SPLIT_DEPTH', 4))))
+    except (ValueError, TypeError):
+        MAX_SPLIT_DEPTH = 4
+    ONE_MAX = bool(data.get('ONE_MAX', False))
     raw_keys = data.get('api_keys', [])
     if isinstance(raw_keys, list):
         API_KEYS = [str(k).strip() for k in raw_keys if str(k).strip()]
