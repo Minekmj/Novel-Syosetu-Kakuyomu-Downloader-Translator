@@ -33,7 +33,8 @@ async def _translate_light_novel_async(
     isno_x=False,
     thinking_budget=None,
     ai_target=None,
-    session_id=None
+    session_id=None,
+    chunk_callback=None
 ):
     target = config.AI_TARGET if ai_target is None else ai_target
 
@@ -88,7 +89,7 @@ async def _translate_light_novel_async(
         r_title = f'''{book_title}
 {author}
 (raw)
-{'+---+\n'}{book_title} | {author}
++---+\n{book_title} | {author}
 
 '''
         raw_txt_info = (txt_path, r_title)
@@ -107,7 +108,8 @@ async def _translate_light_novel_async(
         progress_callback=progress_callback,
         log_callback=log_callback,
         raw_txt_info=raw_txt_info,
-        session_id=session_id
+        session_id=session_id,
+        chunk_callback=chunk_callback
     )
 
 
@@ -129,7 +131,8 @@ def translate_light_novel(
     isno_x=False,
     thinking_budget=None,
     ai_target=None,
-    session_id=None
+    session_id=None,
+    chunk_callback=None
 ):
     return asyncio.run(
         _translate_light_novel_async(
@@ -150,7 +153,8 @@ def translate_light_novel(
             isno_x,
             thinking_budget,
             ai_target=ai_target,
-            session_id=session_id
+            session_id=session_id,
+            chunk_callback=chunk_callback
         )
     )
 
@@ -171,7 +175,8 @@ def TransAi_All(
     isno_x=False,
     thinking_budget=None,
     ai_target=None,
-    session_id=None
+    session_id=None,
+    chunk_callback=None
 ):
     try:
         raw = detect_raw_text(txt)
@@ -207,14 +212,15 @@ def TransAi_All(
                 isno_x=isno_x,
                 thinking_budget=thinking_budget,
                 ai_target=ai_target,
-                session_id=session_id
+                session_id=session_id,
+                chunk_callback=chunk_callback
             )
 
             if trans_out in ('ignore', 'error') or not saved_json_path:
                 return ''
 
             translated_result = '+---+\n' + trans_out
-            epub_text = f'{book_title}\n{author}\n(raw)\n{"+---+\n"}{translated_result}'
+            epub_text = f'{book_title}\n{author}\n(raw)\n+---+\n{translated_result}'
 
             if _is_stopped(check, check_i):
                 return ''
@@ -269,7 +275,8 @@ def TransAi_All(
             isno_x=isno_x,
             thinking_budget=thinking_budget,
             ai_target=ai_target,
-            session_id=session_id
+            session_id=session_id,
+            chunk_callback=chunk_callback
         )
 
         if trans_out in ('ignore', 'error') or not saved_json_path:

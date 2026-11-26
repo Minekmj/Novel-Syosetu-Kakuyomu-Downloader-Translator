@@ -36,7 +36,8 @@ async def run_translation_batch(
     log_callback=None,
     raw_txt_info=None,
     epub_text_builder=None,
-    session_id=None
+    session_id=None,
+    chunk_callback=None
 ):
     out, safe, ai_dir = prepare_output_paths(title, max_chars)
     safety_settings = get_safety_settings()
@@ -53,6 +54,36 @@ async def run_translation_batch(
     lock = asyncio.Lock()
     total_items = len(items)
     pending_items = sum(1 for it in items if it.pre_translated is None)
+    if chunk_callback:
+        first_w = workers[0] if workers else None
+        chunk_callback({
+            'type': 'init',
+            'session_id': session_id or f'trans_{id(items)}',
+            'kind': '번역',
+            'title': title,
+            'ai_dir': ai_dir,
+            'json_path': json_path,
+            'retry_config': {
+                'model_name': first_w.model_name if first_w else 'gemini-2.5-flash-lite',
+                'rpm': first_w.rpm if first_w else 15,
+                'temperature': first_w.temperature if first_w else 0.1,
+                'br_start': first_w.br_start if first_w else 0,
+                'isno_x': first_w.isno_x if first_w else False,
+                'thinking_budget': first_w.thinking_budget if first_w else '기본값',
+                'ai_target': first_w.ai_target if first_w else 0,
+                'raw': raw,
+                'dicts': dicts or {},
+            },
+            'chunks': [
+                {
+                    'idx': it.idx,
+                    'source': it.orig_text or it.source_text or '',
+                    'status': '완료' if it.pre_translated is not None else '대기중',
+                    'result': it.pre_translated or '',
+                }
+                for it in items
+            ],
+        })
 
     async def process_item(pos, item, worker):
         nonlocal completed_count, ignored
@@ -71,6 +102,8 @@ async def run_translation_batch(
                     skip_msg = f'[{item.idx}/{total_items}] [{worker.model_name}] 이미 저장된 파일 존재 → 건너뜀'
                     if log_callback and not (check_i and check_i()):
                         log_callback(skip_msg)
+                    if chunk_callback:
+                        chunk_callback({'type': 'status', 'session_id': session_id or f'trans_{id(items)}', 'idx': item.idx, 'status': '완료', 'result': saved_text})
                     async with lock:
                         translated_parts[pos] = saved_text
                         original_chunks[pos] = item.orig_text
@@ -93,6 +126,8 @@ async def run_translation_batch(
                     log_callback(f'[{item.idx}/{total_items}] [{worker.model_name}] 기존 번역 청크 통과 (인덱스 {item.idx - 1})')
                 result_text = item.pre_translated
             else:
+                if chunk_callback:
+                    chunk_callback({'type': 'status', 'session_id': session_id or f'trans_{id(items)}', 'idx': item.idx, 'status': '진행중'})
                 if item.log_extra and log_callback and not (check_i and check_i()):
                     log_callback(item.log_extra)
 
@@ -142,6 +177,8 @@ async def run_translation_batch(
                     ignored = True
                 return
 
+            if chunk_callback:
+                chunk_callback({'type': 'status', 'session_id': session_id or f'trans_{id(items)}', 'idx': item.idx, 'status': '완료', 'result': result_text})
             if item.pre_translated is None and log_callback and not (check_i and check_i()):
                 log_callback(f'[{item.idx}/{total_items}] [{worker.model_name}] 청크 번역 완료: 성공')
 
@@ -149,6 +186,8 @@ async def run_translation_batch(
             result_ignore_back = True
             raise ForceStopException()
         except Exception as e:
+            if chunk_callback:
+                chunk_callback({'type': 'status', 'session_id': session_id or f'trans_{id(items)}', 'idx': item.idx, 'status': '오류', 'result': str(e)})
             if log_callback and not (check_i and check_i()):
                 log_callback(f' └ [{item.idx}번 청크] [{worker.model_name}] 번역 최종 실패: {e}')
 

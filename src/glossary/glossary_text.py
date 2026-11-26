@@ -305,6 +305,7 @@ async def _call_chunk_api_once(
     ai_target=None,
     session_id=None,
     check=None,
+    chunk_callback=None,
 ):
     if check and check():
         return False, None, False
@@ -461,6 +462,7 @@ async def _extract_glossary_async(
     ai_target=None,
     session_id=None,
     check=None,
+    chunk_callback=None,
 ):
     if not all_text:
         if log_callback:
@@ -487,6 +489,22 @@ async def _extract_glossary_async(
 
     route, target, resolved_model = _get_route(model, ai_target)
     total_chunks = len(chunks)
+    if chunk_callback:
+        chunk_callback({
+            "type": "init",
+            "session_id": session_id or f"glossary_{id(chunks)}",
+            "kind": "AI 용어집",
+            "title": "AI 용어집 추출",
+            "retry_config": {
+                "model_name": resolved_model,
+                "rpm": RPM,
+                "ai_target": target,
+            },
+            "chunks": [
+                {"idx": i, "source": c, "status": "대기중", "result": ""}
+                for i, c in enumerate(chunks, 1)
+            ] + [{"idx": total_chunks + 1, "label": "최종 검증", "source": "", "status": "대기중", "result": ""}],
+        })
     if log_callback:
         log_callback(f"용어집 분석 시작: 총 {total_chunks}개 청크 (타깃: {target}, 모델: {resolved_model}, RPM: {RPM})")
 
@@ -506,6 +524,8 @@ async def _extract_glossary_async(
         for idx, chunk_text in pending_queue:
             if check and check():
                 break
+            if chunk_callback:
+                chunk_callback({"type": "status", "session_id": session_id or f"glossary_{id(chunks)}", "idx": idx, "status": "진행중"})
             if log_callback:
                 log_callback(f"[용어집 {idx}/{total_chunks}] 추출 요청 중...")
 
@@ -525,6 +545,9 @@ async def _extract_glossary_async(
                 continue
 
             if success and parsed_dict is not None:
+                if chunk_callback:
+                    formatted_terms = "\n".join(f"{src} -> {tgt} ({cat})" for src, (tgt, cat) in parsed_dict.items())
+                    chunk_callback({"type": "status", "session_id": session_id or f"glossary_{id(chunks)}", "idx": idx, "status": "완료", "result": formatted_terms})
                 if log_callback:
                     log_callback(f"[용어집 {idx}/{total_chunks}] {len(parsed_dict)}개 단어 추출 완료")
 
@@ -534,6 +557,8 @@ async def _extract_glossary_async(
                     glossary_raw_data[src]["targets"].append(tgt)
                     glossary_raw_data[src]["categories"].append(cat)
             else:
+                if chunk_callback:
+                    chunk_callback({"type": "status", "session_id": session_id or f"glossary_{id(chunks)}", "idx": idx, "status": "오류", "result": ""})
                 failed_queue.append((idx, chunk_text))
 
         pending_queue = failed_queue
@@ -579,6 +604,9 @@ async def _extract_glossary_async(
             f"자동 탈락 {ignored_general + ignored_invalid}개"
         )
 
+    if chunk_callback:
+        chunk_callback({"type": "status", "session_id": session_id or f"glossary_{id(chunks)}", "idx": total_chunks + 1, "status": "진행중"})
+
     filtered_terms = await _filter_system_and_terms_async(
         terms_to_check=check_glossary,
         rate_limiter=rate_limiter,
@@ -588,6 +616,9 @@ async def _extract_glossary_async(
         session_id=session_id,
         check=check,
     )
+
+    if chunk_callback:
+        chunk_callback({"type": "status", "session_id": session_id or f"glossary_{id(chunks)}", "idx": total_chunks + 1, "status": "완료", "result": ""})
 
     final_glossary = {**safe_glossary, **filtered_terms}
 
@@ -607,6 +638,7 @@ def extract_glossary(
     ai_target=None,
     session_id=None,
     check=None,
+    chunk_callback=None,
 ):
     return asyncio.run(
         _extract_glossary_async(
@@ -619,5 +651,6 @@ def extract_glossary(
             ai_target=ai_target,
             session_id=session_id,
             check=check,
+            chunk_callback=chunk_callback,
         )
     )

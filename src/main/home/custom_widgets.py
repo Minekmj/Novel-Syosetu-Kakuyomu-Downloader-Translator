@@ -1,6 +1,9 @@
-from PySide6.QtCore import QObject, Signal, QPropertyAnimation, QEasingCurve, QTimer
-from PySide6.QtWidgets import QScrollArea, QLabel
+from PySide6.QtCore import QObject, Signal, QTimer
+from PySide6.QtWidgets import QLabel
 from PySide6.QtGui import QFontMetrics, QPainter
+
+from src.system.BasicUi import SmoothScrollArea
+
 
 class ThreadProgressBridge(QObject):
     progress_updated = Signal(str)
@@ -8,39 +11,6 @@ class ThreadProgressBridge(QObject):
     def setText(self, text):
         self.progress_updated.emit(str(text))
 
-class SmoothScrollArea(QScrollArea):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.anim = QPropertyAnimation(self.verticalScrollBar(), b"value")
-        self.anim.setEasingCurve(QEasingCurve.Type.OutCubic)
-        self.anim.setDuration(250)
-        self.target_scroll_value = 0
-
-    def wheelEvent(self, event):
-        num_degrees = event.angleDelta().y()
-        if num_degrees == 0:
-            super().wheelEvent(event)
-            return
-
-        bar = self.verticalScrollBar()
-        step = -int(num_degrees * 0.9)
-
-        if self.anim.state() == QPropertyAnimation.State.Running:
-            start_val = self.anim.currentValue()
-            target_val = self.target_scroll_value + step
-        else:
-            start_val = bar.value()
-            target_val = bar.value() + step
-
-        target_val = max(0, min(bar.maximum(), target_val))
-        self.target_scroll_value = target_val
-
-        self.anim.stop()
-        self.anim.setStartValue(start_val)
-        self.anim.setEndValue(target_val)
-        self.anim.start()
-
-        event.accept()
 
 class MarqueeLabel(QLabel):
     def __init__(self, text="", parent=None):

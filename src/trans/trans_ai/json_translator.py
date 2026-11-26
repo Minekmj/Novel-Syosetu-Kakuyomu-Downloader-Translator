@@ -68,7 +68,8 @@ async def _TransAi_From_Json_async(
     isno_x=False,
     thinking_budget=None,
     ai_target=None,
-    session_id=None
+    session_id=None,
+    chunk_callback=None
 ):
     target = config.AI_TARGET if ai_target is None else ai_target
 
@@ -167,7 +168,7 @@ async def _TransAi_From_Json_async(
         r_title = f'''{restored_book_title}
 {author}
 (raw)
-{'+---+\n'}{restored_book_title} | {author}
++---+\n{restored_book_title} | {author}
 
 '''
         raw_txt_info = (txt_path, r_title)
@@ -177,14 +178,14 @@ async def _TransAi_From_Json_async(
             raw_header = [restored_book_title, author, '(raw)']
             if episode:
                 raw_header.append(episode)
-            return '\n'.join(raw_header) + f'\n{"+---+\n"}{final_result}'
+            return '\n'.join(raw_header) + f'\n+---+\n{final_result}'
         else:
             normal_header = [f'{restored_book_title}_번역']
             if author:
                 normal_header.append(author)
             if episode:
                 normal_header.append(episode)
-            return '\n'.join(normal_header) + f'\n{"+---+\n"}{final_result}'
+            return '\n'.join(normal_header) + f'\n+---+\n{final_result}'
 
     final_result, saved_json_path = await run_translation_batch(
         items=items,
@@ -201,7 +202,8 @@ async def _TransAi_From_Json_async(
         log_callback=log_callback,
         raw_txt_info=raw_txt_info,
         epub_text_builder=build_epub_text,
-        session_id=session_id
+        session_id=session_id,
+        chunk_callback=chunk_callback
     )
 
     if final_result == 'ignore' or not saved_json_path:
@@ -225,7 +227,8 @@ def TransAi_From_Json(
     isno_x=False,
     thinking_budget=None,
     ai_target=None,
-    session_id=None
+    session_id=None,
+    chunk_callback=None
 ):
     try:
         res = asyncio.run(
@@ -244,7 +247,8 @@ def TransAi_From_Json(
                 isno_x,
                 thinking_budget,
                 ai_target=ai_target,
-                session_id=session_id
+                session_id=session_id,
+                chunk_callback=chunk_callback
             )
         )
         if not res or res in ('ignore', 'error'):

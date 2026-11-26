@@ -200,19 +200,39 @@ class TranslateDialog(QDialog):
             ai_target = m.get('ai_target', trans_ai.AI_TARGET)
 
         try:
+            old_dlg = getattr(self, 'dict_dialog', None)
+            if old_dlg is not None:
+                try:
+                    if old_dlg.isVisible():
+                        old_dlg.raise_()
+                        old_dlg.activateWindow()
+                        return
+                except RuntimeError:
+                    pass
+
             dialog = DictionaryDialog(self, self.file_title, self.current_dictionary, model_name, rpm, ai_target=ai_target)
-            if dialog.exec() != QDialog.DialogCode.Accepted:
-                return
+            dialog.setModal(False)
+            dialog.setWindowModality(Qt.WindowModality.NonModal)
+            dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+            self.dict_dialog = dialog
 
-            self.current_dictionary = dict(dialog.dictionary)
-            data = load_data()
-            if not isinstance(data.get('dictionary'), dict):
-                data['dictionary'] = {}
-            data['dictionary'][self.file_title] = self.current_dictionary
-            save_data(data)
+            def _on_accepted(dlg=dialog):
+                self.current_dictionary = dict(dlg.dictionary)
+                data = load_data()
+                if not isinstance(data.get('dictionary'), dict):
+                    data['dictionary'] = {}
+                data['dictionary'][self.file_title] = self.current_dictionary
+                save_data(data)
+                self.settings_panel.dictionary_status.setText(f"{self.file_title} ({len(self.current_dictionary)}개)")
+                self.log_panel.add_log(f"용어집 저장 완료: {self.file_title} ({len(self.current_dictionary)}개)")
 
-            self.settings_panel.dictionary_status.setText(f"{self.file_title} ({len(self.current_dictionary)}개)")
-            self.log_panel.add_log(f"용어집 저장 완료: {self.file_title} ({len(self.current_dictionary)}개)")
+            def _on_destroyed():
+                if getattr(self, 'dict_dialog', None) is dialog:
+                    self.dict_dialog = None
+
+            dialog.accepted.connect(_on_accepted)
+            dialog.destroyed.connect(_on_destroyed)
+            dialog.show()
         except NameError:
             pass
 
@@ -322,6 +342,7 @@ class TranslateDialog(QDialog):
             )
             self.thread.progress_changed.connect(self.update_progress)
             self.thread.log_changed.connect(self.log_panel.add_log)
+            self.thread.chunk_changed.connect(self.log_panel.handle_chunk_event)
             self.thread.finished_signal.connect(self.on_finished)
             self.thread.start()
         except NameError:

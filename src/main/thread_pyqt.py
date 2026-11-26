@@ -114,6 +114,7 @@ class FetchNewNumberWorker(QThread):
 class TranslateThread(QThread):
     progress_changed = Signal(int, int, str)
     log_changed = Signal(str)
+    chunk_changed = Signal(dict)
     finished_signal = Signal(bool, str, str)
 
     def __init__(
@@ -186,7 +187,8 @@ class TranslateThread(QThread):
                     isno_x=self.isno_x,
                     thinking_budget=self.thinking_budget,
                     ai_target=self.ai_target,
-                    session_id=self.session_id
+                    session_id=self.session_id,
+                    chunk_callback=self.chunk_changed.emit
                 )
 
             else:
@@ -223,23 +225,40 @@ class TranslateThread(QThread):
                     isno_x=self.isno_x,
                     thinking_budget=self.thinking_budget,
                     ai_target=self.ai_target,
-                    session_id=self.session_id
+                    session_id=self.session_id,
+                    chunk_callback=self.chunk_changed.emit
                 )
 
             if not self.check():
+                F = json != "" and str(state.get("minedown_setting_auto_check", False)).lower() in ("true", "1")
+                if F:
+                    self.log_changed.emit("일본어 잔존 자동 검사 및 수정 시작...")
+                    result = inspect_json_japanese(json, ratio_threshold=0.0, char_count_threshold=1)
+                    is_change = JapaneseCheckCode(result, self.log_changed.emit)
+                    if is_change:
+                        try:
+                            import json as _json
+                            from src.trans.trans_ai.change_translator import _find_backup_dir
+                            bdir = _find_backup_dir(json, self.max_chars)
+                            if bdir and os.path.isdir(bdir) and os.path.isfile(json):
+                                with open(json, "r", encoding="utf-8") as jf:
+                                    jdata = _json.load(jf)
+                                for k, v in jdata.items():
+                                    if str(k).isdigit() and isinstance(v, str):
+                                        cpath = os.path.join(bdir, f"{int(k) + 1}.txt")
+                                        with open(cpath, "w", encoding="utf-8") as cf:
+                                            cf.write(v)
+                        except Exception as sync_err:
+                            self.log_changed.emit(f"백업 폴더 동기화 경고: {sync_err}")
+                        trans_ai.Change_file(json, self.max_chars, self.check, self.check_i)
+                        self.log_changed.emit("일본어 자동 수정 후 EPUB 재생성 완료")
+
                 output_dir = os.path.join(DOWN.downin.base_data.OUTFOLDER, "epub")
                 self.log_changed.emit("=" * 60)
                 self.log_changed.emit("번역 완료")
                 self.log_changed.emit(f"출력 폴더: {output_dir}")
                 self.log_changed.emit("=" * 60)
                 self.finished_signal.emit(True, "번역이 완료되었습니다.", output_dir)
-                
-                F = json != "" and state.get("minedown_setting_auto_check", False) in ("True", "true", "1")
-                if F:
-                    result = inspect_json_japanese(json, ratio_threshold=0.0, char_count_threshold=1)
-                    is_change = JapaneseCheckCode(result, self.log_changed.emit)
-                    if is_change:
-                        trans_ai.Change_file(self.file_path, self.max_chars, self.check, self.check_i)
                     
             else:
                 self.log_changed.emit("=" * 60)
@@ -275,6 +294,7 @@ class ModelLoadThread(QThread):
 
 class GlossaryExtractThread(QThread):
     log_signal = Signal(str)
+    chunk_signal = Signal(dict)
     finished_signal = Signal(dict, str)
 
     def __init__(self, all_text, paserent, chunk, model, rpm, parent=None, ai_target=None, session_id=None, check=None):
@@ -306,7 +326,8 @@ class GlossaryExtractThread(QThread):
                 RPM=self.rpm,
                 ai_target=self.ai_target,
                 session_id=self.session_id,
-                check=self.check
+                check=self.check,
+                chunk_callback=self.chunk_signal.emit
             )
 
             if not isinstance(result, dict):

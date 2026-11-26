@@ -1,57 +1,43 @@
 import asyncio
 import atexit
-import inspect
-import os
-import re
 import shutil
-import signal
-import subprocess
 import threading
-import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
-from src.ai.registry import register_ai
-from src.ai.targets import AiTarget
-from .base import BaseAiModel, AiResponse
-from src.system.config import DATA_FOLDER
-
-from playground_on_python import PlayGround
+from playground_on_python import PlayGround, PlayGroundConfig, PlayGroundOptions
 try:
     from playground_on_python import PlayGroundPool
 except ImportError:
     PlayGroundPool = None
 
-
-def _strip_playground_prefix(model_name: str) -> str:
-    name = (model_name or "").strip()
-    for prefix in ("playground/", "playground:", "playground-", "pg/", "pg:"):
-        if name.lower().startswith(prefix):
-            return name[len(prefix):].strip()
-    return name
-
-
-def build_playground_thinking(thinking_val: Any) -> Optional[str]:
-    if thinking_val is None:
-        return None
-    val = str(thinking_val).strip().upper()
-    if val in ("기본값", "NONE", "", "DEFAULT"):
-        return None
-    level_map = {"MINIMAL": "Minimal", "LOW": "Low", "MEDIUM": "Medium", "HIGH": "High", "XHIGH": "XHigh"}
-    for candidate in ("XHIGH", "MINIMAL", "LOW", "MEDIUM", "HIGH"):
-        if candidate in val:
-            return level_map[candidate]
-    digits = re.findall(r"-?\d+", val)
-    if digits:
-        num = int(digits[0])
-        if num <= 0:
-            return "Minimal"
-        if num <= 1024:
-            return "Low"
-        if num <= 2048:
-            return "Medium"
-        return "High"
-    return None
+from src.ai.registry import register_ai
+from src.ai.targets import AiTarget
+from ..base import AiResponse, BaseAiModel
+from .options import (
+    build_config,
+    build_send_kwargs,
+    resolve_model_kind,
+    resolve_verbose,
+    supports_param,
+)
+from .process_guard import (
+    close_obj,
+    collect_pids_from_obj,
+    is_pid_alive,
+    kill_pid,
+    kill_processes_by_markers,
+)
+from .storage import (
+    cleanup_legacy_profiles,
+    cleanup_runtime_profiles,
+    cleanup_stale_temp_profiles,
+    clone_profile_json,
+    ensure_profile_exists,
+    get_key_path,
+    get_save_dir,
+    next_runtime_profile,
+)
 
 
 @register_ai(
@@ -60,7 +46,7 @@ def build_playground_thinking(thinking_val: Any) -> Optional[str]:
     default_model="gemini-4-hydrogen",
     popular_models=[
         "gemini-4-hydrogen",
-        "gemini-3.5-flash-lite"
+        "gemini-3.5-flash-lite",
     ],
     patterns=["playground/", "playground:", "playground-", "pg/", "pg:"],
     matcher=lambda m: (
@@ -85,7 +71,6 @@ class PlaygroundModel(BaseAiModel):
     _scope_pids: Dict[str, Set[int]] = {}
     _scope_profiles: Dict[str, Set[str]] = {}
     _stopped_sessions: Set[str] = set()
-    _runtime_seq: int = 0
     _atexit_registered = False
     _stale_cleaned = False
 
@@ -97,323 +82,15 @@ class PlaygroundModel(BaseAiModel):
                 PlaygroundModel._atexit_registered = True
             if not PlaygroundModel._stale_cleaned:
                 PlaygroundModel._stale_cleaned = True
-                threading.Thread(target=PlaygroundModel._cleanup_stale_temp_profiles, daemon=True).start()
-
-    @staticmethod
-    def _supports_param(fn: Any, param_name: str) -> bool:
-        try:
-            sig = inspect.signature(fn)
-            return param_name in sig.parameters
-        except Exception:
-            return False
+                cleanup_legacy_profiles()
+                threading.Thread(target=cleanup_stale_temp_profiles, daemon=True).start()
 
     @classmethod
     def _get_save_dir_cls(cls) -> Path:
-        save_dir = (Path(str(DATA_FOLDER)) / "playground").resolve()
-        save_dir.mkdir(parents=True, exist_ok=True)
-        return save_dir
+        return get_save_dir()
 
-    @staticmethod
-    def _is_pid_alive(pid: int) -> bool:
-        if pid <= 0:
-            return False
-        if os.name == "nt":
-            try:
-                import ctypes
-                PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-                STILL_ACTIVE = 259
-                handle = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, int(pid))
-                if not handle:
-                    return False
-                try:
-                    exit_code = ctypes.c_ulong()
-                    if ctypes.windll.kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
-                        return exit_code.value == STILL_ACTIVE
-                    return False
-                finally:
-                    ctypes.windll.kernel32.CloseHandle(handle)
-            except Exception:
-                return False
-        try:
-            os.kill(pid, 0)
-            return True
-        except Exception:
-            return False
-
-    @classmethod
-    def _cleanup_stale_temp_profiles(cls) -> None:
-        try:
-            save_dir = cls._get_save_dir_cls()
-            cur_pid = os.getpid()
-            pattern = re.compile(r"^.+_r(\d+)_\d+(?:_worker_\d+)?$")
-            for item in list(save_dir.iterdir()):
-                name = item.stem if item.is_file() else item.name
-                m = pattern.match(name)
-                if not m:
-                    continue
-                owner_pid = int(m.group(1))
-                if owner_pid != cur_pid and not cls._is_pid_alive(owner_pid):
-                    if item.is_dir():
-                        shutil.rmtree(item, ignore_errors=True)
-                    else:
-                        try:
-                            item.unlink()
-                        except Exception:
-                            pass
-        except Exception:
-            pass
-
-    @classmethod
-    def _next_runtime_profile(cls, profile_key: str) -> str:
-        with cls._pool_lock:
-            cls._runtime_seq += 1
-            seq = cls._runtime_seq
-        return f"{profile_key}_r{os.getpid()}_{seq}"
-
-    @staticmethod
-    def _clean_lock_files(profile_dir: Path) -> None:
-        for lock_name in ("SingletonLock", "SingletonCookie", "SingletonSocket", "Lockfile"):
-            lock_file = profile_dir / lock_name
-            if lock_file.exists():
-                try:
-                    lock_file.unlink()
-                except Exception:
-                    pass
-
-    @classmethod
-    def _clone_profile_storage(cls, save_dir: Path, source_profile: str, target_profile: str) -> None:
-        if not source_profile or not target_profile or source_profile == target_profile:
-            return
-        src_dir = save_dir / source_profile
-        dst_dir = save_dir / target_profile
-        ignore_fn = shutil.ignore_patterns(
-            "Singleton*",
-            "Lockfile",
-            "Crashpad",
-            "Cache",
-            "Code Cache",
-            "GPUCache",
-            "GrShaderCache",
-            "ShaderCache",
-            "*.lock",
-            "*.tmp",
-        )
-        if src_dir.is_dir():
-            try:
-                shutil.copytree(src_dir, dst_dir, dirs_exist_ok=True, ignore=ignore_fn)
-            except Exception:
-                pass
-        dst_dir.mkdir(parents=True, exist_ok=True)
-        cls._clean_lock_files(dst_dir)
-
-        for enc_file in list(save_dir.glob("*.enc")):
-            stem = enc_file.stem
-            if stem == source_profile or stem.startswith(f"{source_profile}_"):
-                suffix = stem[len(source_profile):]
-                target_enc = save_dir / f"{target_profile}{suffix}.enc"
-                try:
-                    shutil.copy2(enc_file, target_enc)
-                except Exception:
-                    pass
-
-        if dst_dir.is_dir():
-            for enc_file in list(dst_dir.glob("*.enc")):
-                stem = enc_file.stem
-                if stem == source_profile or stem.startswith(f"{source_profile}_"):
-                    suffix = stem[len(source_profile):]
-                    target_enc = dst_dir / f"{target_profile}{suffix}.enc"
-                    try:
-                        shutil.copy2(enc_file, target_enc)
-                    except Exception:
-                        pass
-
-    @classmethod
-    def _cleanup_runtime_profiles(cls, save_dir: Path, runtime_profiles: Set[str]) -> None:
-        for rp in list(runtime_profiles):
-            if not rp:
-                continue
-            for target_dir in [save_dir / rp, *save_dir.glob(f"{rp}_worker_*")]:
-                if target_dir.exists():
-                    shutil.rmtree(target_dir, ignore_errors=True)
-            for enc_file in list(save_dir.glob(f"{rp}*.enc")):
-                try:
-                    enc_file.unlink()
-                except Exception:
-                    pass
-
-    @classmethod
-    def _collect_pids_from_obj(cls, obj: Any, visited: Optional[Set[int]] = None) -> Set[int]:
-        pids: Set[int] = set()
-        if obj is None:
-            return pids
-        if visited is None:
-            visited = set()
-        obj_id = id(obj)
-        if obj_id in visited:
-            return pids
-        visited.add(obj_id)
-
-        for attr in ("pid", "browser_pid", "driver_pid", "chrome_pid"):
-            val = getattr(obj, attr, None)
-            if isinstance(val, int) and val > 0:
-                pids.add(val)
-
-        for proc_attr in ("process", "_process"):
-            proc = getattr(obj, proc_attr, None)
-            if proc is not None:
-                p_pid = getattr(proc, "pid", None)
-                if isinstance(p_pid, int) and p_pid > 0:
-                    pids.add(p_pid)
-
-        driver = getattr(obj, "driver", None)
-        if driver is not None:
-            b_pid = getattr(driver, "browser_pid", None)
-            if isinstance(b_pid, int) and b_pid > 0:
-                pids.add(b_pid)
-            service = getattr(driver, "service", None)
-            if service is not None:
-                s_proc = getattr(service, "process", None)
-                if s_proc is not None:
-                    s_pid = getattr(s_proc, "pid", None)
-                    if isinstance(s_pid, int) and s_pid > 0:
-                        pids.add(s_pid)
-
-        if isinstance(obj, (list, tuple, set)):
-            for item in list(obj):
-                pids.update(cls._collect_pids_from_obj(item, visited))
-            return pids
-
-        if isinstance(obj, dict):
-            for item in list(obj.values()):
-                pids.update(cls._collect_pids_from_obj(item, visited))
-            return pids
-
-        for col_attr in ("workers", "_workers", "clients", "_clients", "instances", "_instances", "pool", "_pool", "items", "_items"):
-            col = getattr(obj, col_attr, None)
-            if col is not None:
-                pids.update(cls._collect_pids_from_obj(col, visited))
-
-        for q_attr in ("_queue", "queue"):
-            q_obj = getattr(obj, q_attr, None)
-            if q_obj is not None and hasattr(q_obj, "queue"):
-                try:
-                    pids.update(cls._collect_pids_from_obj(list(q_obj.queue), visited))
-                except Exception:
-                    pass
-
-        return pids
-
-    @staticmethod
-    def _kill_pid(pid: int) -> None:
-        if not pid or pid <= 0:
-            return
-        try:
-            if os.name == "nt":
-                subprocess.run(
-                    ["taskkill", "/F", "/T", "/PID", str(pid)],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000),
-                    timeout=5,
-                )
-            else:
-                os.kill(pid, signal.SIGKILL)
-        except Exception:
-            pass
-
-    @classmethod
-    def _kill_processes_by_markers(cls, markers: Set[str]) -> None:
-        valid_markers = [m for m in markers if m and len(m) >= 4]
-        if not valid_markers:
-            return
-        try:
-            import psutil
-            for proc in psutil.process_iter(["pid", "name", "cmdline"]):
-                try:
-                    name = (proc.info.get("name") or "").lower()
-                    if "chrome" not in name:
-                        continue
-                    cmdline = " ".join(proc.info.get("cmdline") or [])
-                    if any(m in cmdline for m in valid_markers):
-                        cls._kill_pid(int(proc.info["pid"]))
-                except Exception:
-                    pass
-            return
-        except ImportError:
-            pass
-
-        if os.name == "nt":
-            try:
-                escaped = [m.replace("'", "''") for m in valid_markers]
-                cond = " -or ".join(f"$_.CommandLine -like '*{m}*'" for m in escaped)
-                ps_cmd = (
-                    f"Get-CimInstance Win32_Process | Where-Object {{ "
-                    f"($_.Name -like '*chrome*') -and ({cond}) }} | "
-                    f"ForEach-Object {{ $_.ProcessId }}"
-                )
-                res = subprocess.run(
-                    ["powershell", "-NoProfile", "-Command", ps_cmd],
-                    capture_output=True,
-                    text=True,
-                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000),
-                    timeout=5,
-                )
-                for line in (res.stdout or "").splitlines():
-                    line = line.strip()
-                    if line.isdigit():
-                        cls._kill_pid(int(line))
-            except Exception:
-                pass
-
-    @classmethod
-    def _close_obj(
-        cls,
-        obj: Any,
-        force: bool = False,
-        extra_pids: Optional[Set[int]] = None,
-        markers: Optional[Set[str]] = None,
-    ) -> None:
-        pids: Set[int] = set(extra_pids or ())
-        if obj is not None:
-            pids.update(cls._collect_pids_from_obj(obj))
-
-        def _graceful():
-            if obj is None:
-                return
-            try:
-                if hasattr(obj, "close"):
-                    obj.close()
-                elif hasattr(obj, "quit"):
-                    obj.quit()
-            except Exception:
-                pass
-            try:
-                if hasattr(obj, "driver") and obj.driver:
-                    obj.driver.quit()
-            except Exception:
-                pass
-
-        if force:
-            for pid in pids:
-                cls._kill_pid(pid)
-            if markers:
-                cls._kill_processes_by_markers(markers)
-            if obj is not None:
-                t = threading.Thread(target=_graceful, daemon=True)
-                t.start()
-                t.join(timeout=0.3)
-            return
-
-        if obj is not None:
-            t = threading.Thread(target=_graceful, daemon=True)
-            t.start()
-            t.join(timeout=2.5)
-
-        for pid in pids:
-            if cls._is_pid_alive(pid):
-                cls._kill_pid(pid)
-        if markers:
-            cls._kill_processes_by_markers(markers)
+    def _get_save_dir(self) -> Path:
+        return get_save_dir()
 
     @classmethod
     def _close_all_shared(cls, force: bool = False) -> None:
@@ -432,21 +109,21 @@ class PlaygroundModel(BaseAiModel):
             cls._scope_profiles.clear()
 
         for obj in clients + pools:
-            all_pids.update(cls._collect_pids_from_obj(obj))
-            cls._close_obj(obj, force=force)
+            all_pids.update(collect_pids_from_obj(obj))
+            close_obj(obj, force=force)
 
         if force:
             for pid in all_pids:
-                cls._kill_pid(pid)
-            cls._kill_processes_by_markers(all_profiles)
+                kill_pid(pid)
+            kill_processes_by_markers(all_profiles)
         else:
             for pid in all_pids:
-                if cls._is_pid_alive(pid):
-                    cls._kill_pid(pid)
-            cls._kill_processes_by_markers(all_profiles)
+                if is_pid_alive(pid):
+                    kill_pid(pid)
+            kill_processes_by_markers(all_profiles)
 
         try:
-            cls._cleanup_runtime_profiles(cls._get_save_dir_cls(), all_profiles)
+            cleanup_runtime_profiles(get_save_dir(), all_profiles)
         except Exception:
             pass
 
@@ -482,13 +159,13 @@ class PlaygroundModel(BaseAiModel):
                 profiles.update(cls._scope_profiles.pop(k, set()))
 
         for obj in objs:
-            pids.update(cls._collect_pids_from_obj(obj))
-            cls._close_obj(obj, force=True)
+            pids.update(collect_pids_from_obj(obj))
+            close_obj(obj, force=True)
         for pid in pids:
-            cls._kill_pid(pid)
-        cls._kill_processes_by_markers(profiles)
+            kill_pid(pid)
+        kill_processes_by_markers(profiles)
         try:
-            cls._cleanup_runtime_profiles(cls._get_save_dir_cls(), profiles)
+            cleanup_runtime_profiles(get_save_dir(), profiles)
         except Exception:
             pass
 
@@ -519,14 +196,14 @@ class PlaygroundModel(BaseAiModel):
                 profiles.update(cls._scope_profiles.pop(k, set()))
 
         for obj in objs:
-            pids.update(cls._collect_pids_from_obj(obj))
-            cls._close_obj(obj, force=False)
+            pids.update(collect_pids_from_obj(obj))
+            close_obj(obj, force=False)
         for pid in pids:
-            if cls._is_pid_alive(pid):
-                cls._kill_pid(pid)
-        cls._kill_processes_by_markers(profiles)
+            if is_pid_alive(pid):
+                kill_pid(pid)
+        kill_processes_by_markers(profiles)
         try:
-            cls._cleanup_runtime_profiles(cls._get_save_dir_cls(), profiles)
+            cleanup_runtime_profiles(get_save_dir(), profiles)
         except Exception:
             pass
 
@@ -550,9 +227,6 @@ class PlaygroundModel(BaseAiModel):
         sid = (str(session_id).strip() if session_id else "") or "shared"
         return f"{profile_key}::{sid}"
 
-    def _get_save_dir(self) -> Path:
-        return self._get_save_dir_cls()
-
     def _get_profile_lock(self, scope_key: str) -> threading.RLock:
         with PlaygroundModel._pool_lock:
             if scope_key not in PlaygroundModel._locks:
@@ -573,7 +247,8 @@ class PlaygroundModel(BaseAiModel):
                 "expired",
                 "not logged in",
                 "unauthorized",
-                "setting(first=true",
+                "loginmode",
+                "setting(",
             )
         )
 
@@ -589,10 +264,10 @@ class PlaygroundModel(BaseAiModel):
             pids = PlaygroundModel._scope_pids.pop(scope_key, set())
             profiles = PlaygroundModel._scope_profiles.pop(scope_key, set())
 
-        self._close_obj(dead_pg, force=force, extra_pids=pids, markers=profiles)
+        close_obj(dead_pg, force=force, extra_pids=pids, markers=profiles)
         if dead_pool is not None:
-            self._close_obj(dead_pool.get("pool"), force=force, extra_pids=pids, markers=profiles)
-        self._cleanup_runtime_profiles(self._get_save_dir(), profiles)
+            close_obj(dead_pool.get("pool"), force=force, extra_pids=pids, markers=profiles)
+        cleanup_runtime_profiles(get_save_dir(), profiles)
 
     def _drop_client(self, profile_key: str, session_id: Optional[str] = None) -> None:
         if session_id is not None:
@@ -613,7 +288,34 @@ class PlaygroundModel(BaseAiModel):
                 if str(session_id).strip() in PlaygroundModel._stopped_sessions:
                     raise RuntimeError("Playground 작업이 강제 중지되었습니다.")
 
-    def get_client(self, api_key: Optional[str] = None, session_id: Optional[str] = None, verbose: bool = False) -> Any:
+    def _build_pg_init_kwargs(
+        self,
+        profile_name: str,
+        save_dir: Path,
+        verbose: Any = False,
+        default_config: Optional[PlayGroundConfig] = None,
+    ) -> Dict[str, Any]:
+        kwargs: Dict[str, Any] = {
+            "profile_name": profile_name,
+            "base_dir": save_dir,
+            "encrypt": True,
+            "verbose": resolve_verbose(verbose),
+        }
+        if supports_param(PlayGround.__init__, "key_path"):
+            kwargs["key_path"] = get_key_path()
+        if supports_param(PlayGround.__init__, "wipe_runtime_profile"):
+            kwargs["wipe_runtime_profile"] = True
+        if default_config is not None and supports_param(PlayGround.__init__, "default_config"):
+            kwargs["default_config"] = default_config
+        return kwargs
+
+    def get_client(
+        self,
+        api_key: Optional[str] = None,
+        session_id: Optional[str] = None,
+        verbose: Any = False,
+        default_config: Optional[PlayGroundConfig] = None,
+    ) -> Any:
         self._check_session_stopped(session_id)
         profile_key = self._get_profile_key(api_key)
         scope_key = self._get_scope_key(profile_key, session_id)
@@ -651,43 +353,40 @@ class PlaygroundModel(BaseAiModel):
                     profiles = set()
                 dead_pool = PlaygroundModel._pg_pools.pop(scope_key, None)
             if dead_pg is not None:
-                self._close_obj(dead_pg, extra_pids=pids, markers=profiles)
-                self._cleanup_runtime_profiles(self._get_save_dir(), profiles)
+                close_obj(dead_pg, extra_pids=pids, markers=profiles)
+                cleanup_runtime_profiles(get_save_dir(), profiles)
             if dead_pool is not None:
-                self._close_obj(dead_pool.get("pool"))
+                close_obj(dead_pool.get("pool"))
 
-            save_dir = self._get_save_dir()
-            runtime_profile = self._next_runtime_profile(profile_key)
-            self._clone_profile_storage(save_dir, profile_key, runtime_profile)
+            save_dir = get_save_dir()
+            ensure_profile_exists(save_dir, profile_key)
+
+            runtime_profile = next_runtime_profile(profile_key)
+            clone_profile_json(save_dir, profile_key, runtime_profile)
 
             with PlaygroundModel._pool_lock:
                 PlaygroundModel._scope_profiles.setdefault(scope_key, set()).add(runtime_profile)
 
-            pg_kwargs: Dict[str, Any] = {
-                "profile_name": runtime_profile,
-                "base_dir": save_dir,
-                "encrypt": False,
-                "verbose": verbose,
-            }
-            if self._supports_param(PlayGround.__init__, "clone_from"):
-                pg_kwargs["clone_from"] = profile_key
-
+            pg_kwargs = self._build_pg_init_kwargs(
+                runtime_profile,
+                save_dir,
+                verbose=verbose,
+                default_config=default_config,
+            )
             pg = PlayGround(**pg_kwargs)
-            pg.logger.level = 2
 
             connect_kwargs: Dict[str, Any] = {
                 "backup": True,
                 "headless": True,
-                "auto_login": False,
             }
-            if self._supports_param(pg.connect, "clone_from"):
-                connect_kwargs["clone_from"] = profile_key
+            if supports_param(pg.connect, "auto_login"):
+                connect_kwargs["auto_login"] = False
 
             try:
                 pg.connect(**connect_kwargs)
             except Exception as err:
-                self._close_obj(pg, force=True, markers={runtime_profile})
-                self._cleanup_runtime_profiles(save_dir, {runtime_profile})
+                close_obj(pg, force=True, markers={runtime_profile})
+                cleanup_runtime_profiles(save_dir, {runtime_profile})
                 if self._is_login_error(err):
                     raise RuntimeError(
                         "Playground 로그인이 필요하거나 세션이 만료되었습니다. [API 설정 -> Playground]에서 로그인해 주세요."
@@ -695,7 +394,7 @@ class PlaygroundModel(BaseAiModel):
                 raise
 
             self._check_session_stopped(session_id)
-            pids = self._collect_pids_from_obj(pg)
+            pids = collect_pids_from_obj(pg)
             with PlaygroundModel._pool_lock:
                 PlaygroundModel._client_pool[scope_key] = pg
                 PlaygroundModel._scope_pids.setdefault(scope_key, set()).update(pids)
@@ -706,7 +405,8 @@ class PlaygroundModel(BaseAiModel):
         profile_key: str,
         count: int,
         session_id: Optional[str] = None,
-        verbose: bool = False,
+        verbose: Any = False,
+        default_config: Optional[PlayGroundConfig] = None,
     ) -> Any:
         self._check_session_stopped(session_id)
         if PlayGroundPool is None:
@@ -731,15 +431,17 @@ class PlaygroundModel(BaseAiModel):
                 old_pids = PlaygroundModel._scope_pids.pop(scope_key, set())
                 old_profiles = PlaygroundModel._scope_profiles.pop(scope_key, set())
             if existing is not None:
-                self._close_obj(existing.get("pool"), extra_pids=old_pids, markers=old_profiles)
+                close_obj(existing.get("pool"), extra_pids=old_pids, markers=old_profiles)
             if dead_single is not None:
-                self._close_obj(dead_single, extra_pids=old_pids, markers=old_profiles)
+                close_obj(dead_single, extra_pids=old_pids, markers=old_profiles)
             if old_profiles:
-                self._cleanup_runtime_profiles(self._get_save_dir(), old_profiles)
+                cleanup_runtime_profiles(get_save_dir(), old_profiles)
 
-            save_dir = self._get_save_dir()
-            runtime_base = self._next_runtime_profile(profile_key)
-            self._clone_profile_storage(save_dir, profile_key, runtime_base)
+            save_dir = get_save_dir()
+            ensure_profile_exists(save_dir, profile_key)
+
+            runtime_base = next_runtime_profile(profile_key)
+            clone_profile_json(save_dir, profile_key, runtime_base)
 
             with PlaygroundModel._pool_lock:
                 PlaygroundModel._scope_profiles.setdefault(scope_key, set()).add(runtime_base)
@@ -748,21 +450,34 @@ class PlaygroundModel(BaseAiModel):
                 "count": target_count,
                 "base_profile": runtime_base,
                 "base_dir": save_dir,
-                "headless": True,
-                "backup": True,
-                "auto_login": False,
-                "encrypt": False,
-                "verbose": verbose,
+                "encrypt": True,
+                "verbose": resolve_verbose(verbose),
             }
-            if self._supports_param(PlayGroundPool.__init__, "clone_from"):
-                pool_kwargs["clone_from"] = profile_key
+            if supports_param(PlayGroundPool.__init__, "key_path"):
+                pool_kwargs["key_path"] = get_key_path()
+            if supports_param(PlayGroundPool.__init__, "wipe_runtime_profile"):
+                pool_kwargs["wipe_runtime_profile"] = True
+            if default_config is not None and supports_param(PlayGroundPool.__init__, "default_config"):
+                pool_kwargs["default_config"] = default_config
+            if supports_param(PlayGroundPool.__init__, "headless"):
+                pool_kwargs["headless"] = True
+            if supports_param(PlayGroundPool.__init__, "backup"):
+                pool_kwargs["backup"] = True
+            if supports_param(PlayGroundPool.__init__, "auto_login"):
+                pool_kwargs["auto_login"] = False
 
             pool = PlayGroundPool(**pool_kwargs)
             try:
-                pool.start(parallel=True, new_chat=True)
+                if hasattr(pool, "start"):
+                    start_kwargs: Dict[str, Any] = {}
+                    if supports_param(pool.start, "parallel"):
+                        start_kwargs["parallel"] = True
+                    if supports_param(pool.start, "new_chat"):
+                        start_kwargs["new_chat"] = True
+                    pool.start(**start_kwargs)
             except Exception as err:
-                self._close_obj(pool, force=True, markers={runtime_base})
-                self._cleanup_runtime_profiles(save_dir, {runtime_base})
+                close_obj(pool, force=True, markers={runtime_base})
+                cleanup_runtime_profiles(save_dir, {runtime_base})
                 if self._is_login_error(err):
                     raise RuntimeError(
                         "Playground 로그인이 필요하거나 세션이 만료되었습니다. [API 설정 -> Playground]에서 로그인해 주세요."
@@ -770,7 +485,7 @@ class PlaygroundModel(BaseAiModel):
                 raise
 
             self._check_session_stopped(session_id)
-            pids = self._collect_pids_from_obj(pool)
+            pids = collect_pids_from_obj(pool)
             with PlaygroundModel._pool_lock:
                 PlaygroundModel._pg_pools[scope_key] = {"count": target_count, "pool": pool}
                 PlaygroundModel._scope_pids.setdefault(scope_key, set()).update(pids)
@@ -793,38 +508,35 @@ class PlaygroundModel(BaseAiModel):
     def get_raw_client(self, api_key: Optional[str] = None, session_id: Optional[str] = None) -> Any:
         return self.get_client(api_key, session_id=session_id)
 
-    def SetLogin(self, api_key: Optional[str] = None, force: bool = False, verbose: bool = True) -> bool:
+    def SetLogin(self, api_key: Optional[str] = None, force: bool = False, verbose: Any = True) -> bool:
         profile_key = self._get_profile_key(api_key)
         lock = self._get_profile_lock(f"{profile_key}::__login__")
         with lock:
             self._drop_client(profile_key)
             PlaygroundModel._verified_profiles.discard(profile_key)
+            cleanup_legacy_profiles()
 
-            save_dir = self._get_save_dir()
-            for target_dir in [save_dir / profile_key, *save_dir.glob(f"{profile_key}_worker_*")]:
-                if target_dir.exists():
-                    shutil.rmtree(target_dir, ignore_errors=True)
+            save_dir = get_save_dir()
+            runtime_dir = save_dir / f"{profile_key}_runtime"
+            if runtime_dir.exists():
+                shutil.rmtree(runtime_dir, ignore_errors=True)
 
-            pg = PlayGround(
-                profile_name=profile_key,
-                base_dir=save_dir,
-                encrypt=False,
-                verbose=verbose,
-            )
-            pg.logger.level = 2
+            pg = PlayGround(**self._build_pg_init_kwargs(profile_key, save_dir, verbose=verbose))
+            login_mode = PlayGroundOptions.LoginMode.FORCE_NEW if force else PlayGroundOptions.LoginMode.AUTO
             try:
-                pg.setting(first=True, backup=True)
+                pg.setting(first=login_mode, backup=True)
             finally:
-                self._close_obj(pg)
+                close_obj(pg)
 
             PlaygroundModel._verified_profiles.add(profile_key)
             return True
 
-    async def set_login_async(self, api_key: Optional[str] = None, force: bool = False, verbose: bool = True) -> bool:
+    async def set_login_async(self, api_key: Optional[str] = None, force: bool = False, verbose: Any = True) -> bool:
         return await asyncio.to_thread(self.SetLogin, api_key=api_key, force=force, verbose=verbose)
 
     def check_login(self, api_key: Optional[str] = None, verify: bool = False) -> bool:
         profile_key = self._get_profile_key(api_key)
+        save_dir = get_save_dir()
         if not verify:
             prefix = f"{profile_key}::"
             with PlaygroundModel._pool_lock:
@@ -832,26 +544,29 @@ class PlaygroundModel(BaseAiModel):
                     return True
             if profile_key in PlaygroundModel._verified_profiles:
                 return True
-            pg = PlayGround(
-                profile_name=profile_key,
-                base_dir=self._get_save_dir(),
-                encrypt=False,
-                verbose=False,
-            )
-            pg.logger.level = 2
-            return bool(pg.storage.has_any_saved_session())
+            pg = PlayGround(**self._build_pg_init_kwargs(profile_key, save_dir, verbose=False))
+            try:
+                if hasattr(pg, "storage") and hasattr(pg.storage, "has_any_saved_session"):
+                    return bool(pg.storage.has_any_saved_session())
+            except Exception:
+                pass
+            return (save_dir / f"{profile_key}.json").is_file()
 
         lock = self._get_profile_lock(f"{profile_key}::__login__")
         with lock:
-            pg = PlayGround(
-                profile_name=profile_key,
-                base_dir=self._get_save_dir(),
-                encrypt=False,
-                verbose=False,
-            )
-            pg.logger.level = 2
+            if not (save_dir / f"{profile_key}.json").is_file():
+                PlaygroundModel._verified_profiles.discard(profile_key)
+                return False
+            pg = PlayGround(**self._build_pg_init_kwargs(profile_key, save_dir, verbose=False))
             try:
-                ok = bool(pg.is_logged_in(backup=True))
+                if hasattr(pg, "is_logged_in"):
+                    ok = bool(pg.is_logged_in(backup=True))
+                else:
+                    connect_kwargs: Dict[str, Any] = {"backup": True, "headless": True}
+                    if supports_param(pg.connect, "auto_login"):
+                        connect_kwargs["auto_login"] = False
+                    pg.connect(**connect_kwargs)
+                    ok = True
                 if ok:
                     PlaygroundModel._verified_profiles.add(profile_key)
                 else:
@@ -861,19 +576,20 @@ class PlaygroundModel(BaseAiModel):
                 PlaygroundModel._verified_profiles.discard(profile_key)
                 return False
             finally:
-                self._close_obj(pg)
+                close_obj(pg)
 
     def list_models_detail(
         self,
         api_key: Optional[str] = None,
-        kind: Optional[str] = None,
+        kind: Optional[Any] = None,
         paid: Optional[bool] = False,
     ) -> List[Dict[str, Any]]:
         profile_key = self._get_profile_key(api_key)
         scope_key = self._get_scope_key(profile_key, "shared")
         kwargs: Dict[str, Any] = {}
-        if kind is not None:
-            kwargs["kind"] = kind
+        resolved_kind = resolve_model_kind(kind)
+        if resolved_kind is not None:
+            kwargs["kind"] = resolved_kind
         if paid is not None:
             kwargs["paid"] = paid
 
@@ -905,18 +621,19 @@ class PlaygroundModel(BaseAiModel):
     def list_models(
         self,
         api_key: Optional[str] = None,
-        kind: Optional[str] = "text",
+        kind: Optional[Any] = PlayGroundOptions.ModelKind.TEXT,
         paid: Optional[bool] = False,
     ) -> List[str]:
         raw_items = self.list_models_detail(api_key=api_key, kind=kind, paid=paid)
         exclude_keywords = ("imagen", "veo", "lyria", "tts", "audio", "embedding", "robotics", "decision", "transcribe")
         model_names: List[str] = []
+        is_text_kind = str(kind).strip().lower() in ("text", str(PlayGroundOptions.ModelKind.TEXT).lower())
         for item in raw_items:
             mid = str(item.get("id") or item.get("name") or "").strip()
             if not mid:
                 continue
             item_kind = str(item.get("kind") or item.get("type") or "").strip().lower()
-            if kind == "text":
+            if is_text_kind:
                 if item_kind and item_kind not in ("text", "chat", "llm"):
                     continue
                 if any(k in mid.lower() for k in exclude_keywords):
@@ -931,28 +648,13 @@ class PlaygroundModel(BaseAiModel):
         self._check_session_stopped(session_id)
         profile_key = self._get_profile_key(cur_used_key)
         scope_key = self._get_scope_key(profile_key, session_id)
-        model_name = _strip_playground_prefix(setting.get("model_name", "gemini-4-hydrogen")) or "gemini-4-hydrogen"
-        thinking_level = build_playground_thinking(setting.get("thinking_budget"))
-        verbose = bool(setting.get("verbose", False))
+        verbose = setting.get("verbose", False)
         try:
             concurrency = max(1, int(setting.get("concurrency", 1)))
         except (TypeError, ValueError):
             concurrency = 1
 
-        send_kwargs: Dict[str, Any] = {
-            "text": message,
-            "model": model_name,
-            "new_chat": bool(setting.get("new_chat", True)),
-        }
-        if setting.get("system_instruction"):
-            send_kwargs["system_input"] = setting["system_instruction"]
-        if thinking_level is not None:
-            send_kwargs["thinnk"] = thinking_level
-        if "temperature" in setting:
-            send_kwargs["temp"] = setting["temperature"]
-        for opt_key in ("top_p", "google_search", "media", "allow_paid"):
-            if opt_key in setting:
-                send_kwargs[opt_key] = setting[opt_key]
+        send_kwargs = build_send_kwargs(message, setting)
 
         def _call() -> Any:
             self._check_session_stopped(session_id)
@@ -961,7 +663,7 @@ class PlaygroundModel(BaseAiModel):
                 try:
                     with pool.acquire() as pg:
                         with PlaygroundModel._pool_lock:
-                            PlaygroundModel._scope_pids.setdefault(scope_key, set()).update(self._collect_pids_from_obj(pg))
+                            PlaygroundModel._scope_pids.setdefault(scope_key, set()).update(collect_pids_from_obj(pg))
                         return pg.send(**send_kwargs)
                 except Exception as err:
                     self._check_session_stopped(session_id)
@@ -975,7 +677,7 @@ class PlaygroundModel(BaseAiModel):
                         pool = self._get_pg_pool(profile_key, concurrency, session_id=session_id, verbose=verbose)
                         with pool.acquire() as pg:
                             with PlaygroundModel._pool_lock:
-                                PlaygroundModel._scope_pids.setdefault(scope_key, set()).update(self._collect_pids_from_obj(pg))
+                                PlaygroundModel._scope_pids.setdefault(scope_key, set()).update(collect_pids_from_obj(pg))
                             return pg.send(**send_kwargs)
                     raise
 
@@ -1006,6 +708,42 @@ class PlaygroundModel(BaseAiModel):
         else:
             res_text = str(getattr(raw_reply, "text", None) or raw_reply or "")
         return AiResponse(text=res_text, raw_response=raw_reply)
+
+    async def send_batch(self, tasks: List[Dict[str, Any]], setting: Optional[Dict[str, Any]] = None) -> List[Any]:
+        setting = setting or {}
+        cur_used_key = setting.get("api_key", self.api_key)
+        session_id = setting.get("session_id")
+        self._check_session_stopped(session_id)
+        profile_key = self._get_profile_key(cur_used_key)
+        scope_key = self._get_scope_key(profile_key, session_id)
+        verbose = setting.get("verbose", False)
+        try:
+            concurrency = max(1, int(setting.get("concurrency", 3)))
+        except (TypeError, ValueError):
+            concurrency = 3
+        default_cfg = build_config(setting)
+
+        def _call() -> List[Any]:
+            self._check_session_stopped(session_id)
+            pool = self._get_pg_pool(
+                profile_key,
+                concurrency,
+                session_id=session_id,
+                verbose=verbose,
+                default_config=default_cfg,
+            )
+            try:
+                return pool.send_batch(tasks)
+            except Exception as err:
+                self._check_session_stopped(session_id)
+                if self._is_login_error(err):
+                    self._drop_scope(scope_key, failed_obj=pool)
+                    raise RuntimeError(
+                        "Playground 로그인이 필요하거나 세션이 만료되었습니다. [API 설정 -> Playground]에서 로그인해 주세요."
+                    ) from err
+                raise
+
+        return await asyncio.to_thread(_call)
 
     def is_rate_limit_error(self, err: Exception) -> bool:
         if super().is_rate_limit_error(err):

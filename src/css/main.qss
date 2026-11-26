@@ -988,3 +988,49 @@ QProgressBar::chunk:vertical {
         stop:1 |text_url||);
     border-radius: 2px;
 }
+
+QFrame#floatingPillWrap {
+    background-color: |surface_card||;
+    border: |border_card||;
+    border-radius: 13px;
+}
+
+QFrame#floatingPillWrap:hover {
+    background-color: |surface_hover||;
+    border: 1px solid |border_default||;
+}
+
+QFrame#floatingPillWrap[active="true"] {
+    background-color: |surface_hover||;
+    border: 1px solid |border_default||;
+}
+
+QPushButton#floatingPillBtn {
+    background: transparent;
+    border: none;
+    color: |text_secondary||;
+    padding: 4px 4px 4px 11px;
+    font-size: 8.5pt;
+    font-weight: 600;
+}
+
+QPushButton#floatingPillBtn:checked {
+    color: |text_title||;
+    font-weight: 750;
+}
+
+QPushButton#floatingPillClose {
+    background: transparent;
+    border: none;
+    color: |text_muted||;
+    border-radius: 9px;
+    padding: 0px;
+    margin-right: 4px;
+    font-size: 9.5pt;
+    font-weight: 700;
+}
+
+QPushButton#floatingPillClose:hover {
+    color: |text_title||;
+    background-color: rgba(255, 255, 255, 0.12);
+}

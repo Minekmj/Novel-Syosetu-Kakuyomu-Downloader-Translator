@@ -376,6 +376,8 @@ class DictionaryDialog(QDialog):
             check=self.is_ai_glossary_cancelled
         )
         self.ai_glossary_thread.log_signal.connect(self.on_ai_glossary_log)
+        if hasattr(parent, 'log_panel'):
+            self.ai_glossary_thread.chunk_signal.connect(parent.log_panel.handle_chunk_event)
         self.ai_glossary_thread.finished_signal.connect(self.on_ai_glossary_finished)
         self.ai_glossary_thread.start()
 

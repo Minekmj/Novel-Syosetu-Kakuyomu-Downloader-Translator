@@ -1,3 +1,4 @@
+from src.system.BasicUi import ToggleSwitch
 from PySide6.QtWidgets import (
     QWidget, QFrame, QHBoxLayout,
     QLineEdit, QPushButton, QLabel, QComboBox,
@@ -144,8 +145,7 @@ class ListControlBar(QWidget):
         self.refresh_btn.setEnabled(False)
         self.refresh_btn.clicked.connect(self.refresh_clicked.emit)
 
-        self.filter_chk = QCheckBox("남은 화수 있음", self)
-        self.filter_chk.setObjectName("isCo")
+        self.filter_chk = ToggleSwitch("남은 화수 있음", self)
         self.filter_chk.stateChanged.connect(lambda *_: self.filter_changed.emit())
 
         layout.addWidget(self.search_edit, 1)

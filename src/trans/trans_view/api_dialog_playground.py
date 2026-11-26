@@ -1,3 +1,4 @@
+import shutil
 from PySide6.QtCore import Qt, QThread, Signal, QTimer
 from PySide6.QtWidgets import (
     QDialog, QWidget, QLineEdit, QFrame, QMessageBox, QComboBox
@@ -291,13 +292,24 @@ class PlaygroundManagerDialog(QDialog):
         try:
             model = AiRoute(ai_target=AiTarget.PLAYGROUND, api=profile).get_model(AiTarget.PLAYGROUND)
             model.close(profile)
+            model._verified_profiles.discard(profile)
             save_dir = model._get_save_dir()
+
+            profile_json = save_dir / f"{profile}.json"
+            if profile_json.is_file():
+                profile_json.unlink()
+
+            for target_dir in (save_dir / f"{profile}_runtime", save_dir / profile, *save_dir.glob(f"{profile}_worker_*")):
+                if target_dir.exists():
+                    shutil.rmtree(target_dir, ignore_errors=True)
+
             for enc_file in save_dir.rglob("*.enc"):
                 if profile == "default" or profile in enc_file.stem or profile in str(enc_file.parent):
                     try:
                         enc_file.unlink()
                     except Exception:
                         pass
+
             self.refresh_status(verify=False)
             QMessageBox.information(self, "완료", "세션이 삭제되었습니다.")
         except Exception as e:
